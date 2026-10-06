@@ -1,0 +1,42 @@
+name: Apple build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'Hardware/**'
+      - 'Server/**'
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - 'Hardware/**'
+      - 'Server/**'
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write signing and OAuth config
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PCO_OAUTH_CLIENT_ID: ${{ secrets.PCO_OAUTH_CLIENT_ID }}
+        run: |
+          {
+            echo "DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}"
+            echo "PCO_OAUTH_CLIENT_ID = ${PCO_OAUTH_CLIENT_ID}"
+          } > Config/Local.xcconfig
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build ProducerMac
+        run: xcodebuild build -project ThirteenYears.xcodeproj -scheme ProducerMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+
+      - name: Build Pager (iOS)
+        run: xcodebuild build -project ThirteenYears.xcodeproj -scheme Pager -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO

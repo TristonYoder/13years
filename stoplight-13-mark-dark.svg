@@ -1,0 +1,37 @@
+<svg viewBox="0 0 380 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&amp;display=swap');
+      .stoplight-13-number {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+      }
+      .num-1 {
+        font-size: 240px;
+        fill: #F5F5F3;
+        letter-spacing: -0.1em;
+        transform: scaleX(1.6);
+        transform-origin: 0 0;
+      }
+      .num-3 {
+        font-size: 220px;
+        fill: #F5F5F3;
+        stroke: #F5F5F3;
+        stroke-width: 12;
+        letter-spacing: -0.12em;
+        font-stretch: condensed;
+      }
+    </style>
+  </defs>
+
+  <!-- Fat wide "3" (background) -->
+  <text x="90" y="122" dominant-baseline="middle" class="stoplight-13-number num-3">3</text>
+
+  <!-- Solid stoplight housing (the "I") -->
+  <rect x="20" y="15" width="60" height="170" fill="#F5F5F3"/>
+
+  <!-- Stoplight circles -->
+  <circle cx="50" cy="50" r="18" fill="#FF5252"/>
+  <circle cx="50" cy="100" r="18" fill="#FFEB3B"/>
+  <circle cx="50" cy="150" r="18" fill="#66BB6A"/>
+</svg>

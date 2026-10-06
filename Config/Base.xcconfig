@@ -1,0 +1,4 @@
+DEVELOPMENT_TEAM =
+PCO_OAUTH_CLIENT_ID =
+
+#include? "Local.xcconfig"

@@ -1,0 +1,10 @@
+services:
+  relay:
+    build: .
+    image: thirteenyears-relay:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - PLOTIPHAR_API_BASE=https://plotiphar.com
+    restart: unless-stopped
