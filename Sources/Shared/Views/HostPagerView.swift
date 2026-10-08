@@ -50,6 +50,11 @@ public struct HostPagerView: View {
         }
     }
 
+    private var bannerOpacity: Double {
+        let progress: Double = min(Double(abs(bannerDragOffset)) / 200.0, 1.0)
+        return 1.0 - progress * 0.7
+    }
+
     private var pagerView: some View {
         ZStack {
             currentState.color.ignoresSafeArea()
@@ -180,7 +185,7 @@ public struct HostPagerView: View {
                     .shadow(radius: 4)
                     .padding(.horizontal, 20)
                     .offset(x: bannerDragOffset)
-                    .opacity(1 - min(abs(bannerDragOffset) / 200, 1) * 0.7)
+                    .opacity(bannerOpacity)
                     .contentShape(Rectangle())
                     #if os(iOS) || os(macOS)
                     .gesture(
