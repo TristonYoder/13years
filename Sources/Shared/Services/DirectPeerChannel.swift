@@ -37,6 +37,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
 
     private var pendingInboundConnections: [ObjectIdentifier: NWConnection] = [:]
     private var verifiedConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var dialedTokens: Set<String> = []
 
     public init() {}
 
@@ -62,6 +63,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
                 connection.cancel()
             }
             verifiedConnections.removeAll()
+            dialedTokens.removeAll()
             localToken = ""
             localPort = 0
         }
@@ -95,7 +97,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
 
     public func connect(to peerHello: PeerHello) {
         queue.async { [self] in
-            guard isRunning else { return }
+            guard isRunning, dialedTokens.insert(peerHello.connectToken).inserted else { return }
             self.dial(peerHello: peerHello, addressIndex: 0)
         }
     }
@@ -157,9 +159,15 @@ public final class DirectPeerChannel: @unchecked Sendable {
     }
 
     private func dial(peerHello: PeerHello, addressIndex: Int) {
-        guard addressIndex < peerHello.addresses.count else { return }
+        guard addressIndex < peerHello.addresses.count else {
+            dialedTokens.remove(peerHello.connectToken)
+            return
+        }
         let address = peerHello.addresses[addressIndex]
-        guard let port = NWEndpoint.Port(rawValue: peerHello.port) else { return }
+        guard let port = NWEndpoint.Port(rawValue: peerHello.port) else {
+            dialedTokens.remove(peerHello.connectToken)
+            return
+        }
 
         let host = NWEndpoint.Host(address)
         let connection = NWConnection(host: host, port: port, using: .tcp)
@@ -200,7 +208,13 @@ public final class DirectPeerChannel: @unchecked Sendable {
                     }
                 })
             case .failed, .cancelled:
-                guard !didFinish else { return }
+                if didFinish {
+                    self.queue.async {
+                        self.verifiedConnections.removeValue(forKey: key)
+                        self.dialedTokens.remove(peerHello.connectToken)
+                    }
+                    return
+                }
                 didFinish = true
                 timeout.cancel()
                 self.queue.async {
@@ -219,6 +233,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
             guard let self else { return }
             guard let data else {
                 self.verifiedConnections.removeValue(forKey: key)
+                connection.cancel()
                 return
             }
             if let packet = CuePacket.decode(from: data) {

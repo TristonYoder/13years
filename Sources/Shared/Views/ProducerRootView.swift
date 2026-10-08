@@ -13,6 +13,10 @@ public struct ProducerRootView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            #if !os(tvOS)
+            UpdateBannerView()
+            #endif
+
             LiveTimerHeaderView()
                 .padding()
                 .background(.regularMaterial)
@@ -24,6 +28,9 @@ public struct ProducerRootView: View {
             #else
             iPadNavigationLayout
             #endif
+        }
+        .task {
+            UpdateChecker.shared.startPeriodicChecks()
         }
     }
 

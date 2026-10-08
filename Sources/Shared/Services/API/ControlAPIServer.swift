@@ -8,6 +8,7 @@ public final class ControlAPIServer: @unchecked Sendable {
     public static let defaultPort: UInt16 = 13390
 
     private static let quickRetryAttempts = 5
+    private static let maxInFlightBroadcasts = 8
     private static let slowRetryInterval: TimeInterval = 10
 
     public var onStatusChanged: ((Bool) -> Void)?
@@ -106,6 +107,7 @@ public final class ControlAPIServer: @unchecked Sendable {
         let connection: NWConnection
         var buffer: [UInt8] = []
         var isWebSocket = false
+        var inFlightBroadcasts = 0
         let assembler = WebSocketMessageAssembler()
 
         init(connection: NWConnection) {
@@ -346,7 +348,10 @@ public final class ControlAPIServer: @unchecked Sendable {
             guard !clients.isEmpty else { return }
             let frame = WebSocketCodec.encode(WebSocketCodec.text(text))
             for (_, client) in clients where client.isWebSocket {
+                guard client.inFlightBroadcasts < Self.maxInFlightBroadcasts else { continue }
+                client.inFlightBroadcasts += 1
                 client.connection.send(content: frame, completion: .contentProcessed { error in
+                    client.inFlightBroadcasts -= 1
                     if let error {
                         AppLog.networking.error("ControlAPIServer broadcast error: \(String(describing: error), privacy: .public)")
                     }

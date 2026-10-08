@@ -55,9 +55,7 @@ public final class ControlAPIEventHub {
                 send(event: "message", data: message)
             }
         }
-        if engine.recentMessages.isEmpty {
-            announcedMessageIds.removeAll()
-        }
+        announcedMessageIds.formIntersection(engine.recentMessages.map(\.id))
 
         send(event: "state", data: router.snapshot())
     }

@@ -170,6 +170,7 @@ public final class LANUnicastServer: @unchecked Sendable {
             guard let self else { return }
             guard let data else {
                 self.connections.removeValue(forKey: key)
+                connection.cancel()
                 return
             }
             if let packet = CuePacket.decode(from: data) {
