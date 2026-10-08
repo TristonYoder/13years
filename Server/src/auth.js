@@ -30,7 +30,11 @@ export async function resolveOrgIdForToken(token, fetchImpl = fetch) {
     return null;
   }
 
-  cache.set(token, { orgId: org.id, expiresAt: Date.now() + CACHE_TTL_MS });
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (entry.expiresAt <= now) cache.delete(key);
+  }
+  cache.set(token, { orgId: org.id, expiresAt: now + CACHE_TTL_MS });
   return org.id;
 }
 
