@@ -98,38 +98,13 @@ public struct SettingsView: View {
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    #if !os(tvOS)
-                    Slider(
-                        value: Binding(
-                            get: {
-                                Double(HourFormatThreshold.allCases.firstIndex(of: engine.hourFormatThreshold) ?? 1)
-                            },
-                            set: { newValue in
-                                let lastIndex = HourFormatThreshold.allCases.count - 1
-                                let index = min(max(Int(newValue.rounded()), 0), lastIndex)
-                                engine.hourFormatThreshold = HourFormatThreshold.allCases[index]
-                            }
-                        ),
-                        in: 0...Double(HourFormatThreshold.allCases.count - 1),
-                        step: 1
-                    )
-                    #else
-                    Picker("Formatting threshold", selection: $engine.hourFormatThreshold) {
-                        ForEach(HourFormatThreshold.allCases) { threshold in
-                            Text(threshold.label).tag(threshold)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    #endif
-
-                    HStack {
-                        ForEach(HourFormatThreshold.allCases) { threshold in
-                            Text(threshold.label)
-                                .font(.caption2)
-                                .foregroundStyle(threshold == engine.hourFormatThreshold ? Color.accentColor : .secondary)
-                                .fontWeight(threshold == engine.hourFormatThreshold ? .semibold : .regular)
-                                .frame(maxWidth: .infinity)
+                HStack(spacing: 10) {
+                    ForEach([HourFormatThreshold.never, .over90Minutes, .over60Minutes]) { threshold in
+                        HourFormatOptionCard(
+                            threshold: threshold,
+                            isSelected: threshold == engine.hourFormatThreshold
+                        ) {
+                            engine.hourFormatThreshold = threshold
                         }
                     }
                 }
@@ -137,7 +112,7 @@ public struct SettingsView: View {
             } header: {
                 Text("HH:MM:SS Formatting")
             } footer: {
-                Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — e.g. a 95-minute countdown reads 1:35:00 instead of 95:00.")
+                Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
             }
 
             Section {
@@ -227,6 +202,16 @@ public struct SettingsView: View {
                     Text("Paid feature. Pair once with plotiphar.com to sync cue state across separate networks when devices aren't on the same LAN.")
                 }
             }
+
+            #if !os(tvOS)
+            UpdateSettingsSection()
+
+            Section {
+                Link(destination: URL(string: "https://github.com/TristonYoder/13years")!) {
+                    Label("13 Years on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+            }
+            #endif
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingPlanPicker) {
@@ -261,5 +246,40 @@ public struct SettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.orange)
         }
+    }
+}
+
+struct HourFormatOptionCard: View {
+    let threshold: HourFormatThreshold
+    let isSelected: Bool
+    let action: () -> Void
+
+    private static let sampleMinutes = [75, 95]
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(threshold.label)
+                    .font(.callout.weight(.semibold))
+
+                VStack(spacing: 2) {
+                    ForEach(Self.sampleMinutes, id: \.self) { minutes in
+                        Text(TimeFormatting.string(forSeconds: minutes * 60, threshold: threshold))
+                            .font(.system(.callout, design: .monospaced))
+                            .monospacedDigit()
+                    }
+                }
+                .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.12))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
