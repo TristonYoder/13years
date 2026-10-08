@@ -5,39 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>13 Years Pager</title>
-<!--
-  The browser pager — the app's fourth pager platform, after iPhone/iPad
-  (HostPagerView), Apple Watch (WatchCueView) and the ESP32 panel.
-
-  Served by the Producer's own Control API listener at `/pager` (see
-  WebPager.swift) and fed by the same `/v1/socket` push every other control
-  surface uses, so a cue lands here at the same moment it lands on a phone.
-  Deliberately one self-contained file: the HTTP server this is served from
-  is a deliberately minimal one (see HTTPMessage.swift), and a pager that
-  needs four round trips before it can paint is a pager that shows a white
-  screen on a flaky venue network at the exact moment it matters.
-
-  It displays everything the other pagers display — cues, the running item,
-  notes, the latest message — and writes exactly one thing back: messages.
-  Sending and clearing go through the same engine calls the phone pager's
-  own chat does, and a pager writes only to its own thread with the
-  Producer. Nothing here fires a cue or touches the plan; anything that
-  changes the show stays with the surfaces that are meant to (the Producer
-  app, the REST/WebSocket API).
-
-  Query parameters:
-    ?role=<id|name>   which role's cue to show (case-insensitive; the name
-                      as typed in the Producer works, so
-                      `?role=Front%20of%20House` is a valid bookmark).
-                      Wins over whatever was last picked in this browser.
-    ?layout=auto      the default: standard below, lower third on a short,
-            standard  wide viewport.
-            lowerthird
--->
 <style>
-  /* Cue colors are CueState.swift's, to the byte — the ESP32 panel's
-     cue_state.h documents its two deliberate deviations from these; this
-     one has none, since a browser has no panel to compensate for. */
   :root {
     --cue-off-bg: #141a26;
     --cue-off-fg: #ffffff;
@@ -46,12 +14,6 @@
     --cue-go-bg: #26c759;
     --cue-go-fg: #ffffff;
 
-    /* One scale step every size below is a multiple of, so the page is
-       resolution-independent rather than responsive-with-breakpoints: a
-       pager on a phone, a 4K lobby display and an OBS browser source are
-       the same layout at three sizes. Height-led (a pager is read at a
-       glance from across a room, so it should fill the screen) but capped
-       against width, or a wide-and-short window would overflow. */
     --s: min(1.2vh, 2.2vw);
 
     --bg: var(--cue-off-bg);
@@ -66,14 +28,7 @@
     --bg: var(--cue-go-bg);
     --fg: var(--cue-go-fg);
   }
-  /* FLASH_STANDBY / FLASH_GO read as their base state and do not blink —
-     the same call HostPagerView and the ESP32 firmware make. If a blink
-     ever lands, it lands in all three at once. */
 
-  /* The app's own typeface, served out of the app's own bundle: the same
-     six static weights `Font.inter(size:weight:)` maps to, so a weight
-     here resolves to the same file the phone pager draws with instead of
-     being synthesized from a neighbour. */
   @font-face {
     font-family: "Inter";
     src: url("/pager/fonts/Inter-Regular.ttf") format("truetype");
@@ -109,16 +64,10 @@
 
   html, body {
     height: 100%;
-    /* Inter's "zero" feature — a slashed zero, which `Font.inter` switches
-       on app-wide and the ESP32's bitmap fonts bake in at build time. A
-       countdown is mostly digits; this is the difference between the web
-       pager looking like the other pagers and looking like a web page. */
     font-feature-settings: "zero" 1;
     background: var(--bg);
     color: var(--fg);
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    /* A cue change is instant on every other pager — the color IS the
-       signal, and easing it would be lying about when the cue landed. */
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
@@ -134,14 +83,7 @@
 
   .hidden { display: none !important; }
 
-  /* Digits that don't dance as they count down. */
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "zero" 1; }
-
-  /* ---------------------------------------------------------------
-     Standard layout — the same furniture, in the same order, as
-     HostPagerView: role bar, huge state word, the running item with its
-     countdown, assigned note panels, latest message.
-     --------------------------------------------------------------- */
 
   #standard {
     flex: 1;
@@ -150,9 +92,6 @@
     gap: calc(2 * var(--s));
     padding: calc(2 * var(--s)) calc(2.5 * var(--s));
     min-height: 0;
-    /* A column, centered, rather than furniture stretched the full width of
-       whatever monitor this landed on — the phone pager's proportions are
-       the ones everyone on the team already reads at a glance. */
     width: min(100%, calc(80 * var(--s)));
     margin: 0 auto;
   }
@@ -164,12 +103,6 @@
     flex: 0 0 auto;
   }
 
-  /* Appearance stripped on purpose: a native select paints its own
-     background and text color, which ignores the cue palette entirely and
-     renders dark-on-dark the moment the cue is Clear. */
-  /* The chevron is drawn here rather than left to the select, whose own
-     appearance had to go (see below). Mirrors the phone pager's role Menu,
-     which is a name with a `chevron.down` beside it. */
   .rolepick {
     position: relative;
     display: inline-flex;
@@ -191,7 +124,6 @@
     opacity: 0.75;
   }
 
-  /* One role is nothing to pick between, so there's no menu to point at. */
   .rolepick.single::after { display: none; }
 
   #role {
@@ -207,10 +139,7 @@
     appearance: none;
     -webkit-appearance: none;
   }
-  /* One role means nothing to pick between — the picker reads as a plain
-     label then, matching the phone pager, which shows the name either way. */
   #role:disabled { opacity: 1; }
-  /* The open dropdown is drawn by the OS, not by this page. */
   #role option { color: #111; background: #fff; }
 
   .link {
@@ -241,9 +170,6 @@
   }
 
   #cueWord {
-    /* Capped against width as well as the scale step: "STANDBY" is the
-       longest of the three words and shouldn't touch the edges on a narrow
-       phone — the same job HostPagerView's `.minimumScaleFactor(0.5)` does. */
     font-size: min(calc(9 * var(--s)), 17vw);
     font-weight: 900;
     line-height: 0.95;
@@ -271,7 +197,6 @@
   #itemTitle {
     font-size: calc(2 * var(--s));
     font-weight: 700;
-    /* Two lines, then ellipsis — HostPagerView's `.lineLimit(2)`. */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -333,17 +258,10 @@
     font-size: calc(2.2 * var(--s));
     font-weight: 700;
     cursor: pointer;
-    /* The banner is yellow on a background that is also yellow while a
-       Standby cue is up — the phone pager leans on a shadow to separate
-       the two, and so does this. */
     box-shadow: 0 calc(0.3 * var(--s)) calc(1 * var(--s)) rgba(0, 0, 0, 0.35);
   }
   #banner::before { content: "💬"; font-size: calc(2 * var(--s)); }
 
-  /* The way into the thread. Mirrors the phone pager, which always offers
-     a way to reach the Producer rather than only a reply to something
-     already sent. What's standing is the banner above; clearing it is the
-     banner too. */
   #notifyBar {
     flex: 0 0 auto;
     display: flex;
@@ -371,9 +289,6 @@
 
   #notifyBar button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
 
-  /* The chat overlay — the same "one merged timeline, tagged EVERYONE or
-     DIRECT" screen `PagerChatView` gives the phone, over the cue color
-     rather than in a sheet. */
   #chat {
     position: fixed;
     inset: 0;
@@ -426,8 +341,6 @@
     max-width: 85%;
   }
 
-  /* This role's own replies, on the right — the phone pager tags each row
-     the same way rather than relying on the side alone. */
   .msg.own { align-self: flex-end; background: rgba(0, 0, 0, 0.35); }
 
   .msg-meta {
@@ -480,42 +393,12 @@
     padding: 0 calc(0.5 * var(--s));
   }
 
-  /* ---------------------------------------------------------------
-     Lower third — a single strip for a short, wide viewport (an OBS
-     browser source, a ribbon display above a stage):
-
-       [ current time ---- current element ---- countdown ]
-
-     Same cue color as the standard layout, because on a pager the color
-     is the cue; only the furniture changes.
-     --------------------------------------------------------------- */
-
   #lowerthird {
     flex: 1;
-    /* The three fields are positioned, not flowed: the element name has to
-       sit on the strip's true centerline, and in a flex row it would sit on
-       the centerline of whatever the clock and countdown left over — which
-       is off-center by half the difference between them, and moves every
-       time the countdown loses a digit. */
     position: relative;
     display: flex;
     align-items: center;
-    /* No padding here — the three fields are positioned, and each one's
-       own inset is set from JS to match the space above and below the
-       type (see `layoutLowerThird`). */
     padding: 0;
-    /* Height-led: the strip fills whatever band it's given, capped against
-       width so a very wide, very short source doesn't overrun. Everything
-       inside is sized in `em` off this one number. */
-    /* Sized to fill the band: a lower third is usually cropped to exactly
-       the strip it occupies, so air above and below the type is wasted
-       height, not breathing room.
-       The height term is capped at 62vh because a reading plus its caption
-       stands about 1.5em tall — past that the block starts overflowing a
-       short strip. The width term is what actually binds on a typical
-       16:1 strip, and it's deliberately not larger: the clock grows with
-       it, and the clock's width is taken out of the centered name's budget
-       twice over (see `layoutLowerThird`). */
     font-size: min(62vh, 6.8vw);
     font-weight: 700;
     line-height: 1;
@@ -524,18 +407,10 @@
 
   #ltClock {
     position: absolute;
-    /* Zero against the padding edge — the inset itself is the strip's
-       padding, so the two can't double up. */
     left: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    /* Full size, matching the countdown: the two readings are a pair and
-       should carry the same weight on the strip. It costs the centered
-       name width — the clock is the wider of the two fields, and whichever
-       is wider is reserved on both sides to keep the name on the
-       centerline (see `layoutLowerThird`) — which is what the name's
-       shrink-to-fit is there to absorb. */
     font-size: 1em;
     font-weight: 900;
   }
@@ -549,10 +424,6 @@
     font-weight: 900;
   }
 
-  /* The caption under each reading: TIME under the clock, and
-     PROJECTED/ACTUAL under the countdown — read-only here, exactly as in
-     the standard layout, where the pager displays that flag and doesn't
-     toggle it. */
   .lt-tag {
     font-size: 0.26em;
     font-weight: 700;
@@ -561,11 +432,6 @@
     margin-top: 0.25em;
   }
 
-  /* Centered on the strip, with the room it may take set from JS (see
-     `layoutLowerThird`) so it can never run under the fields on either
-     side. In message mode it's re-anchored to the left instead and given
-     everything up to the countdown.
-     The dark panel is the standard layout's item card, at this scale. */
   #ltTitle {
     position: absolute;
     left: 50%;
@@ -578,10 +444,6 @@
     border-radius: 0.2em;
   }
 
-  /* A message takes the clock's place as well as the name's — the countdown
-     is the one thing that stays, because it's the only field on this strip
-     nobody can reconstruct for themselves. Same yellow card the standard
-     layout puts a message in. */
   #lowerthird.message #ltClock { display: none; }
 
   #lowerthird.message #ltTitle {
@@ -590,22 +452,42 @@
     box-shadow: 0 0.02em 0.06em rgba(0, 0, 0, 0.35);
   }
 
-  /* A disconnected pager says so in both layouts rather than silently
-     showing a cue that may already be stale. */
-  #offline {
+  #waiting {
     position: fixed;
-    left: 50%;
-    bottom: calc(1.5 * var(--s));
-    transform: translateX(-50%);
-    font-size: calc(1.4 * var(--s));
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    border-radius: 999px;
-    padding: calc(0.6 * var(--s)) calc(1.6 * var(--s));
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(2.6 * var(--s));
+    background: #000;
+    color: #f5f5f3;
   }
-  [data-layout="lowerthird"] #offline { font-size: min(9vh, 1.6vw); bottom: 2vh; }
+  #waitingMark {
+    width: min(30vw, 50vh);
+    height: auto;
+    display: block;
+    overflow: visible;
+  }
+  #waitingText {
+    font-size: calc(1.7 * var(--s));
+    font-weight: 700;
+  }
+  [data-layout="lowerthird"] #waiting {
+    flex-direction: row;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+  [data-layout="lowerthird"] #waitingMark {
+    width: auto;
+  }
+  [data-layout="lowerthird"] #waitingText {
+    white-space: nowrap;
+  }
+  [data-layout="lowerthird"] #ltClock {
+    z-index: 101;
+  }
 </style>
 </head>
 <body>
@@ -666,45 +548,119 @@
       </span>
     </div>
 
-    <div id="offline" class="hidden">RECONNECTING…</div>
+  </div>
+
+  <div id="waiting" role="status" aria-label="Waiting for Producer">
+    <svg id="waitingMark" viewBox="0 0 206 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="wait-top-shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.4"/>
+        </filter>
+        <style>
+          .wait-number {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+          }
+          @keyframes wait-rotate-red {
+            0% { transform: translateY(0px); }
+            16% { transform: translateY(50px); }
+            33% { transform: translateY(100px); }
+            41% { transform: translateY(50px) translateX(-30px); }
+            50% { transform: translateY(0px); }
+            66% { transform: translateY(50px); }
+            83% { transform: translateY(100px); }
+            91% { transform: translateY(50px) translateX(30px); }
+            100% { transform: translateY(0px); }
+          }
+          @keyframes wait-glow-red {
+            0%, 32.99% { opacity: 0; }
+            33%, 49.99% { opacity: 1; }
+            50%, 82.99% { opacity: 0; }
+            83%, 99.99% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes wait-rotate-yellow {
+            0% { transform: translateY(0px); }
+            16% { transform: translateY(50px); }
+            24% { transform: translateY(-25px) translateX(-30px); }
+            33% { transform: translateY(-50px); }
+            50% { transform: translateY(0px); }
+            66% { transform: translateY(50px); }
+            74% { transform: translateY(-25px) translateX(30px); }
+            83% { transform: translateY(-50px); }
+            100% { transform: translateY(0px); }
+          }
+          @keyframes wait-glow-yellow {
+            0%, 15.99% { opacity: 0; }
+            16%, 32.99% { opacity: 1; }
+            33%, 65.99% { opacity: 0; }
+            66%, 82.99% { opacity: 1; }
+            83%, 100% { opacity: 0; }
+          }
+          @keyframes wait-rotate-green {
+            0% { transform: translateY(0px); }
+            8% { transform: translateY(-50px) translateX(-30px); }
+            16% { transform: translateY(-100px); }
+            33% { transform: translateY(-50px); }
+            50% { transform: translateY(0px); }
+            58% { transform: translateY(-50px) translateX(30px); }
+            66% { transform: translateY(-100px); }
+            83% { transform: translateY(-50px); }
+            100% { transform: translateY(0px); }
+          }
+          @keyframes wait-glow-green {
+            0%, 15.99% { opacity: 1; }
+            16%, 49.99% { opacity: 0; }
+            50%, 65.99% { opacity: 1; }
+            66%, 100% { opacity: 0; }
+          }
+          .wait-cycle-red { animation: wait-rotate-red 6s ease-in-out infinite; }
+          .wait-cycle-yellow { animation: wait-rotate-yellow 6s ease-in-out infinite; }
+          .wait-cycle-green { animation: wait-rotate-green 6s ease-in-out infinite; }
+          .wait-glow-red { animation: wait-rotate-red 6s ease-in-out infinite, wait-glow-red 6s ease-in-out infinite; fill: #FF5252; }
+          .wait-glow-yellow { animation: wait-rotate-yellow 6s ease-in-out infinite, wait-glow-yellow 6s ease-in-out infinite; fill: #FFEB3B; }
+          .wait-glow-green { animation: wait-rotate-green 6s ease-in-out infinite, wait-glow-green 6s ease-in-out infinite; fill: #66BB6A; }
+          .wait-num-3 {
+            font-size: 220px;
+            fill: #F5F5F3;
+            stroke: #F5F5F3;
+            stroke-width: 12;
+            letter-spacing: -0.12em;
+            font-stretch: condensed;
+          }
+        </style>
+      </defs>
+
+      <text x="90" y="122" dominant-baseline="middle" class="wait-number wait-num-3">3</text>
+
+      <rect x="20" y="15" width="60" height="170" fill="#F5F5F3"/>
+
+      <circle cx="50" cy="50" r="18" fill="#FF5252" class="wait-cycle-red"/>
+      <circle cx="50" cy="100" r="18" fill="#FFEB3B" class="wait-cycle-yellow"/>
+      <circle cx="50" cy="150" r="18" fill="#66BB6A" class="wait-cycle-green"/>
+
+      <circle cx="50" cy="50" r="18" class="wait-glow-red"/>
+      <circle cx="50" cy="100" r="18" class="wait-glow-yellow"/>
+      <circle cx="50" cy="150" r="18" class="wait-glow-green"/>
+    </svg>
+    <div id="waitingText">Waiting for Producer…</div>
   </div>
 
 <script>
 "use strict";
 
-// ---------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------
-
 const params = new URLSearchParams(location.search);
 
-// The role this pager is for. A bookmark is the whole point — a host's
-// tablet, a camera op's second monitor and a lower third over the stage are
-// three different roles on three different URLs — so the parameter takes
-// precedence over whatever this browser last had picked, every load.
 const ROLE_PARAM = (params.get("role") || "").trim();
 
-// `auto` (default) picks per viewport; the explicit values are for a
-// browser source whose canvas isn't the shape its content is (OBS at
-// 1920x1080 showing a strip, say).
 const LAYOUT_PARAM = (params.get("layout") || "auto").toLowerCase().replace(/[^a-z]/g, "");
 
 const ROLE_STORAGE_KEY = "13years.webpager.role";
 
-// ---------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------
-
-/** Last snapshot from `hello`/`state`, and when it landed (for the local tick). */
 let snapshot = null;
 let snapshotAt = 0;
-/// The Producer's own device name, off `GET /v1/health` — the same thing
-/// `HostPagerView` shows beside its green dot. It isn't in the state
-/// snapshot, and it never changes for the life of a connection, so it's
-/// fetched once rather than carried on every push.
 let producerName = "";
 let selectedRoleId = ROLE_PARAM || readStoredRole() || "";
-/** Id of the message the banner was dismissed for — HostPagerView's `dismissedMessageId`. */
 let dismissedMessageId = null;
 let socket = null;
 let reconnectDelay = 500;
@@ -742,7 +698,9 @@ const el = {
   ltCountdown: document.getElementById("ltCountdown"),
   ltCountdownValue: document.getElementById("ltCountdownValue"),
   ltDuration: document.getElementById("ltDuration"),
-  offline: document.getElementById("offline"),
+  waiting: document.getElementById("waiting"),
+  waitingText: document.getElementById("waitingText"),
+  waitingMark: document.getElementById("waitingMark"),
 };
 
 function readStoredRole() {
@@ -750,18 +708,9 @@ function readStoredRole() {
 }
 
 function storeRole(id) {
-  try { localStorage.setItem(ROLE_STORAGE_KEY, id); } catch (_) { /* private mode */ }
+  try { localStorage.setItem(ROLE_STORAGE_KEY, id); } catch (_) {  }
 }
 
-// ---------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------
-
-// What "a lower third resolution" means in a browser that only knows its
-// own viewport: a band far wider than it is tall. Either test alone has a
-// false positive — a phone in landscape is 2.2:1, a small floating window
-// is short but square-ish — so it takes both a genuinely short viewport or
-// a genuinely extreme ratio.
 function isLowerThirdViewport() {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -780,24 +729,17 @@ function applyLayout() {
   root.dataset.layout = layout;
   el.standard.classList.toggle("hidden", layout !== "standard");
   el.lowerthird.classList.toggle("hidden", layout !== "lowerthird");
-  // The layout that was hidden hasn't been rendered since it was hidden —
-  // on a fresh load that's the placeholder markup, and waiting for the next
-  // snapshot to fix it means up to a second of "--:--" after a resize.
   if (snapshot) render();
 }
 
 window.addEventListener("resize", applyLayout);
 applyLayout();
 
-// ---------------------------------------------------------------------
-// Formatting — mirrors TimeFormatting.string(forSeconds:threshold:)
-// ---------------------------------------------------------------------
-
 function thresholdSeconds() {
   switch (snapshot && snapshot.settings && snapshot.settings.hourFormatThreshold) {
     case "over60Minutes": return 3600;
     case "never": return null;
-    default: return 5400; // over90Minutes, the app's own default
+    default: return 5400;
   }
 }
 
@@ -812,25 +754,12 @@ function formatDuration(totalSeconds) {
   } else {
     core = pad(Math.floor(abs / 60)) + ":" + pad(abs % 60);
   }
-  // Negative is overtime, not a negative duration — same as the app.
   return totalSeconds < 0 ? "+" + core : core;
 }
 
-/// The wall clock, with seconds, at the countdown's own size — the two
-/// readings are a pair.
-///
-/// It is the widest field on the strip by some way, and because the
-/// centered name reserves the wider of the two side fields on *both*
-/// sides to stay on the true centerline, every pixel here costs the name
-/// two. That's the trade: two big readings, and a name that shrinks to
-/// fit what they leave.
 function formatClock(date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
-
-// ---------------------------------------------------------------------
-// Derivation — mirrors PagerPresentationState
-// ---------------------------------------------------------------------
 
 function roles() { return (snapshot && snapshot.roles) || []; }
 
@@ -871,13 +800,11 @@ function notesFor(item) {
 
 function latestRelevantMessage() {
   if (!snapshot) return null;
-  // `messages` is newest-first, so the first match is the latest one.
   return (snapshot.messages || []).find(
     (m) => !m.targetRoleId || m.targetRoleId === selectedRoleId
   ) || null;
 }
 
-/** Remaining seconds, ticked forward locally between snapshots. */
 function remainingSeconds() {
   if (!snapshot || !snapshot.timer) return null;
   const timer = snapshot.timer;
@@ -886,17 +813,10 @@ function remainingSeconds() {
   return Math.round(timer.remainingSeconds - elapsed);
 }
 
-// ---------------------------------------------------------------------
-// Rendering
-// ---------------------------------------------------------------------
-
 function renderRoles() {
   const list = roles();
   const role = activeRole();
   if (role && role.id !== selectedRoleId) {
-    // The selected role was deleted (or this pager was pointed at a name
-    // that doesn't exist) and `activeRole` fell back to the first one —
-    // adopt it, so the picker and the cue can't disagree.
     selectedRoleId = role.id;
   }
 
@@ -931,8 +851,6 @@ function renderStandard() {
     const isHeader = (item.itemType || "").toLowerCase() === "header";
     el.itemCard.dataset.header = isHeader ? "1" : "0";
     el.itemTitle.textContent = (item.title || "").toUpperCase();
-    // Headers are section dividers with no meaningful duration — no
-    // countdown, same as every other pager.
     el.countdown.classList.toggle("hidden", isHeader);
     el.duration.classList.toggle("hidden", isHeader);
     if (!isHeader) {
@@ -979,9 +897,6 @@ function renderLowerThird() {
   el.lowerthird.classList.toggle("message", message !== null);
   el.ltClockValue.textContent = formatClock(new Date());
   if (message) {
-    // No glyph, unlike the standard layout's banner: at this size the card
-    // taking over the strip is already unmistakably a message, and the
-    // glyph only costs the text width.
     el.ltTitle.textContent = message.text;
   } else {
     el.ltTitle.textContent = item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "—";
@@ -999,17 +914,6 @@ function renderLowerThird() {
   fitTitle(layoutLowerThird(message !== null));
 }
 
-/// The message currently standing as a notification, or `null`.
-///
-/// "Standing" is the Producer's state, not this page's: a message notifies
-/// until someone clears the notification (here, on another web pager, or in
-/// the Producer app's Messages section), which is a different act from
-/// deleting the thread. `notificationsClearedAt` in the snapshot is where
-/// that line sits — see `CueEngine.notificationsClearedAt`.
-///
-/// It replaced a 30-second timer that used to take a lower third down on
-/// its own. A timer is the wrong instrument: the producer is the one who
-/// knows whether the host has read it.
 function activeNotification() {
   const message = latestRelevantMessage();
   if (!message || message.id === dismissedMessageId) return null;
@@ -1018,25 +922,9 @@ function activeNotification() {
   return message;
 }
 
-/// Positions the centered field and reports how wide it may be.
-///
-/// Normal: the clock and the countdown reserve the same width as each other
-/// (whichever is wider), so what's left is symmetric about the strip's
-/// centerline and the name sits on it. Message mode: the clock is gone, so
-/// the text gets everything up to the countdown.
 function layoutLowerThird(isMessage) {
   const strip = el.lowerthird;
 
-  // Match the side inset to the space centering leaves above and below the
-  // tallest reading, so the type sits the same distance from all four
-  // edges. Measured rather than declared: the vertical gap is whatever the
-  // band height minus the block height happens to be, and that changes
-  // with every source size.
-  //
-  // Applied as each field's own offset, not as padding on the strip: these
-  // three are absolutely positioned, and an absolutely positioned child is
-  // laid out against its container's *padding box* — padding would inset
-  // the box it's measured from by exactly nothing.
   const blockHeight = Math.max(el.ltClock.offsetHeight, el.ltCountdown.offsetHeight);
   const inset = Math.max((strip.clientHeight - blockHeight) / 2, 0);
   el.ltClock.style.left = inset + "px";
@@ -1067,21 +955,9 @@ function layoutLowerThird(isMessage) {
   }
   available = Math.max(available, 0);
   el.ltTitle.style.maxWidth = available + "px";
-  // What the text itself gets: the panel is border-box, so its padding
-  // comes out of the same budget.
   return Math.max(available - padX * 2, 0);
 }
 
-/// The element name (or a message) is the one thing this strip exists to
-/// show, so it shrinks to fit the room the other fields leave, down to a
-/// floor, and only then falls back to the CSS ellipsis.
-///
-/// Measured against an off-screen copy rather than by comparing the live
-/// node's `scrollWidth` to its `clientWidth`: `text-overflow: ellipsis`
-/// clips the text to the box before either is reported, so the usual
-/// "is this truncated?" test reads exactly equal on text that is very much
-/// truncated. The copy carries the same font and no box to clip to, so its
-/// width is the width the text actually wants.
 const measurer = document.createElement("span");
 measurer.style.cssText = "position:absolute;left:-9999px;top:0;white-space:nowrap;visibility:hidden;";
 document.body.appendChild(measurer);
@@ -1089,9 +965,6 @@ document.body.appendChild(measurer);
 let lastFit = "";
 let fittedSize = "";
 
-/// `available` comes from `layoutLowerThird`, which knows how much room the
-/// clock and the countdown left — the node's own width can't be asked,
-/// because the node is what's being sized.
 function fitTitle(available) {
   const node = el.ltTitle;
   node.style.fontSize = "";
@@ -1111,9 +984,6 @@ function fitTitle(available) {
   measurer.textContent = node.textContent;
 
   const needed = measurer.offsetWidth;
-  // A hair under an exact fit: measured and rendered widths agree to about
-  // a pixel, and landing exactly on the box is what puts an ellipsis on
-  // text that technically fits.
   fittedSize = needed > available && needed > 0
     ? Math.max(base * 0.3, (base * available * 0.98) / needed) + "px"
     : "";
@@ -1133,26 +1003,9 @@ function render() {
   }
 }
 
-/// The Producer pushes on change, and a show sitting on a paused timer
-/// changes nothing for minutes at a stretch — so silence is not evidence of
-/// a dead link, and a pager that treated it that way sat there saying
-/// "Reconnecting…" through a perfectly healthy service.
-///
-/// Every other pager answers this by asking: the Watch polls `/v1/state` at
-/// 1 Hz whether or not anything moved. This one does the same, just at a
-/// lower rate, because the socket already covers the moment-to-moment case
-/// — the ask is what proves the link is still there when nothing is
-/// happening, and what catches a socket that is open but no longer carrying
-/// anything.
 const HEARTBEAT_MS = 2000;
-/// Three missed asks. Below that, a single slow response would flap the
-/// indicator on a busy network.
 const STALE_AFTER_MS = 6500;
 
-/// Everything relevant to this role: Everyone broadcasts plus this role's
-/// own thread with the Producer, merged into one timeline and tagged, the
-/// way `PagerChatView` does it for the phone (a pager gets one screen, not
-/// separate Everyone and DM tabs like the Producer's `MessagesView`).
 function threadMessages() {
   if (!snapshot) return [];
   return (snapshot.messages || [])
@@ -1196,8 +1049,6 @@ function renderChat() {
     el.chatLog.appendChild(node);
   }
 
-  // Follow the conversation, unless the reader has scrolled back to catch
-  // up on something.
   if (wasAtBottom) el.chatLog.scrollTop = el.chatLog.scrollHeight;
 }
 
@@ -1212,17 +1063,42 @@ function renderConnection() {
   el.linkLabel.textContent = live
     ? (producerName ? "Live — " + producerName : "Live")
     : "Reconnecting…";
-  // In the standard layout the role bar already says this; the lower third
-  // has no chrome of its own, so it gets the badge.
-  el.offline.classList.toggle("hidden", live || root.dataset.layout !== "lowerthird");
+  el.waiting.classList.toggle("hidden", live);
+  if (!live && root.dataset.layout === "lowerthird") fitWaiting();
 }
 
-// The clock and the countdown both have to move between snapshots — the
-// Producer pushes about once a second while a timer runs, but a paused
-// browser tab, a dropped socket or a plain wall clock all need a local
-// tick to stay honest.
+function fitWaiting() {
+  const strip = el.lowerthird;
+  el.ltClockValue.textContent = formatClock(new Date());
+  const inset = Math.max((strip.clientHeight - el.ltClock.offsetHeight) / 2, 0);
+  el.ltClock.style.left = inset + "px";
+  const left = inset * 2 + el.ltClock.offsetWidth;
+  const width = Math.max(window.innerWidth - left - inset, 0);
+  const aspect = 206 / 200;
+  let markHeight = window.innerHeight * 0.9;
+  const gap = markHeight * 0.12;
+  const maxFont = window.innerHeight * 0.62;
+  el.waiting.style.paddingLeft = left + "px";
+  el.waiting.style.gap = gap + "px";
+  el.waitingText.style.fontSize = maxFont + "px";
+  const textWidth = el.waitingText.getBoundingClientRect().width || 1;
+  const room = width - markHeight * aspect - gap;
+  let font = maxFont;
+  if (room < textWidth) font = Math.max(maxFont * room / textWidth, markHeight * 0.1);
+  if (font === markHeight * 0.1) {
+    const scale = Math.min(width / (markHeight * aspect + gap + textWidth * font / maxFont), 1);
+    markHeight *= scale;
+    font *= scale;
+  }
+  el.waitingText.style.fontSize = font + "px";
+  el.waitingMark.style.height = markHeight + "px";
+}
+
 setInterval(() => {
-  if (!snapshot) return;
+  if (!snapshot) {
+    renderConnection();
+    return;
+  }
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
   } else if (!el.countdown.classList.contains("hidden")) {
@@ -1231,20 +1107,12 @@ setInterval(() => {
   renderConnection();
 }, 250);
 
-// ---------------------------------------------------------------------
-// Transport — the same `/v1/socket` push every control surface gets, with
-// a REST fallback for a browser (or a proxy) that won't do WebSockets.
-// ---------------------------------------------------------------------
-
 function adopt(state) {
   snapshot = state;
   snapshotAt = Date.now();
   if (!selectedRoleId) {
     selectedRoleId = (state.roles && state.roles[0] && state.roles[0].id) || "";
   } else if (ROLE_PARAM) {
-    // Resolve the parameter against real roles once they're known: an id
-    // wins, then a case-insensitive name, so `?role=Host` works without
-    // anyone having to know a UUID.
     const match = (state.roles || []).find(
       (r) => r.id === ROLE_PARAM ||
              r.id.toLowerCase() === ROLE_PARAM.toLowerCase() ||
@@ -1262,8 +1130,6 @@ function connect() {
   try {
     ws = new WebSocket(url);
   } catch (_) {
-    // No WebSocket in this browser (or a proxy in the way) — the heartbeat
-    // above is a complete pager on its own, just a second less immediate.
     return;
   }
   socket = ws;
@@ -1275,18 +1141,12 @@ function connect() {
   ws.onmessage = (event) => {
     let payload;
     try { payload = JSON.parse(event.data); } catch (_) { return; }
-    // `hello` on connect and `state` on every change carry the identical
-    // shape, on purpose (see ControlAPIModels.swift) — one branch handles
-    // both. A `message` event is already inside the next state snapshot.
     if (payload.event === "hello" || payload.event === "state") adopt(payload.data);
   };
 
   ws.onclose = () => {
     socket = null;
     renderConnection();
-    // Back off to a second and stay there: a venue network that drops for
-    // ten minutes should still have every pager back the moment it
-    // returns, so this never gives up.
     reconnectDelay = Math.min(reconnectDelay * 2, 1000);
     setTimeout(connect, reconnectDelay);
   };
@@ -1311,39 +1171,21 @@ async function fetchProducerName() {
     const health = await response.json();
     producerName = health.device || "";
     renderConnection();
-  } catch (_) { /* the state heartbeat is what reports the link */ }
+  } catch (_) {  }
 }
 
-// The ask, on a timer, whatever the socket is doing.
 setInterval(() => {
   if (Date.now() - snapshotAt >= HEARTBEAT_MS) fetchOnce();
   if (!producerName && snapshot) fetchProducerName();
 }, 1000);
 
-// ---------------------------------------------------------------------
-// Input
-// ---------------------------------------------------------------------
-
 el.role.addEventListener("change", () => {
   selectedRoleId = el.role.value;
   storeRole(selectedRoleId);
-  // A role switch changes which message is "latest" for this pager; that's
-  // a view change, not a new arrival, so don't re-show a banner for it.
   const message = latestRelevantMessage();
   dismissedMessageId = message ? message.id : null;
   render();
 });
-
-// ---------------------------------------------------------------------
-// Writing back
-//
-// The one place this pager stops being a display. Both routes are the same
-// ones the app's own buttons take (`POST`/`DELETE /v1/messages` land on
-// `CueEngine.sendMessage` / `clearMessageHistory`), so a message sent from a
-// browser is indistinguishable from one sent on the phone pager — it
-// persists, it reaches every other pager, and it comes back to this page in
-// the next state push like any other.
-// ---------------------------------------------------------------------
 
 let statusTimer = null;
 
@@ -1357,8 +1199,6 @@ function showStatus(text) {
 async function post(path, options) {
   const response = await fetch(path, { cache: "no-store", ...options });
   if (!response.ok) throw new Error("HTTP " + response.status);
-  // The reply is the new message list, but taking the next full snapshot
-  // keeps one shape in play rather than two.
   await fetchOnce();
 }
 
@@ -1376,9 +1216,6 @@ el.compose.addEventListener("submit", async (event) => {
 
   el.send.disabled = true;
   try {
-    // This role's own thread with the Producer, addressed exactly as
-    // `PagerChatView.send()` does it: a pager writes to its own DM thread,
-    // never to the Everyone thread, and never picks a recipient.
     await post("/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1390,7 +1227,6 @@ el.compose.addEventListener("submit", async (event) => {
     });
     el.composeText.value = "";
     updateSendEnabled();
-    // This pager's own message shouldn't take its own screen over.
     const own = latestRelevantMessage();
     if (own && own.senderRoleId === selectedRoleId) dismissedMessageId = own.id;
     render();
@@ -1402,15 +1238,9 @@ el.compose.addEventListener("submit", async (event) => {
   }
 });
 
-/// Clearing is confirmed in the button itself rather than through
-/// `window.confirm`: an embedded browser (OBS's CEF, a kiosk shell) can
-/// suppress a native dialog outright, and a confirmation that silently
-/// never appears is a button that silently never works.
 let clearArmed = null;
 
 el.clear.addEventListener("click", async () => {
-  // History is shared: clearing it here clears it on the Producer and on
-  // every other pager, so the first press only arms the button.
   if (!clearArmed) {
     el.clear.textContent = "Confirm clear?";
     showStatus("Deletes every message on every device — press again");
@@ -1448,7 +1278,6 @@ el.openChat.addEventListener("click", () => {
 el.closeChat.addEventListener("click", () => el.chat.classList.add("hidden"));
 
 el.chat.addEventListener("click", (event) => {
-  // Click the scrim, not the card.
   if (event.target === el.chat) el.chat.classList.add("hidden");
 });
 
@@ -1456,14 +1285,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") el.chat.classList.add("hidden");
 });
 
-// The banner is the notification, so dismissing it here clears it
-// everywhere — every web pager and every lower third — while leaving the
-// thread intact. `DELETE /v1/messages` (in the chat header) is the other,
-// much bigger hammer.
-//
-// Hidden locally first so the click feels immediate; the state that comes
-// back is what actually settles it, and if the call fails the banner
-// returns with the next snapshot.
 el.banner.addEventListener("click", async () => {
   const message = activeNotification();
   if (!message) return;
@@ -1479,10 +1300,6 @@ el.banner.addEventListener("click", async () => {
   }
 });
 
-// One REST call up front, in parallel with the socket opening: the
-// `hello` snapshot is usually faster, but on a network where the socket has
-// to time out first this is the difference between a pager that paints
-// immediately and one that shows placeholders for several seconds.
 fetchOnce();
 fetchProducerName();
 connect();
