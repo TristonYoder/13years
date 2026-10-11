@@ -8,6 +8,7 @@ struct ProducerMacApp: App {
     @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true)
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = DocumentController()
+    @StateObject private var launchPreferences = LaunchPreferences()
     private let flashingWindow = PagerFlashingWindowController()
 
     init() {
@@ -18,10 +19,21 @@ struct ProducerMacApp: App {
         WindowGroup {
             ProducerRootView()
                 .environmentObject(cueEngine)
+                .environmentObject(launchPreferences)
                 .frame(minWidth: 800, minHeight: 600)
+                .disabled(documents.isLauncherPresented)
+                .overlay {
+                    if documents.isLauncherPresented {
+                        LauncherView(documents: documents)
+                            .environmentObject(cueEngine)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: documents.isLauncherPresented)
                 .splashScreen(isPresented: splash.isPresented)
                 .task {
                     splash.markReady()
+                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
                     guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }
@@ -34,6 +46,9 @@ struct ProducerMacApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {
+                Button("New Document…") { documents.newDocument(cueEngine) }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("New from Template…") { documents.newFromTemplate(cueEngine) }
                 Button("Open…") { documents.open(cueEngine) }
                     .keyboardShortcut("o")
                 Menu("Open Recent") {
@@ -50,6 +65,7 @@ struct ProducerMacApp: App {
                     .keyboardShortcut("s")
                 Button("Save As…") { documents.saveAs(cueEngine) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Button("Save as Template…") { documents.saveAsTemplate(cueEngine) }
             }
             CommandGroup(after: .newItem) {
                 Button("Flash a Pager…") {

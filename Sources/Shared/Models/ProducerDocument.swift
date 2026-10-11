@@ -5,6 +5,7 @@ import Foundation
 
 public struct ProducerDocument: Codable, Equatable, Sendable {
     public static let fileExtension = "13years"
+    public static let templateExtension = "13yearstemplate"
     public static let currentVersion = 1
 
     public struct Settings: Codable, Equatable, Sendable {
@@ -53,6 +54,23 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.planItems = planItems
         self.activeItemIndex = activeItemIndex
         self.settings = settings
+    }
+
+    public func asTemplate() -> ProducerDocument {
+        var template = self
+        template.savedAt = Date()
+        template.roles = roles.map { role in
+            var role = role
+            role.state = .off
+            return role
+        }
+        template.planItems = planItems.map { item in
+            var item = item
+            item.elapsedSeconds = 0
+            item.isRunning = false
+            return item
+        }
+        return template
     }
 
     public enum LoadError: LocalizedError {

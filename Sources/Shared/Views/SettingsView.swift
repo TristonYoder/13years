@@ -140,6 +140,16 @@ public struct SettingsView: View {
                 Text("Devices on the same LAN — Pager apps and ESP32 hardware pagers — discover this device via Bonjour and connect directly for real-time cue delivery.")
             }
 
+            #if os(macOS)
+            Section {
+                LaunchSettingsSection()
+            } header: {
+                Text("Startup")
+            } footer: {
+                Text("A template opens as a new untitled document, so the template file itself is never changed except by Save as Template.")
+            }
+            #endif
+
             Section {
                 ControlAPISettingsSection()
             } header: {
