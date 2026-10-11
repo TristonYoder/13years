@@ -1537,8 +1537,9 @@ public final class CueEngine: ObservableObject {
     }
 
     private var timerAnchor: TimerAnchor?
+    var timerClock: () -> Date = { Date() }
 
-    private func tickTimer() {
+    func tickTimer() {
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
             AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .public) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .public)")
@@ -1572,7 +1573,7 @@ public final class CueEngine: ObservableObject {
             return
         }
 
-        let now = Date()
+        let now = timerClock()
         if var anchor = timerAnchor, anchor.itemId == item.id, anchor.lastWritten == item.elapsedSeconds {
             let elapsed = anchor.elapsedAtStart + max(0, Int(now.timeIntervalSince(anchor.startedAt)))
             anchor.lastWritten = elapsed
