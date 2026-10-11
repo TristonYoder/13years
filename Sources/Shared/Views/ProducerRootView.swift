@@ -19,6 +19,9 @@ public struct ProducerRootView: View {
 
             LiveTimerHeaderView()
                 .padding()
+                #if os(macOS)
+                .padding(.top, -6)
+                #endif
                 .background(.regularMaterial)
 
             Divider()
@@ -29,6 +32,9 @@ public struct ProducerRootView: View {
             iPadNavigationLayout
             #endif
         }
+        #if os(macOS)
+        .ignoresSafeArea(.container, edges: .top)
+        #endif
         .task {
             UpdateChecker.shared.startPeriodicChecks()
         }
@@ -37,7 +43,7 @@ public struct ProducerRootView: View {
     #if os(macOS)
     private var macOSNavigationSplitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(AppMode.allCases, id: \.self, selection: Binding(
+            List(AppMode.sidebarCases, id: \.self, selection: Binding(
                 get: { engine.appMode },
                 set: { if let mode = $0 { engine.appMode = mode } }
             )) { mode in
@@ -50,8 +56,10 @@ public struct ProducerRootView: View {
             .listStyle(.sidebar)
             #endif
             .navigationTitle("13 Years Producer")
+            .modifier(HideNativeSidebarToggle())
         } detail: {
             detailView(for: engine.appMode)
+                .modifier(HideNativeSidebarToggle())
         }
         .modifier(HideNativeSidebarToggle())
         .environment(\.toggleSidebar) {
@@ -64,7 +72,7 @@ public struct ProducerRootView: View {
 
     private var iPadNavigationLayout: some View {
         TabView(selection: $engine.appMode) {
-            ForEach(AppMode.allCases, id: \.self) { mode in
+            ForEach(AppMode.sidebarCases, id: \.self) { mode in
                 NavigationStack { detailView(for: mode) }
                     .tabItem { Label { Text(mode.displayName) } icon: { mode.icon } }
                     .tag(mode)
@@ -81,7 +89,7 @@ public struct ProducerRootView: View {
         case .serviceFlow:
             ServiceFlowView()
         case .livePreview:
-            LivePreviewView()
+            ProducerControlView()
         case .messages:
             MessagesView()
         case .settings:

@@ -25,6 +25,27 @@ final class CueEngineTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "serviceSchedules")
     }
 
+    func testUnreadMessageFromRoleClearsWhenThreadOpened() {
+        let engine = CueEngine()
+        engine.roles = [RoleCue(id: "r1", name: "Lyrics"), RoleCue(id: "r2", name: "Camera")]
+        engine.addMessages([InterTeamMessage(sender: "Lyrics", targetRoleId: "r1", senderRoleId: "r1", text: "ready?")])
+
+        XCTAssertTrue(engine.hasUnreadMessage(forRoleId: "r1"))
+        XCTAssertFalse(engine.hasUnreadMessage(forRoleId: "r2"))
+
+        engine.openMessageThread(forRoleId: "r1")
+        XCTAssertEqual(engine.appMode, .messages)
+        XCTAssertEqual(engine.selectedMessageThreadId, "r1")
+        XCTAssertFalse(engine.hasUnreadMessage(forRoleId: "r1"))
+    }
+
+    func testProducerMessagesAreNeverUnread() {
+        let engine = CueEngine()
+        engine.roles = [RoleCue(id: "r1", name: "Lyrics")]
+        engine.addMessages([InterTeamMessage(targetRoleId: "r1", text: "standby")])
+        XCTAssertFalse(engine.hasUnreadMessage(forRoleId: "r1"))
+    }
+
     func testMultiRoleSelectionAndCueTrigger() {
         let engine = CueEngine()
         engine.roles = [

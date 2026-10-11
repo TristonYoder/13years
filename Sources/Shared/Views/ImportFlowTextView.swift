@@ -26,7 +26,43 @@ public struct ImportFlowTextView: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        importForm
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Import") { performImport() }
+                        .disabled(parsedItems.isEmpty)
+                }
+                .padding()
+                .background(.bar)
+            }
+            .frame(minWidth: 460, minHeight: 480)
+        #else
         NavigationStack {
+            importForm
+                .navigationTitle("Import Flow")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Import") { performImport() }
+                            .disabled(parsedItems.isEmpty)
+                    }
+                }
+        }
+        #endif
+    }
+
+    private func performImport() {
+        onImport(planTitle, parsedItems)
+        dismiss()
+    }
+
+    private var importForm: some View {
             Form {
                 Section("Service Title") {
                     TextField("e.g. Sunday Morning Service", text: $planTitle)
@@ -69,19 +105,5 @@ public struct ImportFlowTextView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Import Flow")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Import") {
-                        onImport(planTitle, parsedItems)
-                        dismiss()
-                    }
-                    .disabled(parsedItems.isEmpty)
-                }
-            }
-        }
     }
 }

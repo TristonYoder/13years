@@ -6,11 +6,15 @@ import SwiftUI
 public struct MessagesView: View {
     @EnvironmentObject var engine: CueEngine
     @State private var messageText: String = ""
-    @State private var selectedThreadId: String = "all"
     @State private var isHighPriority = false
     @State private var showingClearConfirmation = false
 
     public init() {}
+
+    private var selectedThreadId: String {
+        get { engine.selectedMessageThreadId }
+        nonmutating set { engine.selectedMessageThreadId = newValue }
+    }
 
     private var targetRoleId: String? { selectedThreadId == "all" ? nil : selectedThreadId }
 
@@ -58,6 +62,9 @@ public struct MessagesView: View {
                 }
             }
         }
+        .onAppear { engine.markThreadRead(roleId: selectedThreadId) }
+        .onChange(of: selectedThreadId) { _, id in engine.markThreadRead(roleId: id) }
+        .onChange(of: engine.recentMessages) { _, _ in engine.markThreadRead(roleId: selectedThreadId) }
     }
 
     private var threadSidebar: some View {
