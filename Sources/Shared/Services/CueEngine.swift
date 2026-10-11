@@ -1529,6 +1529,15 @@ public final class CueEngine: ObservableObject {
     private var pcoLiveSyncTickCount = 0
     private var heartbeatTickCount = 0
 
+    private struct TimerAnchor {
+        let itemId: String
+        let startedAt: Date
+        let elapsedAtStart: Int
+        var lastWritten: Int
+    }
+
+    private var timerAnchor: TimerAnchor?
+
     private func tickTimer() {
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
@@ -1558,11 +1567,28 @@ public final class CueEngine: ObservableObject {
             }
         }
 
-        guard var item = activeTimerItem, item.isRunning else { return }
-        item.elapsedSeconds += 1
+        guard var item = activeTimerItem, item.isRunning else {
+            timerAnchor = nil
+            return
+        }
+
+        let now = Date()
+        if var anchor = timerAnchor, anchor.itemId == item.id, anchor.lastWritten == item.elapsedSeconds {
+            let elapsed = anchor.elapsedAtStart + max(0, Int(now.timeIntervalSince(anchor.startedAt)))
+            anchor.lastWritten = elapsed
+            timerAnchor = anchor
+            item.elapsedSeconds = elapsed
+        } else {
+            timerAnchor = TimerAnchor(
+                itemId: item.id,
+                startedAt: now,
+                elapsedAtStart: item.elapsedSeconds,
+                lastWritten: item.elapsedSeconds
+            )
+        }
         self.activeTimerItem = item
 
-        if isMasterServer && item.elapsedSeconds % 5 == 0 {
+        if isMasterServer && heartbeatTickCount % 5 == 0 {
             let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
             server.broadcast(packet: packet)
             broadcastToRelay(packet)
