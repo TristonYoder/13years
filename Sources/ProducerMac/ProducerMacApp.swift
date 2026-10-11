@@ -23,8 +23,7 @@ struct ProducerMacApp: App {
                     splash.markReady()
                 }
         }
-        .windowStyle(.titleBar)
-        .windowToolbarStyle(.unified)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Flash a Pager…") {

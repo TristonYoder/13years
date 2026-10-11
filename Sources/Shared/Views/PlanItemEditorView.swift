@@ -59,7 +59,52 @@ public struct PlanItemEditorView: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        editorForm
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Save") { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canSave)
+                }
+                .padding()
+                .background(.bar)
+            }
+            .frame(minWidth: 460, minHeight: 480)
+        #else
         NavigationStack {
+            editorForm
+                .navigationTitle(isAdding ? "Add Item" : "Edit Item")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { save() }
+                            .disabled(!canSave)
+                    }
+                }
+        }
+        #endif
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func save() {
+        let id: String? = {
+            if case .edit(let item) = mode { return item.id }
+            return nil
+        }()
+        onSave(id, title, itemType, lengthInSeconds, notes, isDurationActual)
+        dismiss()
+    }
+
+    private var editorForm: some View {
             Form {
                 Section("Item") {
                     TextField("Title", text: $title)
@@ -90,24 +135,6 @@ public struct PlanItemEditorView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(isAdding ? "Add Item" : "Edit Item")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        let id: String? = {
-                            if case .edit(let item) = mode { return item.id }
-                            return nil
-                        }()
-                        onSave(id, title, itemType, lengthInSeconds, notes, isDurationActual)
-                        dismiss()
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
     }
 
     private var durationRow: some View {

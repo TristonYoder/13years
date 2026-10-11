@@ -13,6 +13,12 @@ public struct ProducerRootView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            #if os(macOS)
+            Rectangle()
+                .fill(.regularMaterial)
+                .frame(height: 28)
+            #endif
+
             #if !os(tvOS)
             UpdateBannerView()
             #endif
@@ -50,8 +56,10 @@ public struct ProducerRootView: View {
             .listStyle(.sidebar)
             #endif
             .navigationTitle("13 Years Producer")
+            .modifier(HideNativeSidebarToggle())
         } detail: {
             detailView(for: engine.appMode)
+                .modifier(HideNativeSidebarToggle())
         }
         .modifier(HideNativeSidebarToggle())
         .environment(\.toggleSidebar) {

@@ -9,36 +9,76 @@ public struct PCOPlanPickerView: View {
 
     public init() {}
 
+    private var title: String {
+        engine.pcoSelectedServiceTypeId == nil ? "Plan Type" : "Plan"
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if engine.pcoSelectedServiceTypeId == nil {
+            serviceTypeList
+        } else {
+            planList
+        }
+    }
+
     public var body: some View {
-        NavigationStack {
-            Group {
-                if engine.pcoSelectedServiceTypeId == nil {
-                    serviceTypeList
-                } else {
-                    planList
-                }
-            }
-            .navigationTitle(engine.pcoSelectedServiceTypeId == nil ? "Plan Type" : "Plan")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+        #if os(macOS)
+        VStack(spacing: 0) {
+            HStack {
                 if engine.pcoSelectedServiceTypeId != nil {
-                    ToolbarItem(placement: .navigation) {
-                        Button(action: { engine.pcoSelectedServiceTypeId = nil }) {
-                            Label("Plan Types", systemImage: "chevron.left")
+                    Button(action: { engine.pcoSelectedServiceTypeId = nil }) {
+                        Label("Plan Types", systemImage: "chevron.left")
+                    }
+                }
+                Spacer()
+                Text(title).font(.headline)
+                Spacer()
+            }
+            .padding()
+
+            Divider()
+
+            content
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding()
+            .background(.bar)
+        }
+        .task {
+            if engine.pcoServiceTypes.isEmpty {
+                engine.fetchPCOServiceTypes()
+            }
+        }
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 480, idealHeight: 560)
+        #else
+        NavigationStack {
+            content
+                .navigationTitle(title)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    if engine.pcoSelectedServiceTypeId != nil {
+                        ToolbarItem(placement: .navigation) {
+                            Button(action: { engine.pcoSelectedServiceTypeId = nil }) {
+                                Label("Plan Types", systemImage: "chevron.left")
+                            }
                         }
                     }
                 }
-            }
-            .task {
-                if engine.pcoServiceTypes.isEmpty {
-                    engine.fetchPCOServiceTypes()
+                .task {
+                    if engine.pcoServiceTypes.isEmpty {
+                        engine.fetchPCOServiceTypes()
+                    }
                 }
-            }
         }
-        #if os(macOS)
-        .frame(minWidth: 420, idealWidth: 460, minHeight: 480, idealHeight: 560)
         #endif
     }
 
