@@ -461,6 +461,18 @@ public final class CueEngine: ObservableObject {
         )
     }
 
+    public func resetToNewDocument() {
+        var blank = makeDocument()
+        blank.roles = []
+        blank.selectedRoleIds = nil
+        blank.waypoints = []
+        blank.serviceSchedules = []
+        blank.planItems = []
+        blank.activeItemIndex = 0
+        apply(blank)
+        currentDocumentURL = nil
+    }
+
     public func apply(_ document: ProducerDocument) {
         roles = document.roles.isEmpty
             ? RoleCue.defaultRoles

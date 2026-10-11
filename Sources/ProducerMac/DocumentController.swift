@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class DocumentController: ObservableObject {
     @Published private(set) var recentURLs: [URL] = []
+    @Published var isLauncherPresented = true
 
     private var discardedOnClose = false
 
@@ -16,6 +17,10 @@ final class DocumentController: ObservableObject {
 
     private var contentType: UTType {
         UTType(filenameExtension: ProducerDocument.fileExtension) ?? .json
+    }
+
+    private var templateType: UTType {
+        UTType(filenameExtension: ProducerDocument.templateExtension) ?? .json
     }
 
     init() {
@@ -78,6 +83,84 @@ final class DocumentController: ObservableObject {
         return write(engine, to: url)
     }
 
+    func newDocument(_ engine: CueEngine) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [contentType]
+        panel.canCreateDirectories = true
+        panel.title = "New Document"
+        panel.prompt = "Create"
+        panel.nameFieldStringValue = "Untitled.\(ProducerDocument.fileExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        engine.resetToNewDocument()
+        write(engine, to: url)
+    }
+
+    func saveAsTemplate(_ engine: CueEngine) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [templateType]
+        panel.canCreateDirectories = true
+        panel.title = "Save as Template"
+        panel.prompt = "Save Template"
+        let base = engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled"
+        panel.nameFieldStringValue = "\(base).\(ProducerDocument.templateExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try engine.makeDocument().asTemplate().write(to: url)
+        } catch {
+            present(error, action: "save the template", url: url)
+        }
+    }
+
+    func newFromTemplate(_ engine: CueEngine) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [templateType]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.title = "New from Template"
+        panel.prompt = "Choose"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        openTemplate(url, in: engine)
+    }
+
+    @discardableResult
+    func openTemplate(_ url: URL, in engine: CueEngine, reportErrors: Bool = true) -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            engine.apply(try ProducerDocument.read(from: url))
+            engine.currentDocumentURL = nil
+            discardedOnClose = false
+            isLauncherPresented = false
+            return true
+        } catch {
+            if reportErrors { present(error, action: "open", url: url) }
+            return false
+        }
+    }
+
+    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+        switch preferences.behavior {
+        case .showLauncher:
+            return
+        case .reopenLast:
+            guard let url = recentURLs.first else { return }
+            open(url, in: engine)
+        case .openFile:
+            guard let url = preferences.fileURL else { return }
+            if preferences.isTemplate {
+                openTemplate(url, in: engine)
+            } else {
+                open(url, in: engine)
+            }
+        }
+    }
+
+    func dismissLauncher() {
+        isLauncherPresented = false
+    }
+
     func open(_ engine: CueEngine) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [contentType]
@@ -94,6 +177,7 @@ final class DocumentController: ObservableObject {
             engine.apply(try ProducerDocument.read(from: url))
             engine.currentDocumentURL = url
             discardedOnClose = false
+            isLauncherPresented = false
             noteRecent(url)
         } catch {
             forget(url)
@@ -114,6 +198,7 @@ final class DocumentController: ObservableObject {
         }
         engine.currentDocumentURL = url
         discardedOnClose = false
+        isLauncherPresented = false
         noteRecent(url)
         return true
     }
