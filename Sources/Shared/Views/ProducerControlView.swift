@@ -5,8 +5,8 @@ import SwiftUI
 
 public struct ProducerControlView: View {
     @EnvironmentObject var engine: CueEngine
-    @State private var messageText: String = ""
     @State private var showingPlanPicker = false
+    @AppStorage("showPagerPreview") private var showsPreview = true
 
     public init() {}
 
@@ -17,75 +17,32 @@ public struct ProducerControlView: View {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
+
+                Button(action: { showsPreview.toggle() }) {
+                    Label(showsPreview ? "Hide Preview" : "Show Preview", systemImage: "iphone.gen3")
+                }
+                .help(showsPreview ? "Hide the live pager preview" : "Show the live pager preview")
             }
 
-            ScrollView {
-                VStack(spacing: 24) {
-                    commandDeck
-                    roleGrid
-                    commsPanel
+            HStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        roleGrid
+                    }
+                    .padding()
                 }
-                .padding()
+
+                if showsPreview {
+                    PagerPreviewPane()
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
+            .clipped()
+            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showsPreview)
         }
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
         }
-    }
-
-    private var commandDeck: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Master Control", systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.headline)
-                Spacer()
-                Text("\(engine.selectedRoleIds.count) roles selected")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 12) {
-                Button(action: { engine.setCueForSelectedRoles(.standby) }) {
-                    VStack(spacing: 4) {
-                        Text("STANDBY")
-                            .font(.system(.title2, weight: .black))
-                        Text("Yellow")
-                            .font(.caption)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.yellow)
-                .foregroundStyle(.black)
-                .help("Set STANDBY for the \(engine.selectedRoleIds.count) selected role(s)")
-
-                Button(action: { engine.setCueForSelectedRoles(.go) }) {
-                    VStack(spacing: 4) {
-                        Text("GO!")
-                            .font(.system(.title2, weight: .black))
-                        Text("Green")
-                            .font(.caption)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .help("Set GO for the \(engine.selectedRoleIds.count) selected role(s)")
-
-                Button(action: { engine.setCueForSelectedRoles(.off) }) {
-                    Text("CLEAR")
-                        .font(.headline)
-                        .padding(.vertical, 16)
-                        .frame(width: 80)
-                }
-                .buttonStyle(.bordered)
-                .help("Clear the cue for the \(engine.selectedRoleIds.count) selected role(s)")
-            }
-        }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var roleGrid: some View {
@@ -129,12 +86,29 @@ public struct ProducerControlView: View {
 
                 Spacer()
 
-                Text(role.state.displayName)
-                    .font(.caption.weight(.bold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(role.state.color.opacity(0.2), in: Capsule())
-                    .foregroundStyle(role.state.color)
+                if role.state != .off {
+                    Text(role.state.displayName)
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(role.state.color.opacity(0.2), in: Capsule())
+                        .foregroundStyle(role.state.color)
+                }
+
+                Button(action: { engine.openMessageThread(forRoleId: role.id) }) {
+                    Image(systemName: "message.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open the message thread with \(role.name)")
+
+                Button(action: { engine.clearActiveNotification() }) {
+                    Image(systemName: "bell.slash")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(engine.activeNotification(forRoleId: role.id) == nil)
+                .help("Take the standing message off the web pagers and lower thirds, keeping the history")
             }
 
             HStack(spacing: 8) {
@@ -157,52 +131,79 @@ public struct ProducerControlView: View {
             }
         }
         .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.regularMaterial)
+                if engine.hasUnreadMessage(forRoleId: role.id) {
+                    PulsingBlueFill()
+                }
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(isSelected ? .blue : .clear, lineWidth: 2)
         )
-        .onTapGesture { engine.toggleRoleSelection(role.id) }
-    }
-
-    private var commsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Crew Messages", systemImage: "message.fill")
-                .font(.headline)
-
-            HStack(spacing: 8) {
-                TextField("Message for host / crew…", text: $messageText)
-                    #if os(macOS)
-                    .textFieldStyle(.roundedBorder)
-                    #endif
-
-                Button("Send") {
-                    engine.sendMessage(messageText)
-                    messageText = ""
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(messageText.isEmpty)
-            }
-
-            if !engine.recentMessages.isEmpty {
-                ForEach(engine.recentMessages.prefix(4)) { msg in
-                    HStack {
-                        Text(msg.sender)
-                            .font(.caption.bold())
-                            .foregroundStyle(.blue)
-                        Text(msg.text)
-                            .font(.callout)
-                        Spacer()
-                        Text(msg.timestamp, style: .time)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                }
+        .overlay(alignment: .topTrailing) {
+            if engine.hasUnreadMessage(forRoleId: role.id) {
+                UnreadMessageBadge()
+                    .offset(x: 18, y: -18)
+                    .allowsHitTesting(false)
             }
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .onTapGesture { engine.toggleRoleSelection(role.id) }
+    }
+}
+
+private struct UnreadMessageBadge: View {
+    var body: some View {
+        Image(systemName: "message.fill")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(8)
+            .background(Color.blue, in: Circle())
+            .accessibilityLabel("Unread message")
+    }
+}
+
+private struct PulsingBlueFill: View {
+    @State private var isBright = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color.blue)
+            .opacity(isBright ? 0.3 : 0.04)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isBright = true
+                }
+            }
+            .allowsHitTesting(false)
+    }
+}
+
+private struct PagerPreviewPane: View {
+    private static let phoneSize = CGSize(width: 320, height: 660)
+    private static let padding: CGFloat = 24
+
+    var body: some View {
+        GeometryReader { proxy in
+            let availableHeight = max(proxy.size.height - Self.padding * 2, 1)
+            let scale = min(1, availableHeight / Self.phoneSize.height)
+
+            HostPagerView()
+                .safeAreaInset(edge: .top, spacing: 0) { Color.clear.frame(height: 16) }
+                .safeAreaInset(edge: .leading, spacing: 0) { Color.clear.frame(width: 12) }
+                .frame(width: Self.phoneSize.width, height: Self.phoneSize.height)
+                .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 44, style: .continuous)
+                        .strokeBorder(.black, lineWidth: 10)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+                .scaleEffect(scale)
+                .frame(width: Self.phoneSize.width * scale, height: Self.phoneSize.height * scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 380)
     }
 }

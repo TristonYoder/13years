@@ -26,83 +26,120 @@ public struct LiveTimerHeaderView: View {
             }
 
             HStack {
-                Button(action: { engine.previousPlanItem() }) {
-                    Image(systemName: "chevron.left")
+                HStack {
+                    #if os(macOS)
+                    Color.clear.frame(width: 64, height: 1)
+                    #endif
                 }
-                .buttonStyle(.bordered)
-                .help("Previous item")
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(spacing: 2) {
-                    Text(engine.activeTimerItem?.servicePlanTitle ?? "Sunday Service")
-                        .font(.caption)
+                    #if os(macOS)
+                    Text(engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(engine.activeTimerItem?.title ?? "No Item Selected")
-                        .font(.headline)
                         .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-
-                if engine.isAtEndOfPlan && engine.canLoadNextService {
-                    Button(action: { engine.loadNextService() }) {
-                        Label("Next Service", systemImage: "calendar.badge.clock")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .help("Load the next scheduled service from Planning Center")
-                } else {
-                    Button(action: { engine.nextPlanItem() }) {
-                        Image(systemName: "chevron.right")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(engine.isAtEndOfPlan)
-                    .help("Next item")
-                }
-            }
-
-            if let item = engine.activeTimerItem {
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Text("Remaining")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-
-                            projectedActualPicker(item)
-                        }
-
+                    #endif
+                    Text(engine.activeTimerItem?.title ?? "No Item Selected")
+                        .font(.system(size: 20, weight: .heavy))
+                        .textCase(.uppercase)
+                        .lineLimit(1)
+                    if let item = engine.activeTimerItem {
                         remainingTimeControl(item)
+                        projectedActualPicker(item)
                     }
-
-                    Spacer()
-
-                    ControlGroup {
-                        Button("+1m") { engine.adjustTimerRemainingTime(bySeconds: 60) }
-                            .help("Add 1 minute")
-                        Button("+30s") { engine.adjustTimerRemainingTime(bySeconds: 30) }
-                            .help("Add 30 seconds")
-                        Button("−30s") { engine.adjustTimerRemainingTime(bySeconds: -30) }
-                            .help("Subtract 30 seconds")
-                        Button("−1m") { engine.adjustTimerRemainingTime(bySeconds: -60) }
-                            .help("Subtract 1 minute")
-                    }
-                    .controlGroupStyle(.automatic)
-
-                    Button(action: { engine.toggleTimerRunning() }) {
-                        Image(systemName: item.isRunning ? "pause.fill" : "play.fill")
-                            .frame(width: 18)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(item.isRunning ? .blue : .green)
-                    .help(item.isRunning ? "Pause the timer" : "Start the timer")
-
-                    Button(action: { engine.resetTimer() }) {
-                        Image(systemName: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Reset elapsed time")
                 }
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    if engine.activeTimerItem != nil {
+                        HStack(spacing: 8) {
+                            Button(action: { engine.previousPlanItem() }) {
+                                Image(systemName: "chevron.left").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Previous item")
+
+                            if let item = engine.activeTimerItem {
+                                Button(action: { engine.toggleTimerRunning() }) {
+                                    Image(systemName: item.isRunning ? "pause.fill" : "play.fill")
+                                        .font(.title2)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(item.isRunning ? .blue : .green)
+                                .help(item.isRunning ? "Pause the timer" : "Start the timer")
+
+                                Button(action: { engine.resetTimer() }) {
+                                    Image(systemName: "arrow.counterclockwise").font(.title2).frame(maxWidth: .infinity, maxHeight: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .help("Reset elapsed time")
+                            }
+
+                            if engine.isAtEndOfPlan && engine.canLoadNextService {
+                                Button(action: { engine.loadNextService() }) {
+                                    Label("Next Service", systemImage: "calendar.badge.clock")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .help("Load the next scheduled service from Planning Center")
+                            } else {
+                                Button(action: { engine.nextPlanItem() }) {
+                                    Image(systemName: "chevron.right").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(engine.isAtEndOfPlan)
+                                .help("Next item")
+                            }
+                        }
+                        .frame(maxHeight: .infinity)
+                    }
+                    cueButtons
+                }
+                .frame(width: 340)
+                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var cueButtons: some View {
+        let count = engine.selectedRoleIds.count
+        return HStack(spacing: 8) {
+            Button(action: { engine.setCueForSelectedRoles(.standby) }) {
+                Text("STANDBY")
+                    .font(.system(size: 13, weight: .black))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.yellow)
+            .foregroundStyle(.black)
+            .help("Set STANDBY for the \(count) selected role(s)")
+
+            Button(action: { engine.setCueForSelectedRoles(.go) }) {
+                Text("GO!")
+                    .font(.system(size: 13, weight: .black))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .help("Set GO for the \(count) selected role(s)")
+
+            Button(action: { engine.setCueForSelectedRoles(.off) }) {
+                Text("CLEAR")
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .help("Clear the cue for the \(count) selected role(s)")
+        }
+        .frame(maxHeight: .infinity)
     }
 
     private func projectedActualPicker(_ item: PCOTimerItem) -> some View {
@@ -110,9 +147,6 @@ public struct LiveTimerHeaderView: View {
             get: { engine.activeTimerActualForDisplay },
             set: { isActual in
                 engine.setActiveTimerActualOverride(isActual)
-                if isActual {
-                    isEditingTimer = true
-                }
             }
         )) {
             Text("Projected").tag(false)
@@ -127,7 +161,7 @@ public struct LiveTimerHeaderView: View {
     @ViewBuilder
     private func remainingTimeControl(_ item: PCOTimerItem) -> some View {
         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold))
-            .font(.inter(size: 32, weight: .bold))
+            .font(.inter(size: 52, weight: .black))
             .foregroundStyle(isEditingTimer ? Color.primary : (item.isOvertime ? .red : .primary))
             #if !os(tvOS)
             .contentTransition(.numericText())

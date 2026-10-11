@@ -7,6 +7,7 @@ import SwiftUI
 struct ProducerMacApp: App {
     @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true)
     @StateObject private var splash = SplashCoordinator()
+    @StateObject private var documents = DocumentController()
     private let flashingWindow = PagerFlashingWindowController()
 
     init() {
@@ -22,9 +23,34 @@ struct ProducerMacApp: App {
                 .task {
                     splash.markReady()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }
+                    documents.saveOnClose(cueEngine)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    documents.saveOnClose(cueEngine)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandGroup(after: .newItem) {
+                Button("Open…") { documents.open(cueEngine) }
+                    .keyboardShortcut("o")
+                Menu("Open Recent") {
+                    ForEach(documents.recentURLs, id: \.self) { url in
+                        Button(url.lastPathComponent) { documents.open(url, in: cueEngine) }
+                    }
+                    if !documents.recentURLs.isEmpty { Divider() }
+                    Button("Clear Menu") { documents.clearRecents() }
+                        .disabled(documents.recentURLs.isEmpty)
+                }
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") { documents.save(cueEngine) }
+                    .keyboardShortcut("s")
+                Button("Save As…") { documents.saveAs(cueEngine) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .newItem) {
                 Button("Flash a Pager…") {
                     flashingWindow.present(cueEngine: cueEngine)

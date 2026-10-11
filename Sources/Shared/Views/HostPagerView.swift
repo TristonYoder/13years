@@ -55,6 +55,11 @@ public struct HostPagerView: View {
         return 1.0 - progress * 0.7
     }
 
+    private static var localHostName: String {
+        let name = ProcessInfo.processInfo.hostName
+        return name.hasSuffix(".local") ? String(name.dropLast(".local".count)) : name
+    }
+
     private var pagerView: some View {
         ZStack {
             currentState.color.ignoresSafeArea()
@@ -71,8 +76,6 @@ public struct HostPagerView: View {
                         HStack(spacing: 6) {
                             Text(activeRole?.name ?? "Host Pager")
                                 .font(.inter(size: 14, weight: .bold))
-                            Image(systemName: "chevron.down")
-                                .font(.inter(size: 12))
                         }
                         .foregroundColor(currentState.textColor)
                         .padding(.horizontal, 12)
@@ -84,7 +87,15 @@ public struct HostPagerView: View {
                     Spacer()
 
                     if engine.isMasterServer {
-                        EmptyView()
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                            Text("Connected to \(Self.localHostName)")
+                                .font(.inter(size: 11, weight: .semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(currentState.textColor.opacity(0.8))
                     } else if engine.isProducerLive, let master = engine.connectedMasterName {
                         HStack(spacing: 4) {
                             Circle()

@@ -12,6 +12,9 @@ import UIKit
 @MainActor
 public final class CueEngine: ObservableObject {
     @Published public var appMode: AppMode = .producerControl
+    @Published public var currentDocumentURL: URL?
+    @Published public var selectedMessageThreadId: String = "all"
+    @Published private var messageReadAt: [String: Date] = [:]
     @Published public var roles: [RoleCue] = RoleCue.defaultRoles {
         didSet { persistRoles() }
     }
@@ -440,6 +443,54 @@ public final class CueEngine: ObservableObject {
         #else
         return UIDevice.current.name
         #endif
+    }
+
+    public func makeDocument() -> ProducerDocument {
+        ProducerDocument(
+            roles: roles,
+            selectedRoleIds: selectedRoleIds.sorted(),
+            waypoints: waypoints,
+            serviceSchedules: serviceSchedules,
+            planItems: planItems,
+            activeItemIndex: activeItemIndex,
+            settings: .init(
+                hourFormatThreshold: hourFormatThreshold,
+                pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
+                plotipharRelayHost: plotipharRelayHost
+            )
+        )
+    }
+
+    public func apply(_ document: ProducerDocument) {
+        roles = document.roles.isEmpty
+            ? RoleCue.defaultRoles
+            : document.roles.map { role in
+                var role = role
+                role.state = .off
+                return role
+            }
+        let knownRoleIds = Set(roles.map(\.id))
+        let restored = document.selectedRoleIds.map(Set.init) ?? selectedRoleIds
+        selectedRoleIds = restored.intersection(knownRoleIds)
+        if selectedRoleIds.isEmpty, let first = roles.first { selectedRoleIds = [first.id] }
+
+        waypoints = document.waypoints
+        serviceSchedules = sortedByStartsAt(document.serviceSchedules)
+        hourFormatThreshold = document.settings.hourFormatThreshold
+        pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
+        plotipharRelayHost = document.settings.plotipharRelayHost
+
+        var items = document.planItems
+        for index in items.indices { items[index].isRunning = false }
+        planItems = items
+        if items.isEmpty {
+            activeItemIndex = 0
+            activeTimerItem = nil
+        } else {
+            activeItemIndex = min(max(document.activeItemIndex, 0), items.count - 1)
+            activeTimerItem = items[activeItemIndex]
+        }
+        broadcastTimerUpdate()
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
@@ -1260,6 +1311,22 @@ public final class CueEngine: ObservableObject {
             client.broadcast(packet: packet)
         }
         broadcastToRelay(packet)
+    }
+
+    public func hasUnreadMessage(forRoleId roleId: String) -> Bool {
+        let readAt = messageReadAt[roleId] ?? .distantPast
+        return recentMessages.contains { $0.senderRoleId == roleId && $0.timestamp > readAt }
+    }
+
+    public func markThreadRead(roleId: String) {
+        guard hasUnreadMessage(forRoleId: roleId) else { return }
+        messageReadAt[roleId] = Date()
+    }
+
+    public func openMessageThread(forRoleId roleId: String) {
+        selectedMessageThreadId = roleId
+        markThreadRead(roleId: roleId)
+        appMode = .messages
     }
 
     public func clearActiveNotification() {

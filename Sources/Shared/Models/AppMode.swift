@@ -11,6 +11,8 @@ public enum AppMode: String, Codable, CaseIterable, Sendable, Hashable {
     case messages = "MESSAGES"
     case settings = "SETTINGS"
 
+    public static var sidebarCases: [AppMode] { allCases.filter { $0 != .livePreview } }
+
     public var displayName: String {
         switch self {
         case .producerControl: return "Pagers"
