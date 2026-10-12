@@ -142,11 +142,16 @@ nextItem: {
 
 Used by the Swift pager (iPad, Apple TV, any window wider than tall) and the web pager (`layout=auto` when the viewport is wider than tall and its aspect ratio is under 3:1; `?layout=landscape` forces it; wider than 3:1 is still the lower third). All sizes are fractions of the shorter side `s` of the pager window so it scales from an iPad to a TV.
 
-- Ground: near-black (`#111114`). The whole screen is framed by a border in the cue colour (STANDBY yellow, GO green) of thickness `max(14 px, 0.022 s)`. With no cue (`OFF`) the frame stays at the same thickness in a barely visible neutral so the layout never shifts.
-- Cue badge, top left, inside the frame: a filled rounded rectangle in the cue colour with dark text, holding the cue word (`GO!`, `STANDBY`) at about `0.11 s` high, heavy weight. No badge and no text when `OFF`.
-- Local time, top centre, styled like the web pager's lower-third clock: the device's local time of day with seconds (`h:mm:ss` with the locale's AM/PM style), heavy weight at about `0.075 s`, near white, with a small letter-spaced `LOCAL TIME` caption beneath. It updates every second on the second boundary.
-- Stability: the layout must not move between cue states. The top row always reserves the height of the cue badge (empty and invisible when `OFF`), and the centre block (title, countdown, tag) is positioned from the window alone, never from the badge, so the countdown stays at the same place for `GO`, `STANDBY` and `OFF`.
+- Ground and frame: near-black ground (`#111114`) inside a frame in the cue colour (STANDBY yellow, GO green) of thickness `max(14 px, 0.022 s)`. The frame's INNER corners are rounded with radius `max(18 px, 0.04 s)`; the outer edge follows the window. With no cue the frame stays at the same thickness in a barely visible neutral so the layout never shifts.
+- Top-left slot (far left, inside the frame): shows the local time while there is no cue and is REPLACED by the cue badge while the cue is `STANDBY` or `GO`. The clock is styled like the web pager's lower-third clock: the device's local time of day with seconds (`h:mm:ss`, locale AM/PM style), heavy weight at about `0.075 s`, near white, left aligned, with a small letter-spaced `LOCAL TIME` caption beneath, updating on the second boundary. The badge is a filled rounded rectangle in the cue colour with dark text and the cue word (`GO!`, `STANDBY`) about `0.11 s` high, heaviest weight. The slot reserves the height of the badge and the width of the widest word (`STANDBY`) so nothing moves when it switches.
 - Role, top right: the role name, with `FOR: PERSON` beneath when a person is assigned, and the connection state (dot and short text).
-- Centre: the current item title in uppercase (about `0.05 s`, up to two lines), the countdown (about `0.32 s`, heaviest weight; negative values keep the `+` prefix), then `PROJECTED` or `ACTUAL` (about `0.02 s`, dimmed).
-- Bottom left: the current item's notes for the role's categories as a translucent card; hidden when there are none. The yellow message banner overlays the bottom edge when a message is standing.
-- Bottom right: the next-item card (uppercase title and the role's notes), at most 40% of the width; hidden when there is no next item.
+- Centre: the current item title in uppercase (about `0.05 s`, up to two lines), the countdown (about `0.32 s`, heaviest weight; negative values keep the `+` prefix), then `PROJECTED` or `ACTUAL` (about `0.02 s`, dimmed). It is positioned from the window alone and must not move between cue states.
+- Bottom: two cards of exactly equal width (half the width minus the gap) and equal height. Left, the current item's notes (hidden placeholder keeps the space when there are none); right, the next item. The next-item card's first row holds the item title in uppercase at about `0.035 s` (noticeably larger than the notes text) with the item's projected length (`m:ss`, or `h:mm:ss` over the hour threshold) right aligned in the same row; then its notes. The yellow message banner overlays the bottom edge when a message is standing.
+
+## Cue replaces the clock
+
+In every layout that shows a local-time clock (landscape, and the lower third), the clock slot is taken over by the cue word while the cue is `STANDBY` or `GO`, and returns when the cue clears.
+
+## Note format
+
+Everywhere notes are shown (every layout), each note is one entry: the category name in bold followed by a colon, then the text on the same line, wrapping as needed, e.g. **Lighting:** warm wash, slow fade. One entry per category assigned to the pager's role; nothing for empty notes.
