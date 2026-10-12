@@ -111,3 +111,29 @@ Each sample stores its local monotonic receive time. Samples older than 90 s are
 ### Ordering and bounds
 
 `CUE_UPDATE`, `CUE_DELTA`, `TIMER_ANCHOR` and `MESSAGE`-carrying state packets are accepted only when `rev` is strictly greater than the held `rev`. `DIGEST` carries the producer's current `rev`, so it is accepted when `rev` is greater than or equal to the held `rev` (it is used only for verification and never advances the gate past the highest applied packet; a digest with a lower `rev` than held is ignored). A `PONG` rebases the gate. A packet whose `rev` exceeds the held `rev` by more than 1,000,000 is ignored unless its `epoch` changed or it is a `PONG`. Anchor values outside these ranges are ignored: `lengthInSeconds` 0 to 604800, `elapsedMs` 0 to 604800000.
+
+## Next item (v2.2)
+
+Pagers show a second card with the next item. The producer adds an optional `nextItem` to the packets that carry the active timer item: v2 `TIMER_ANCHOR`, the v2 catch-up `PONG`, and the legacy `CUE_UPDATE`, `TIMER_UPDATE` and `PONG`. It is `null` or absent when there is no next item.
+
+```
+nextItem: {
+  "id": string,
+  "title": string,
+  "itemType": string,
+  "lengthInSeconds": int,
+  "notes": { "<category>": "<text>" }
+}
+```
+
+- It is the first non-header item after the active one. Header items are never "next".
+- `notes` holds only the categories assigned to at least one role, so the packet stays small; a pager shows the notes for its own role's categories.
+- When the next item changes without the timer changing (a plan edit, a reorder), the producer sends a new `TIMER_ANCHOR` (with a new `rev`) carrying the new `nextItem`.
+- The 4096-byte limit on a v2 `PONG` still holds: drop the oldest messages first, then the longest note values of `nextItem`.
+- `nextItem` is not part of any digest hash. A pager that misses a change recovers on the next catch-up.
+- Control API: `timer.nextItem` carries the full next item (all notes) in the snapshot and the `timer` event, so clients that already hold the plan need no extra data.
+
+## Pager presentation rules
+
+- A role whose cue is `OFF` shows no cue word; the layout keeps its place. `STANDBY` and `GO` show as before.
+- The next-item card sits below the current-item card: the title in uppercase, then the notes for the pager's role categories; no card when there is no next item. Compact layouts (lower third, the ESP32 panel) may omit or shrink it.
