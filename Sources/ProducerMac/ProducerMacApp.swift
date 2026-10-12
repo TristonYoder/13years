@@ -41,6 +41,7 @@ struct ProducerMacApp: App {
                 .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .task {
                     splash.markReady()
+                    documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
@@ -73,6 +74,8 @@ struct ProducerMacApp: App {
                     .keyboardShortcut("s")
                 Button("Save As…") { documents.saveAs(cueEngine) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Button("Revert to Last Save") { documents.revert(cueEngine) }
+                    .disabled(!documents.canRevert)
                 Button("Save as Template…") { documents.saveAsTemplate(cueEngine) }
             }
             CommandGroup(after: .newItem) {

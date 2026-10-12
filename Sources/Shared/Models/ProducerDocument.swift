@@ -73,6 +73,25 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         return template
     }
 
+    public func normalizedForComparison() -> ProducerDocument {
+        var copy = self
+        copy.savedAt = .distantPast
+        copy.roles = roles.map { role in
+            var role = role
+            role.state = .off
+            role.lastUpdated = .distantPast
+            return role
+        }
+        copy.selectedRoleIds = selectedRoleIds?.sorted()
+        copy.planItems = planItems.map { item in
+            var item = item
+            item.elapsedSeconds = 0
+            item.isRunning = false
+            return item
+        }
+        return copy
+    }
+
     public enum LoadError: LocalizedError {
         case newerVersion(Int)
 

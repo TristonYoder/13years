@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import AppKit
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,8 +10,11 @@ import UniformTypeIdentifiers
 final class DocumentController: ObservableObject {
     @Published private(set) var recentURLs: [URL] = []
     @Published var isLauncherPresented = true
+    @Published private(set) var canRevert = false
+    private var revertObserver: AnyCancellable?
 
     private var discardedOnClose = false
+    private var autosaver: DocumentAutosaver?
 
     private static let recentsDefaultsKey = "recentDocumentBookmarks"
     private static let maxRecents = 10
@@ -33,6 +37,40 @@ final class DocumentController: ObservableObject {
         }
     }
 
+    func attach(_ engine: CueEngine) {
+        guard autosaver == nil else { return }
+        let saver = DocumentAutosaver(
+            engine: engine,
+            write: { [weak self] document, url in
+                if let error = self?.attemptWrite(document, to: url) { throw error }
+            },
+            onFailure: { [weak self] error, url in
+                self?.present(error, action: "save", url: url)
+            }
+        )
+        autosaver = saver
+        revertObserver = saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 }
+    }
+
+    func revert(_ engine: CueEngine) {
+        guard let url = engine.currentDocumentURL, let document = autosaver?.revertDocument() else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Revert to Last Save?"
+        alert.informativeText = "Changes since the last save will be lost."
+        let revert = alert.addButton(withTitle: "Revert")
+        revert.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        engine.apply(document)
+        if let error = attemptWrite(engine.makeDocument(), to: url) {
+            present(error, action: "save", url: url)
+            return
+        }
+        autosaver?.reseed()
+        autosaver?.markManualSave()
+    }
+
     func save(_ engine: CueEngine) {
         guard let url = engine.currentDocumentURL else {
             saveAs(engine)
@@ -43,7 +81,7 @@ final class DocumentController: ObservableObject {
 
     func saveOnClose(_ engine: CueEngine) {
         guard let url = engine.currentDocumentURL, !discardedOnClose else { return }
-        var failure: Error? = attemptWrite(engine, to: url)
+        var failure: Error? = attemptWrite(engine.makeDocument(), to: url)
         while let error = failure {
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -57,15 +95,15 @@ final class DocumentController: ObservableObject {
                 discardedOnClose = true
                 return
             }
-            failure = attemptWrite(engine, to: url)
+            failure = attemptWrite(engine.makeDocument(), to: url)
         }
     }
 
-    private func attemptWrite(_ engine: CueEngine, to url: URL) -> Error? {
+    private func attemptWrite(_ document: ProducerDocument, to url: URL) -> Error? {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            try engine.makeDocument().write(to: url)
+            try document.write(to: url)
             return nil
         } catch {
             return error
@@ -131,6 +169,8 @@ final class DocumentController: ObservableObject {
         do {
             engine.apply(try ProducerDocument.read(from: url))
             engine.currentDocumentURL = nil
+            autosaver?.reseed()
+            autosaver?.markOpened()
             discardedOnClose = false
             isLauncherPresented = false
             return true
@@ -180,6 +220,8 @@ final class DocumentController: ObservableObject {
         do {
             engine.apply(try ProducerDocument.read(from: url))
             engine.currentDocumentURL = url
+            autosaver?.reseed()
+            autosaver?.markOpened()
             discardedOnClose = false
             isLauncherPresented = false
             noteRecent(url)
@@ -196,7 +238,7 @@ final class DocumentController: ObservableObject {
 
     @discardableResult
     private func write(_ engine: CueEngine, to url: URL) -> Bool {
-        if let error = attemptWrite(engine, to: url) {
+        if let error = attemptWrite(engine.makeDocument(), to: url) {
             present(error, action: "save", url: url)
             return false
         }
@@ -204,6 +246,8 @@ final class DocumentController: ObservableObject {
         discardedOnClose = false
         isLauncherPresented = false
         noteRecent(url)
+        autosaver?.reseed()
+        autosaver?.markManualSave()
         return true
     }
 

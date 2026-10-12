@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -15,6 +16,9 @@ final class IOSDocumentController: ObservableObject {
     ))
     @Published var errorMessage: String?
     @Published var isLauncherPresented = true
+    @Published private(set) var canRevert = false
+    @Published var isConfirmingRevert = false
+    private var revertObserver: AnyCancellable?
     @Published private(set) var recents: [RecentEntry] = [] {
         didSet { DocumentMenuBridge.recentURLs = recents.map(\.url) }
     }
@@ -45,9 +49,72 @@ final class IOSDocumentController: ObservableObject {
         DocumentMenuBridge.recentURLs = recents.map(\.url)
     }
 
+    private enum ExportPurpose { case copy, saveAs, newDocument }
+    private var exportPurpose = ExportPurpose.copy
+    private var autosaver: DocumentAutosaver?
+
+    func attach(_ engine: CueEngine) {
+        guard autosaver == nil else { return }
+        let saver = DocumentAutosaver(
+            engine: engine,
+            write: { document, url in try Self.coordinatedWrite(document, to: url) },
+            onFailure: { [weak self] error, url in
+                self?.errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
+            }
+        )
+        autosaver = saver
+        revertObserver = saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 }
+    }
+
+    func revert(_ engine: CueEngine) {
+        guard let url = engine.currentDocumentURL, let document = autosaver?.revertDocument() else { return }
+        engine.apply(document)
+        do {
+            try Self.coordinatedWrite(engine.makeDocument(), to: url)
+        } catch {
+            errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
+            return
+        }
+        autosaver?.reseed()
+        autosaver?.markManualSave()
+    }
+
+    func flushIfNeeded() {
+        autosaver?.flush()
+    }
+
+    nonisolated private static func coordinatedWrite(_ document: ProducerDocument, to url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        var coordinationError: NSError?
+        var writeError: Error?
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { target in
+            do { try document.write(to: target) } catch { writeError = error }
+        }
+        if let error = coordinationError ?? writeError.map({ $0 as NSError }) { throw error }
+    }
+
     func newDocument(_ engine: CueEngine) {
-        engine.resetToNewDocument()
-        isLauncherPresented = false
+        exportFile = ProducerDocumentFile(ProducerDocument(
+            roles: [], waypoints: [], serviceSchedules: [], planItems: [], activeItemIndex: 0,
+            settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
+        ))
+        exportPurpose = .newDocument
+        isExporting = true
+    }
+
+    func save(_ engine: CueEngine) {
+        guard let url = engine.currentDocumentURL else {
+            saveAs(engine)
+            return
+        }
+        do {
+            try Self.coordinatedWrite(engine.makeDocument(), to: url)
+            autosaver?.reseed()
+            autosaver?.markManualSave()
+        } catch {
+            errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
+        }
     }
 
     func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
@@ -102,11 +169,13 @@ final class IOSDocumentController: ObservableObject {
 
     func saveAs(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument())
+        exportPurpose = .saveAs
         isExporting = true
     }
 
     func saveAsTemplate(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument(), isTemplate: true)
+        exportPurpose = .copy
         isExporting = true
     }
 
@@ -119,8 +188,36 @@ final class IOSDocumentController: ObservableObject {
         }
     }
 
-    func handleExport(_ result: Result<URL, Error>) {
-        if case .failure(let error) = result { errorMessage = error.localizedDescription }
+    func handleExport(_ result: Result<URL, Error>, engine: CueEngine) {
+        let purpose = exportPurpose
+        exportPurpose = .copy
+        switch result {
+        case .failure(let error):
+            if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
+        case .success(let url):
+            switch purpose {
+            case .copy:
+                break
+            case .saveAs:
+                engine.currentDocumentURL = url
+                noteRecent(url)
+                autosaver?.reseed()
+                autosaver?.markManualSave()
+            case .newDocument:
+                engine.resetToNewDocument()
+                do {
+                    try Self.coordinatedWrite(engine.makeDocument(), to: url)
+                } catch {
+                    errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
+                    return
+                }
+                engine.currentDocumentURL = url
+                noteRecent(url)
+                autosaver?.reseed()
+                autosaver?.markManualSave()
+                isLauncherPresented = false
+            }
+        }
     }
 
     func open(_ url: URL, in engine: CueEngine) {
@@ -131,6 +228,8 @@ final class IOSDocumentController: ObservableObject {
             let isTemplate = url.pathExtension.lowercased() == ProducerDocument.templateExtension
             engine.apply(document)
             engine.currentDocumentURL = isTemplate ? nil : url
+            autosaver?.reseed()
+            autosaver?.markOpened()
             isLauncherPresented = false
             if !isTemplate { noteRecent(url) }
         } catch {
@@ -146,9 +245,17 @@ struct DocumentCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
+            Button("New Document…") { documents.newDocument(engine) }
+                .keyboardShortcut("n", modifiers: [.command, .option])
             Button("New from Template…") { documents.beginImport(template: true) }
-            Button("Save As…") { documents.saveAs(engine) }
+        }
+        CommandGroup(replacing: .saveItem) {
+            Button("Save") { documents.save(engine) }
                 .keyboardShortcut("s")
+            Button("Save As…") { documents.saveAs(engine) }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            Button("Revert to Last Save") { documents.isConfirmingRevert = true }
+                .disabled(!documents.canRevert)
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
         }
     }

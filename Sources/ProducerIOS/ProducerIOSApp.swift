@@ -9,6 +9,7 @@ struct ProducerIOSApp: App {
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = IOSDocumentController()
     @StateObject private var launchPreferences = LaunchPreferences()
+    @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(ProducerIOSAppDelegate.self) private var appDelegate
 
     init() {
@@ -39,7 +40,11 @@ struct ProducerIOSApp: App {
                 .splashScreen(isPresented: splash.isPresented)
                 .task {
                     splash.markReady()
+                    documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase != .active { documents.flushIfNeeded() }
                 }
                 .onOpenURL { documents.open($0, in: cueEngine) }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
@@ -59,7 +64,13 @@ struct ProducerIOSApp: App {
                     document: documents.exportFile,
                     contentType: documents.exportType,
                     defaultFilename: documents.exportFile.isTemplate ? "Untitled Template" : "Untitled"
-                ) { documents.handleExport($0) }
+                ) { documents.handleExport($0, engine: cueEngine) }
+                .alert("Revert to Last Save?", isPresented: $documents.isConfirmingRevert) {
+                    Button("Revert", role: .destructive) { documents.revert(cueEngine) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Changes since the last save will be lost.")
+                }
                 .alert("Document Error", isPresented: documents.hasError) {
                     Button("OK", role: .cancel) {}
                 } message: {

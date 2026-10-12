@@ -33,7 +33,7 @@ struct LauncherView: View {
                 header
 
                 HStack(spacing: 12) {
-                    actionCard(title: "New", subtitle: "A blank service", systemImage: "plus") {
+                    actionCard(title: "New Document…", subtitle: "A blank service", systemImage: "plus") {
                         actions.newDocument()
                     }
                     actionCard(title: "From Template", subtitle: "Start from a saved layout", systemImage: "doc.on.doc") {
