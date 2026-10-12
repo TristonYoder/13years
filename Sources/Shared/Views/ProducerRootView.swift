@@ -38,6 +38,9 @@ public struct ProducerRootView: View {
     }
 
     private var adaptiveNavigation: some View {
+        #if os(macOS)
+        splitLayout
+        #else
         GeometryReader { proxy in
             if proxy.size.height > proxy.size.width || proxy.size.width < 640 {
                 tabLayout
@@ -45,6 +48,7 @@ public struct ProducerRootView: View {
                 splitLayout
             }
         }
+        #endif
     }
 
     private var splitLayout: some View {
