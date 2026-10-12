@@ -144,7 +144,8 @@ Used by the Swift pager (iPad, Apple TV, any window wider than tall) and the web
 
 - Ground: near-black (`#111114`). The whole screen is framed by a border in the cue colour (STANDBY yellow, GO green) of thickness `max(14 px, 0.022 s)`. With no cue (`OFF`) the frame stays at the same thickness in a barely visible neutral so the layout never shifts.
 - Cue badge, top left, inside the frame: a filled rounded rectangle in the cue colour with dark text, holding the cue word (`GO!`, `STANDBY`) at about `0.11 s` high, heavy weight. No badge and no text when `OFF`.
-- Local time, top centre: the device's local time of day (`h:mm` with the locale's 12 or 24 hour style), about `0.045 s`, dimmed. It updates every second.
+- Local time, top centre, styled like the web pager's lower-third clock: the device's local time of day with seconds (`h:mm:ss` with the locale's AM/PM style), heavy weight at about `0.075 s`, near white, with a small letter-spaced `LOCAL TIME` caption beneath. It updates every second on the second boundary.
+- Stability: the layout must not move between cue states. The top row always reserves the height of the cue badge (empty and invisible when `OFF`), and the centre block (title, countdown, tag) is positioned from the window alone, never from the badge, so the countdown stays at the same place for `GO`, `STANDBY` and `OFF`.
 - Role, top right: the role name, with `FOR: PERSON` beneath when a person is assigned, and the connection state (dot and short text).
 - Centre: the current item title in uppercase (about `0.05 s`, up to two lines), the countdown (about `0.32 s`, heaviest weight; negative values keep the `+` prefix), then `PROJECTED` or `ACTUAL` (about `0.02 s`, dimmed).
 - Bottom left: the current item's notes for the role's categories as a translucent card; hidden when there are none. The yellow message banner overlays the bottom edge when a message is standing.
