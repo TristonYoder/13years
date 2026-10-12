@@ -137,6 +137,7 @@
     appearance: none;
     -webkit-appearance: none;
   }
+  .fr-roleslot #role { flex: 1 1 auto; width: 100%; }
   #role:disabled { opacity: 1; }
   #role option { color: #111; background: #fff; }
 
@@ -150,21 +151,16 @@
 
   [data-stage="amber"] { color: #ff9f0a; color: color-mix(in srgb, var(--fg) 70%, #ff9f0a); }
   [data-stage="red"] { color: #ff453a; color: color-mix(in srgb, var(--fg) 60%, #ff3b30); }
-  #footer {
-    position: absolute;
-    left: calc(var(--frame) + var(--pad));
-    right: calc(var(--frame) + var(--pad));
-    bottom: var(--frame);
-    height: var(--foot);
-    z-index: 6;
+  #iconRow {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: calc(var(--u) * 0.012);
+    gap: calc(var(--u) * 0.01);
+    width: 0;
+    min-width: 100%;
   }
-  #footer #composeStatus { margin-right: auto; }
+  #iconRow button { flex: 1 1 0; min-width: 0; }
+  #chatHead #composeStatus { margin-right: auto; }
 
-  #footer button, #chatHead button, #compose button {
+  #iconRow button, #chatHead button, #compose button {
     font: inherit;
     font-size: calc(1.5 * var(--s));
     font-weight: 700;
@@ -179,11 +175,11 @@
     white-space: nowrap;
   }
 
-  #footer button:hover:not(:disabled),
+  #iconRow button:hover:not(:disabled),
   #chatHead button:hover:not(:disabled),
   #compose button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.42); }
 
-  #footer button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
+  #iconRow button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
 
   #chat {
     position: fixed;
@@ -429,7 +425,6 @@
     --pad: calc(var(--u) * 0.025);
     --badge: calc(var(--u) * 0.11);
     --clock: calc(var(--u) * 0.075);
-    --foot: max(44px, calc(var(--u) * 0.065));
     flex: 1;
     min-height: 0;
     position: relative;
@@ -437,7 +432,6 @@
     flex-direction: column;
     gap: var(--pad);
     padding: calc(var(--frame) + var(--pad));
-    padding-bottom: calc(var(--frame) + var(--foot));
     background: var(--cue);
     color: var(--fg);
     overflow: hidden;
@@ -465,7 +459,6 @@
   }
   html[data-cue="STANDBY"] .fr, html[data-cue="FLASH_STANDBY"] .fr { --cue: var(--cue-standby-bg); }
   html[data-cue="GO"] .fr, html[data-cue="FLASH_GO"] .fr { --cue: var(--cue-go-bg); }
-  html[data-footer="none"] .fr { --foot: 0px; }
   html[data-cuedisplay="full"] .fr {
     --fg: var(--ink);
     --ground: var(--cuefull);
@@ -553,7 +546,7 @@
     align-items: flex-end;
     text-align: right;
   }
-  .fr-roleslot { display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * 0.008); max-width: 100%; }
+  .fr-roleslot { display: grid; justify-items: stretch; width: max-content; gap: calc(var(--u) * 0.008); max-width: 100%; }
   .fr .rolepick { font-size: calc(var(--u) * 0.03); max-width: 100%; }
   #standard .rolepick { font-size: max(14px, calc(var(--u) * 0.036)); }
   .fr #role { background: var(--chip); color: var(--fg); }
@@ -641,18 +634,17 @@
   }
   #standard .fr-msg-from { font-size: max(11px, calc(var(--u) * 0.026)); }
 
-  .fr #footer button {
+  .fr #iconRow button {
     background: var(--chip);
     color: var(--fg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    width: 44px;
-    height: 44px;
+    min-height: 44px;
     opacity: 0.75;
   }
-  #footer svg { width: 24px; height: 24px; fill: currentColor; display: block; }
+  #iconRow svg { width: 24px; height: 24px; fill: currentColor; display: block; }
 
   #ptMid {
     flex: 1 1 0;
@@ -865,17 +857,13 @@
         </button>
       </div>
 
-      <div id="footer">
-      <div id="composeStatus" class="hidden"></div>
-      <button id="openChat" type="button" aria-label="Messages" title="Messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg></button>
-      <button id="openSettings" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
-      </div>
     </div>
 
     <div id="chat" class="hidden" role="dialog" aria-label="Messages">
       <div id="chatCard">
         <div id="chatHead">
           <span id="chatTitle">Messages</span>
+          <div id="composeStatus" class="hidden"></div>
           <button id="clear" type="button" title="Clear the message history on every device">Clear History</button>
           <button id="closeChat" type="button">Done</button>
         </div>
@@ -953,6 +941,11 @@
       </button>
     </div>
 
+  </div>
+
+  <div id="iconRow">
+      <button id="openChat" type="button" aria-label="Messages" title="Messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg></button>
+      <button id="openSettings" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
   </div>
 
   <div id="offline" class="hidden" role="status"></div>
@@ -1899,7 +1892,7 @@ const el = {
   ptMessageFrom: document.getElementById("ptMessageFrom"),
   role: document.getElementById("role"),
   rolepick: document.getElementById("rolepick"),
-  footer: document.getElementById("footer"),
+  iconRow: document.getElementById("iconRow"),
   connState: document.getElementById("connState"),
   connStateText: document.getElementById("connStateText"),
   connProducer: document.getElementById("connProducer"),
@@ -1964,8 +1957,8 @@ function applyControlVisibility() {
   if (!SHOW_SETTINGS) el.openSettings.remove();
   if (!SHOW_MESSAGES) el.openChat.remove();
   if (!SHOW_SETTINGS && !SHOW_MESSAGES) {
-    el.footer.remove();
-    root.dataset.footer = "none";
+    el.iconRow.remove();
+    root.dataset.icons = "none";
   }
 }
 
@@ -1973,8 +1966,7 @@ function placeShared(layout) {
   const landscape = layout === "landscape";
   const home = landscape ? el.lsRoleSlot : el.ptRoleSlot;
   if (el.rolepick.parentNode !== home) home.append(el.rolepick);
-  const footerHome = landscape ? el.landscape : el.standard;
-  if (root.dataset.footer !== "none" && el.footer.parentNode !== footerHome) footerHome.append(el.footer);
+  if (root.dataset.icons !== "none" && el.iconRow.parentNode !== home) home.append(el.iconRow);
 }
 
 function applyLayout() {

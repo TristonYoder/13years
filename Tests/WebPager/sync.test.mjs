@@ -1058,8 +1058,8 @@ for (const [name, search, width, height] of [
     const { context, nodes } = loadPage(search, width, height);
     vm.runInContext("renderConnection()", context);
     assert.equal(context.document.documentElement.dataset.layout, name === "portrait" ? "standard" : name);
-    const footerHome = vm.runInContext("el.footer.parentNode && el.footer.parentNode.id", context);
-    if (name !== "lowerthird") assert.equal(footerHome, name === "portrait" ? "standard" : "landscape");
+    const rowHome = vm.runInContext("el.iconRow.parentNode && el.iconRow.parentNode.id", context);
+    if (name !== "lowerthird") assert.equal(rowHome, name === "portrait" ? "ptRoleSlot" : "lsRoleSlot");
     assert.equal(nodes.get("waiting").classList.contains("hidden"), false);
     assert.equal(nodes.get("connStateText").textContent, "Connecting");
   });
@@ -1074,7 +1074,7 @@ for (const [name, search, width, height] of [
   });
 }
 
-test("footer holds only the two icon buttons with accessible names", () => {
+test("header row holds only the two icon buttons with accessible names", () => {
   assert.match(html, /<button id="openChat"[^>]*aria-label="Messages"/);
   assert.match(html, /<button id="openSettings"[^>]*aria-label="Settings"/);
   assert.doesNotMatch(html, />Messages<\/button>/);
@@ -1093,10 +1093,10 @@ test("parseFlagParam accepts 0/1/false/true/no/yes and defaults otherwise", () =
 test("settings=0 and messages=0 flags reach the page script", () => {
   const both = loadPage("?settings=0&messages=false", 390, 844);
   assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", both.context).join(), "false,false");
-  assert.equal(both.context.document.documentElement.dataset.footer, "none");
+  assert.equal(both.context.document.documentElement.dataset.icons, "none");
   const one = loadPage("?messages=no", 844, 390);
   assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", one.context).join(), "true,false");
-  assert.notEqual(one.context.document.documentElement.dataset.footer, "none");
+  assert.notEqual(one.context.document.documentElement.dataset.icons, "none");
   const def = loadPage("", 390, 844);
   assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", def.context).join(), "true,true");
 });
