@@ -17,10 +17,33 @@ struct PagerMacApp: App {
             PagerRootView()
                 .environmentObject(cueEngine)
                 .frame(minWidth: 320, minHeight: 240)
+                .ignoresSafeArea()
+                .background(EdgelessWindow())
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { cueEngine.deviceDidBecomeActive() }
                 }
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 900, height: 560)
     }
+}
+
+private struct EdgelessWindow: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
+            window.backgroundColor = .black
+            for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(button)?.isHidden = true
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
