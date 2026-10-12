@@ -764,7 +764,7 @@ public final class ControlAPIRouter {
 
     public func timerSnapshot() -> ControlAPITimerState {
         revision += 1
-        return ControlAPITimerState(rev: revision, serverNowMs: Self.nowMs(), timer: activeTimer())
+        return ControlAPITimerState(rev: revision, serverNowMs: Self.nowMs(), timer: activeTimer(), epoch: engine.syncV2.epoch)
     }
 
     private static func nowMs() -> Int {
@@ -773,9 +773,22 @@ public final class ControlAPIRouter {
 
     public func snapshot() -> ControlAPIState {
         revision += 1
-        return ControlAPIState(
-            rev: revision,
-            serverNowMs: Self.nowMs(),
+        return makeState(rev: revision, serverNowMs: Self.nowMs(), includeTimer: true)
+    }
+
+    func nonTimerFingerprint() -> Int {
+        let state = makeState(rev: 0, serverNowMs: 0, includeTimer: false)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(state) else { return Int.random(in: Int.min...Int.max) }
+        return data.hashValue
+    }
+
+    private func makeState(rev: Int, serverNowMs: Int, includeTimer: Bool) -> ControlAPIState {
+        ControlAPIState(
+            rev: rev,
+            serverNowMs: serverNowMs,
             appMode: engine.appMode.rawValue,
             network: ControlAPIState.NetworkStatus(
                 isMasterServer: engine.isMasterServer,
@@ -789,7 +802,7 @@ public final class ControlAPIRouter {
             ),
             roles: engine.roles,
             selectedRoleIds: engine.selectedRoleIds.sorted(),
-            timer: activeTimer(),
+            timer: includeTimer ? activeTimer() : nil,
             plan: planStatus(),
             messages: engine.recentMessages,
             notificationsClearedAt: engine.notificationsClearedAt,
@@ -797,7 +810,8 @@ public final class ControlAPIRouter {
             plotiphar: plotipharStatus(),
             settings: settingsStatus(),
             waypoints: waypointStatuses(),
-            schedules: scheduleStatus()
+            schedules: scheduleStatus(),
+            epoch: engine.syncV2.epoch
         )
     }
 
@@ -825,7 +839,8 @@ public final class ControlAPIRouter {
                 timer: SyncHash.timer(engine.currentAnchor),
                 plan: SyncHash.plan(items: engine.planItems, activeItemIndex: engine.activeItemIndex),
                 messages: SyncHash.messages(engine.recentMessages)
-            )
+            ),
+            epoch: engine.syncV2.epoch
         )
     }
 

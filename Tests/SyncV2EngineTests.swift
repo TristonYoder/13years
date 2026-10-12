@@ -246,9 +246,10 @@ final class SyncV2ProducerTests: SyncV2TestCase {
     func testV2PingOverRelayMarksRelayAndLeavesLegacyReplyIntact() {
         let engine = makeProducer()
         engine.handlePacket(ping(version: 2), origin: .relay)
-        XCTAssertTrue(outbox.targets(.pong).contains { $0.isLegacyLAN })
+        XCTAssertFalse(outbox.targets(.pong).contains { $0.isLegacyLAN })
         XCTAssertEqual(outbox.relayPackets(.pong).count, 1)
-        XCTAssertNil(outbox.relayPackets(.pong)[0].rev)
+        XCTAssertEqual(outbox.relayPackets(.pong)[0].rev, outbox.relayPackets(.digest)[0].rev)
+        XCTAssertEqual(outbox.relayPackets(.pong)[0].to, "pager")
         XCTAssertEqual(outbox.relayPackets(.timerAnchor).count, 1)
         XCTAssertEqual(outbox.relayPackets(.digest).count, 1)
         outbox.clear()
@@ -398,6 +399,7 @@ final class SyncV2ClientTests: SyncV2TestCase {
 
         var reply = stray
         reply.t0 = t0
+        reply.to = engine.deviceId
         engine.handlePacket(reply)
         XCTAssertEqual(engine.syncV2.estimator.offsetMs ?? 0, 5000 - 5, accuracy: 0.001)
         XCTAssertTrue(engine.syncV2.producerIsV2)
@@ -609,6 +611,7 @@ final class SyncV2ClientTests: SyncV2TestCase {
         for _ in 0..<30 { engine.tickTimer() }
         XCTAssertTrue(outbox.lanPackets(.sync).isEmpty)
         engine.handlePacket(digest(rev: 1, hashes: engine.localHashes()))
+        outbox.clear()
         for _ in 0..<30 { engine.tickTimer() }
         XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
     }
@@ -617,5 +620,509 @@ final class SyncV2ClientTests: SyncV2TestCase {
 private extension CueEngine {
     func outboxIsQuiet(_ outbox: Outbox) -> Bool {
         outbox.sent.allSatisfy { $0.packet.type != .sync }
+    }
+}
+
+private final class MonoBox {
+    var ms: Double = 1_000_000
+}
+
+@MainActor
+final class SyncV21Tests: SyncV2TestCase {
+    private var mono = MonoBox()
+
+    override func setUp() {
+        super.setUp()
+        mono = MonoBox()
+    }
+
+    private func client() -> CueEngine {
+        let engine = makeClient()
+        let box = mono
+        engine.monotonicMsClock = { box.ms }
+        return engine
+    }
+
+    private func digest(rev: Int, epoch: Int? = nil, to: String? = nil, hashes: SyncHash.Hashes) -> CuePacket {
+        var packet = CuePacket(type: .digest, senderId: "producer", timestamp: clock.value.timeIntervalSince1970)
+        packet.rev = rev
+        packet.epoch = epoch
+        packet.to = to
+        packet.hashes = hashes
+        return packet
+    }
+
+    private func anchor(rev: Int, epoch: Int? = 1, to: String? = nil, elapsedMs: Int = 10_000, running: Bool = true) -> CuePacket {
+        let item = PCOTimerItem(id: "a", title: "Song", lengthInSeconds: 300, elapsedSeconds: elapsedMs / 1000, isRunning: running)
+        let value = TimerAnchor(itemId: "a", lengthInSeconds: 300, elapsedMs: elapsedMs, anchorMs: clock.ms, isRunning: running, isDurationActual: false)
+        var packet = anchorPacket(rev: rev, anchor: value, item: item)
+        packet.epoch = epoch
+        packet.to = to
+        packet.timestamp = clock.value.timeIntervalSince1970
+        return packet
+    }
+
+    private func giveOffset(_ engine: CueEngine, _ offsetMs: Double = 0) {
+        let t0 = clock.value.timeIntervalSince1970 * 1000
+        engine.syncV2.estimator.add(ClockSyncSample(t0: t0, t1: t0 + offsetMs, t2: t0 + offsetMs, t3: t0, monotonicMs: mono.ms), nowMonotonicMs: mono.ms)
+    }
+
+    private func v2Client() -> CueEngine {
+        let engine = client()
+        engine.handlePacket(digest(rev: 0, epoch: 1, hashes: engine.localHashes()))
+        giveOffset(engine)
+        outbox.clear()
+        return engine
+    }
+
+    func testProducerStampsItsEpochOnEveryV2Packet() {
+        let producer = makeProducer()
+        let epoch = producer.syncV2.epoch
+        XCTAssertTrue((1...Int(Int32.max)).contains(epoch))
+        producer.handlePacket(ping(version: 2), origin: .lanServer(connection))
+        producer.toggleTimerRunning()
+        producer.setCueForRole(id: "band", state: .go)
+        producer.tickTimer()
+        var sync = CuePacket(type: .sync, senderId: "pager")
+        sync.t0 = 5
+        producer.handlePacket(sync, origin: .lanServer(connection))
+        for type in [CuePacket.PacketType.pong, .timerAnchor, .digest, .cueDelta, .syncReply] {
+            let packets = outbox.sent.map(\.packet).filter { $0.type == type }
+            XCTAssertFalse(packets.isEmpty, type.rawValue)
+            XCTAssertTrue(packets.allSatisfy { $0.epoch == epoch }, type.rawValue)
+        }
+    }
+
+    func testCatchUpPacketsAndSyncRepliesAreAddressedToTheRequester() {
+        let producer = makeProducer()
+        producer.handlePacket(ping(version: 2), origin: .lanServer(connection))
+        XCTAssertTrue(outbox.sent.allSatisfy { $0.packet.to == "pager" })
+        var sync = CuePacket(type: .sync, senderId: "other")
+        sync.t0 = 9
+        outbox.clear()
+        producer.handlePacket(sync, origin: .relay)
+        XCTAssertEqual(outbox.relayPackets(.syncReply).first?.to, "other")
+    }
+
+    func testCatchUpPongCapsMessagesAtTwentyAndFourKilobytesDroppingTheOldest() throws {
+        let producer = makeProducer()
+        let long = String(repeating: "x", count: 400)
+        producer.addMessages((0..<60).map { InterTeamMessage(id: "m\($0)", text: long, timestamp: Date(timeIntervalSince1970: Double($0))) })
+        producer.handlePacket(ping(version: 2), origin: .relay)
+        let pong = try XCTUnwrap(outbox.relayPackets(.pong).first)
+        let data = try XCTUnwrap(pong.encode())
+        XCTAssertLessThanOrEqual(data.count, 4096)
+        let messages = try XCTUnwrap(pong.messages)
+        XCTAssertLessThanOrEqual(messages.count, 20)
+        XCTAssertGreaterThan(messages.count, 0)
+        XCTAssertEqual(messages.map(\.id), (0..<messages.count).map { "m\(59 - $0)" })
+        XCTAssertEqual(pong.proto, 2)
+        XCTAssertNotNil(pong.rev)
+        XCTAssertNotNil(pong.epoch)
+
+        let few = makeProducer()
+        few.recentMessages = []
+        few.addMessages((0..<5).map { InterTeamMessage(id: "s\($0)", text: "hi", timestamp: Date(timeIntervalSince1970: Double($0))) })
+        outbox.clear()
+        few.handlePacket(ping(version: 2), origin: .relay)
+        XCTAssertEqual(outbox.relayPackets(.pong).first?.messages?.count, 5)
+    }
+
+    func testV2PongReplacesTheMessageList() {
+        let engine = v2Client()
+        engine.addMessages((0..<5).map { InterTeamMessage(id: "old\($0)", text: "o", timestamp: Date(timeIntervalSince1970: Double($0))) })
+        var pong = CuePacket(type: .pong, senderId: "producer", messages: [
+            InterTeamMessage(id: "n1", text: "a", timestamp: Date(timeIntervalSince1970: 100)),
+            InterTeamMessage(id: "n2", text: "b", timestamp: Date(timeIntervalSince1970: 200)),
+        ])
+        pong.rev = 3
+        pong.proto = 2
+        engine.handlePacket(pong)
+        XCTAssertEqual(engine.recentMessages.map(\.id), ["n2", "n1"])
+    }
+
+    func testPeerPingSyncAndProtoNeverMarkTheProducerAsV2() {
+        let engine = client()
+        engine.handlePacket(ping(version: 2))
+        var sync = CuePacket(type: .sync, senderId: "peer")
+        sync.t0 = 1
+        sync.proto = 2
+        engine.handlePacket(sync)
+        var legacyPong = CuePacket(type: .pong, senderId: "producer")
+        legacyPong.proto = 2
+        engine.handlePacket(legacyPong)
+        var foreignReply = CuePacket(type: .syncReply, senderId: "producer")
+        foreignReply.t0 = 1
+        foreignReply.t1 = 2
+        foreignReply.t2 = 3
+        engine.handlePacket(foreignReply)
+        XCTAssertFalse(engine.syncV2.producerIsV2)
+
+        var v2Pong = CuePacket(type: .pong, senderId: "producer")
+        v2Pong.rev = 4
+        engine.handlePacket(v2Pong)
+        XCTAssertTrue(engine.syncV2.producerIsV2)
+    }
+
+    func testAddressedSyncReplyMarksV2AndOthersAreIgnored() {
+        let engine = client()
+        engine.sendSyncSample()
+        let t0 = outbox.lanPackets(.sync)[0].t0!
+        var reply = CuePacket(type: .syncReply, senderId: "producer")
+        reply.t0 = t0
+        reply.t1 = t0 + 5
+        reply.t2 = t0 + 5
+        reply.receivedAtMs = Double(t0) + 10
+        reply.to = "somebody-else"
+        engine.handlePacket(reply)
+        XCTAssertNil(engine.syncV2.estimator.offsetMs)
+        XCTAssertFalse(engine.syncV2.producerIsV2)
+        reply.to = engine.deviceId
+        engine.handlePacket(reply)
+        XCTAssertNotNil(engine.syncV2.estimator.offsetMs)
+        XCTAssertTrue(engine.syncV2.producerIsV2)
+    }
+
+    func testPacketsAddressedToAnotherPagerAreIgnoredAndOwnOnesApplied() {
+        let engine = v2Client()
+        var pong = CuePacket(type: .pong, senderId: "producer", roleCues: [RoleCue(id: "x", name: "X")])
+        pong.rev = 9
+        pong.to = "someone-else"
+        engine.handlePacket(pong)
+        XCTAssertFalse(engine.roles.contains { $0.id == "x" })
+        pong.to = engine.deviceId
+        engine.handlePacket(pong)
+        XCTAssertTrue(engine.roles.contains { $0.id == "x" })
+        engine.handlePacket(anchor(rev: 20, to: "someone-else"))
+        XCTAssertNil(engine.syncV2.held)
+    }
+
+    func testNewEpochDiscardsAnchorGateSamplesAndCatchesUp() {
+        let engine = v2Client()
+        engine.handlePacket(anchor(rev: 50, epoch: 1))
+        XCTAssertNotNil(engine.syncV2.held)
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, true)
+        outbox.clear()
+
+        engine.handlePacket(digest(rev: 2, epoch: 2, hashes: engine.localHashes()))
+        XCTAssertNil(engine.syncV2.held)
+        XCTAssertNil(engine.syncV2.estimator.offsetMs)
+        XCTAssertNil(engine.syncV2.gate.highest)
+        XCTAssertEqual(engine.syncV2.producerEpoch, 2)
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, false)
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 1)
+        XCTAssertEqual(outbox.lanPackets(.ping).first?.proto, 2)
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+
+        engine.handlePacket(anchor(rev: 3, epoch: 2))
+        XCTAssertNotNil(engine.syncV2.held)
+    }
+
+    func testLowerRevAfterRestartIsAcceptedOnlyThroughANewEpoch() {
+        let engine = v2Client()
+        engine.handlePacket(anchor(rev: 500, epoch: 1))
+        engine.handlePacket(anchor(rev: 3, epoch: 1, elapsedMs: 99_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 10_000)
+        engine.handlePacket(anchor(rev: 3, epoch: 2, elapsedMs: 99_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 99_000)
+    }
+
+    func testStrictRevGateAndBigJumpRule() {
+        let engine = v2Client()
+        engine.handlePacket(anchor(rev: 5))
+        engine.handlePacket(anchor(rev: 5, elapsedMs: 77_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 10_000)
+        engine.handlePacket(anchor(rev: 4, elapsedMs: 77_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 10_000)
+        engine.handlePacket(anchor(rev: 5 + 1_000_001, elapsedMs: 77_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 10_000)
+        engine.handlePacket(anchor(rev: Int.max, elapsedMs: 77_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 10_000)
+        engine.handlePacket(anchor(rev: 6, elapsedMs: 20_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 20_000)
+        var pong = CuePacket(type: .pong, senderId: "producer")
+        pong.rev = 1
+        engine.handlePacket(pong)
+        engine.handlePacket(anchor(rev: 2, elapsedMs: 30_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 30_000)
+    }
+
+    func testAddressedCatchUpAnchorAtThePongRevIsAccepted() {
+        let engine = v2Client()
+        var pong = CuePacket(type: .pong, senderId: "producer")
+        pong.rev = 8
+        pong.to = engine.deviceId
+        engine.handlePacket(pong)
+        engine.handlePacket(anchor(rev: 8, to: engine.deviceId))
+        XCTAssertNotNil(engine.syncV2.held)
+    }
+
+    func testDigestAtHeldRevIsVerifiedButNeverAdvancesTheGate() {
+        let engine = v2Client()
+        engine.handlePacket(anchor(rev: 5))
+        engine.handlePacket(digest(rev: 5, epoch: 1, hashes: engine.localHashes()))
+        XCTAssertEqual(engine.syncV2.gate.highest, 5)
+        engine.handlePacket(digest(rev: 40, epoch: 1, hashes: engine.localHashes()))
+        XCTAssertEqual(engine.syncV2.gate.highest, 5)
+        engine.handlePacket(anchor(rev: 6, elapsedMs: 42_000))
+        XCTAssertEqual(engine.syncV2.held?.anchor.elapsedMs, 42_000)
+        outbox.clear()
+        engine.handlePacket(digest(rev: 1, epoch: 1, hashes: SyncHash.Hashes(roles: "x", timer: "x", messages: "x")))
+        XCTAssertTrue(outbox.lanPackets(.ping).isEmpty)
+    }
+
+    func testLegacyUpdatesFromABelievedV2ProducerTriggerOneCatchUpPerFiveSeconds() {
+        let engine = v2Client()
+        let legacy = CuePacket(type: .cueUpdate, senderId: "producer", roleCues: engine.roles)
+        engine.handlePacket(legacy, origin: .lanClient)
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 1)
+        engine.handlePacket(legacy, origin: .lanClient)
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 1)
+        mono.ms += 5_001
+        engine.handlePacket(CuePacket(type: .timerUpdate, senderId: "producer", timerItem: PCOTimerItem(title: "T")), origin: .lanClient)
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 2)
+    }
+
+    func testLegacyUpdatesOverTheRelayAreNormalWhileV2PacketsKeepArriving() {
+        let engine = v2Client()
+        engine.handlePacket(CuePacket(type: .cueUpdate, senderId: "producer", roleCues: engine.roles), origin: .relay)
+        XCTAssertTrue(outbox.lanPackets(.ping).isEmpty)
+        mono.ms += 13_000
+        engine.handlePacket(CuePacket(type: .cueUpdate, senderId: "producer", roleCues: engine.roles), origin: .relay)
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 1)
+    }
+
+    func testPersistentMessageMismatchBacksOffToOneCatchUpPerThirtySeconds() {
+        let engine = v2Client()
+        engine.addMessages([InterTeamMessage(id: "extra", text: "e", timestamp: Date(timeIntervalSince1970: 1))])
+        var remote = engine.localHashes()
+        remote.messages = "ffffffffffffffff"
+        func deliver() {
+            engine.syncV2.catchUpInFlight = false
+            engine.handlePacket(digest(rev: 0, epoch: 1, hashes: remote))
+        }
+        deliver()
+        deliver()
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 2)
+        deliver()
+        deliver()
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 2)
+        mono.ms += 31_000
+        deliver()
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 3)
+        deliver()
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 3)
+    }
+
+    func testRolesMismatchAlwaysCatchesUpImmediately() {
+        let engine = v2Client()
+        var remote = engine.localHashes()
+        remote.roles = "ffffffffffffffff"
+        for _ in 0..<4 {
+            engine.syncV2.catchUpInFlight = false
+            engine.handlePacket(digest(rev: 0, epoch: 1, hashes: remote))
+        }
+        XCTAssertEqual(outbox.lanPackets(.ping).count, 4)
+    }
+
+    func testEstimatorIgnoresStaleSamplesAndDropsOldOnesAfterAClockStep() {
+        var estimator = ClockOffsetEstimator()
+        func sample(offset: Double, rtt: Double, at mono: Double) -> ClockSyncSample {
+            ClockSyncSample(t0: 1_000, t1: 1_000 + offset + rtt / 2, t2: 1_000 + offset + rtt / 2, t3: 1_000 + rtt, monotonicMs: mono)
+        }
+        estimator.add(sample(offset: 100, rtt: 2, at: 0), nowMonotonicMs: 0)
+        estimator.add(sample(offset: 101, rtt: 30, at: 10_000), nowMonotonicMs: 10_000)
+        XCTAssertEqual(estimator.samples.count, 2)
+        estimator.add(sample(offset: 102, rtt: 40, at: 95_000), nowMonotonicMs: 95_000)
+        XCTAssertEqual(estimator.samples.count, 2)
+        XCTAssertEqual(estimator.best?.effectiveRtt ?? 0, 30, accuracy: 0.001)
+
+        estimator.add(sample(offset: 3_600_100, rtt: 40, at: 96_000), nowMonotonicMs: 96_000)
+        XCTAssertEqual(estimator.samples.count, 1)
+        XCTAssertEqual(estimator.offsetMs ?? 0, 3_600_100, accuracy: 0.001)
+    }
+
+    func testEstimatorRoundingBoundsAndImplausibleReplies() {
+        var estimator = ClockOffsetEstimator()
+        XCTAssertTrue(estimator.add(ClockSyncSample(t0: 100, t1: 100, t2: 101, t3: 99)))
+        XCTAssertEqual(estimator.best?.effectiveRtt, 0)
+        XCTAssertFalse(estimator.add(ClockSyncSample(t0: 100, t1: 500, t2: 900, t3: 200)))
+        XCTAssertFalse(estimator.add(ClockSyncSample(t0: 0, t1: 0, t2: 0, t3: 10_001)))
+        XCTAssertTrue(estimator.add(ClockSyncSample(t0: 0, t1: 0, t2: 0, t3: 10_000)))
+        var fresh = ClockOffsetEstimator()
+        XCTAssertFalse(fresh.add(ClockSyncSample(t0: 0, t1: 86_400_001, t2: 86_400_001, t3: 0)))
+        XCTAssertFalse(fresh.add(ClockSyncSample(t0: 0, t1: -86_400_001, t2: -86_400_001, t3: 0)))
+        XCTAssertFalse(fresh.add(ClockSyncSample(t0: .nan, t1: 0, t2: 0, t3: 0)))
+        XCTAssertTrue(fresh.add(ClockSyncSample(t0: 0, t1: 86_400_000, t2: 86_400_000, t3: 0)))
+    }
+
+    func testClockChangeWakeAndReconnectClearSamplesAndBurst() {
+        let engine = v2Client()
+        XCTAssertFalse(engine.syncV2.estimator.samples.isEmpty)
+        engine.systemClockDidChange()
+        XCTAssertTrue(engine.syncV2.estimator.samples.isEmpty)
+        XCTAssertNotNil(engine.syncV2.estimator.offsetMs)
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+
+        giveOffset(engine)
+        outbox.clear()
+        engine.deviceDidBecomeActive()
+        XCTAssertTrue(engine.syncV2.estimator.samples.isEmpty)
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+
+        giveOffset(engine)
+        outbox.clear()
+        engine.relayDidConnect()
+        XCTAssertTrue(engine.syncV2.estimator.samples.isEmpty)
+        XCTAssertEqual(outbox.lanPackets(.ping).first?.proto, 2)
+        XCTAssertEqual(outbox.relayPackets(.ping).count, 1)
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+        XCTAssertTrue(engine.syncV2.relayLinked)
+    }
+
+    func testSampleReceiveTimeIsStoredForAging() {
+        let engine = client()
+        engine.sendSyncSample()
+        let t0 = outbox.lanPackets(.sync)[0].t0!
+        var reply = CuePacket(type: .syncReply, senderId: "producer")
+        reply.t0 = t0
+        reply.t1 = t0
+        reply.t2 = t0
+        reply.to = engine.deviceId
+        reply.receivedAtMs = Double(t0)
+        engine.handlePacket(reply)
+        XCTAssertEqual(engine.syncV2.estimator.samples.first?.monotonicMs, mono.ms)
+    }
+
+    func testFirstV2PacketWithoutAnOffsetStartsOneBurst() {
+        let engine = client()
+        engine.handlePacket(digest(rev: 1, epoch: 1, hashes: engine.localHashes()))
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+        engine.handlePacket(anchor(rev: 2))
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 1)
+        mono.ms += 3_001
+        engine.handlePacket(anchor(rev: 3))
+        XCTAssertEqual(outbox.lanPackets(.sync).count, 2)
+        XCTAssertEqual(outbox.relayPackets(.sync).count, 2)
+    }
+
+    func testHeldAnchorAccruesFromLocalReceiveTimeUntilAnOffsetExists() {
+        let engine = client()
+        engine.handlePacket(anchor(rev: 1, elapsedMs: 10_000))
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 10)
+        mono.ms += 2_500
+        engine.refreshHeldTimer()
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 12)
+        XCTAssertNil(engine.syncV2.estimator.offsetMs)
+    }
+
+    func testRelayLinkFlagFollowsTheConnectionWithoutTouchingSyncState() {
+        let engine = v2Client()
+        engine.relayDidConnect()
+        XCTAssertTrue(engine.syncV2.relayLinked)
+        engine.relayDidDisconnect()
+        XCTAssertFalse(engine.syncV2.relayLinked)
+        XCTAssertTrue(engine.syncV2.producerIsV2)
+    }
+
+    func testHostileAnchorsNeverCrashAndAreRejectedAtDecode() throws {
+        func decode(_ anchor: String) -> CuePacket? {
+            CuePacket.decode(from: Data(#"{"type":"TIMER_ANCHOR","timestamp":1,"senderId":"x","rev":1,"anchor":\#(anchor)}"#.utf8))
+        }
+        let big = decode(#"{"itemId":"a","lengthInSeconds":9223372036854775807,"elapsedMs":9223372036854775807,"anchorMs":-9223372036854775808,"isRunning":true,"isDurationActual":false}"#)
+        XCTAssertNil(big?.anchor)
+        XCTAssertEqual(big?.anchorRejected, true)
+        let negative = decode(#"{"itemId":"a","lengthInSeconds":-1,"elapsedMs":0,"anchorMs":0,"isRunning":true,"isDurationActual":false}"#)
+        XCTAssertEqual(negative?.anchorRejected, true)
+        let overElapsed = decode(#"{"itemId":"a","lengthInSeconds":300,"elapsedMs":604800001,"anchorMs":0,"isRunning":true,"isDurationActual":false}"#)
+        XCTAssertEqual(overElapsed?.anchorRejected, true)
+        let overLength = decode(#"{"itemId":"a","lengthInSeconds":604801,"elapsedMs":0,"anchorMs":0,"isRunning":true,"isDurationActual":false}"#)
+        XCTAssertEqual(overLength?.anchorRejected, true)
+        let edge = decode(#"{"itemId":"a","lengthInSeconds":604800,"elapsedMs":604800000,"anchorMs":9223372036854775807,"isRunning":true,"isDurationActual":false}"#)
+        XCTAssertEqual(edge?.anchorRejected, false)
+        XCTAssertNotNil(edge?.anchor)
+        let null = decode("null")
+        XCTAssertEqual(null?.anchorRejected, false)
+        XCTAssertNil(null?.anchor)
+
+        let engine = v2Client()
+        engine.handlePacket(anchor(rev: 5))
+        var forged = try XCTUnwrap(big)
+        forged.rev = 6
+        engine.handlePacket(forged)
+        XCTAssertNotNil(engine.syncV2.held)
+
+        let extreme = TimerAnchor(itemId: "a", lengthInSeconds: Int.min, elapsedMs: Int.max, anchorMs: Int.min, isRunning: true, isDurationActual: false)
+        _ = extreme.elapsedMs(atProducerMs: Int.max)
+        _ = extreme.remainingSeconds(atProducerMs: Int.max)
+        _ = extreme.msUntilNextSecond(atProducerMs: Int.min)
+        let hostileItem = PCOTimerItem(id: "h", title: "h", lengthInSeconds: Int.min, elapsedSeconds: Int.max, isRunning: true)
+        _ = hostileItem.remainingSeconds
+        _ = hostileItem.formattedRemainingTime
+        var mutable = hostileItem
+        mutable.adjustRemainingTime(bySeconds: Int.max)
+        mutable.setRemainingTime(seconds: Int.max)
+        var gate = SyncRevisionGate()
+        XCTAssertTrue(gate.accept(Int.min))
+        XCTAssertFalse(gate.accept(Int.max, allowJump: false))
+        let item = PCOTimerItem(id: "z", title: "z", lengthInSeconds: 10, elapsedSeconds: Int.max, isRunning: true)
+        engine.handlePacket(CuePacket(type: .timerUpdate, senderId: "producer", timerItem: item))
+        engine.tickTimer()
+        engine.tickTimer()
+    }
+
+    func testOneShotProducerTimerAlignsToTheAnchorSecondBoundary() {
+        let producer = makeProducer()
+        _ = producer.currentAnchor
+        XCTAssertNotNil(producer.syncV2.producerWorkItem)
+        XCTAssertEqual(producer.syncV2.producerTickDelayMs, 1_001)
+
+        clock.value.addTimeInterval(12.25)
+        producer.armProducerDisplayTick()
+        XCTAssertEqual(producer.syncV2.producerTickDelayMs, 751)
+
+        producer.toggleTimerRunning()
+        XCTAssertNil(producer.syncV2.producerWorkItem)
+        XCTAssertNil(producer.syncV2.producerTickDelayMs)
+
+        producer.toggleTimerRunning()
+        XCTAssertEqual(producer.syncV2.producerTickDelayMs, 751)
+    }
+
+    func testPagersAndMirrorsCreateNoDisplayTimer() {
+        let pager = client()
+        pager.handlePacket(anchor(rev: 1))
+        pager.tickTimer()
+        XCTAssertNil(pager.syncV2.producerWorkItem)
+        pager.armProducerDisplayTick()
+        XCTAssertNil(pager.syncV2.producerWorkItem)
+
+        let mirror = CueEngine(mirroring: nil)
+        mirror.armProducerDisplayTick()
+        mirror.tickTimer()
+        XCTAssertNil(mirror.syncV2.producerWorkItem)
+    }
+
+    func testPacketCodecCarriesEpochAndTo() throws {
+        var packet = CuePacket(type: .digest, senderId: "p")
+        packet.epoch = 12345
+        packet.to = "pager"
+        let decoded = try XCTUnwrap(CuePacket.decode(from: XCTUnwrap(packet.encode())))
+        XCTAssertEqual(decoded.epoch, 12345)
+        XCTAssertEqual(decoded.to, "pager")
+        let legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(CuePacket(type: .ping, senderId: "p").encode())) as? [String: Any])
+        XCTAssertNil(legacy["epoch"])
+        XCTAssertNil(legacy["to"])
+    }
+
+    func testLocalMessageOrderBreaksTimestampTiesByIdAscending() {
+        let producer = makeProducer()
+        let stamp = Date(timeIntervalSince1970: 50)
+        producer.addMessages([
+            InterTeamMessage(id: "b", text: "b", timestamp: stamp),
+            InterTeamMessage(id: "a", text: "a", timestamp: stamp),
+            InterTeamMessage(id: "c", text: "c", timestamp: Date(timeIntervalSince1970: 60)),
+        ])
+        XCTAssertEqual(producer.recentMessages.map(\.id), ["c", "a", "b"])
     }
 }

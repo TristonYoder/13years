@@ -160,7 +160,7 @@ public final class CueEngine: ObservableObject {
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
     private var timerSubscription: AnyCancellable?
-    private var fastTimerSubscription: AnyCancellable?
+    private var clockChangeObserver: NSObjectProtocol?
     var syncV2 = SyncV2State()
     var outboundObserver: ((CuePacket, OutboundTarget) -> Void)?
 
@@ -211,6 +211,15 @@ public final class CueEngine: ObservableObject {
         relayClient.onPacketReceived = { [weak self] packet in
             self?.handlePacket(packet, origin: .relay)
         }
+        relayClient.onConnected = { [weak self] in
+            self?.relayDidConnect()
+        }
+        relayClient.onDisconnected = { [weak self] in
+            self?.relayDidDisconnect()
+        }
+        clockChangeObserver = NotificationCenter.default.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemClockDidChange() }
+        }
         relayClient.onTextMessageReceived = { [weak self] data in
             guard let peerHello = PeerHello.decode(from: data) else { return }
             self?.directPeerChannel.connect(to: peerHello)
@@ -258,6 +267,7 @@ public final class CueEngine: ObservableObject {
         syncV2.anchor = nil
         syncV2.lastBroadcastRoles = nil
         syncV2.relayHasV2Peer = false
+        cancelProducerDisplayTick()
         lastProducerPacketAt = nil
         connectedProducerHost = nil
         connectedProducerAPIPort = nil
@@ -280,14 +290,18 @@ public final class CueEngine: ObservableObject {
             client.onStatusChanged = { [weak self] isJoined in
                 self?.isLANConnected = isJoined
                 if !isJoined {
-                    self?.resetClientSyncState()
-                    self?.isProducerLive = false
-                    self?.connectedProducerHost = nil
-                    self?.connectedProducerAPIPort = nil
+                    guard let self else { return }
+                    if !self.syncV2.relayLinked {
+                        self.resetClientSyncState()
+                        self.isProducerLive = false
+                    }
+                    self.connectedProducerHost = nil
+                    self.connectedProducerAPIPort = nil
                 }
             }
             client.onMasterDiscovered = { [weak self] name in
                 self?.connectedMasterName = name
+                self?.syncV2.estimator.clearSamples()
                 self?.requestCatchUp()
                 self?.startSyncBurst()
             }
@@ -1817,7 +1831,7 @@ public final class CueEngine: ObservableObject {
         let newOnes = incoming.filter { !existingIds.contains($0.id) }
         guard !newOnes.isEmpty else { return }
         recentMessages.append(contentsOf: newOnes)
-        recentMessages.sort { $0.timestamp > $1.timestamp }
+        recentMessages = SyncHash.sortedNewestFirst(recentMessages)
         if recentMessages.count > Self.maxStoredMessages {
             recentMessages.removeLast(recentMessages.count - Self.maxStoredMessages)
         }
@@ -1856,12 +1870,6 @@ public final class CueEngine: ObservableObject {
             .sink { [weak self] _ in
                 self?.tickTimer()
             }
-        fastTimerSubscription = Timer.publish(every: 0.1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self, self.isMasterServer, !self.isRemoteMirror else { return }
-                self.evaluateMasterTimer()
-            }
     }
 
     private var pcoLiveSyncTickCount = 0
@@ -1876,6 +1884,7 @@ public final class CueEngine: ObservableObject {
 
     private var legacyTimerAnchor: LegacyTimerAnchor?
     var timerClock: () -> Date = { Date() }
+    var monotonicMsClock: () -> Double = { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000 }
 
     func tickTimer() {
         guard !isRemoteMirror else { return }
@@ -1912,6 +1921,7 @@ public final class CueEngine: ObservableObject {
 
         if isMasterServer {
             evaluateMasterTimer()
+            if !isRemoteMirror, syncV2.producerWorkItem == nil { armProducerDisplayTick() }
         } else if !(syncV2.producerIsV2 && syncV2.held != nil) {
             accrueLegacyTimer()
         }
@@ -1931,7 +1941,7 @@ public final class CueEngine: ObservableObject {
 
         let now = timerClock()
         if var anchor = legacyTimerAnchor, anchor.itemId == item.id, anchor.lastWritten == item.elapsedSeconds {
-            let elapsed = anchor.elapsedAtStart + max(0, Int(now.timeIntervalSince(anchor.startedAt)))
+            let elapsed = anchor.elapsedAtStart.saturatingAdding(max(0, Int(max(-1e12, min(1e12, now.timeIntervalSince(anchor.startedAt))))))
             anchor.lastWritten = elapsed
             legacyTimerAnchor = anchor
             item.elapsedSeconds = elapsed
@@ -2020,16 +2030,21 @@ public final class CueEngine: ObservableObject {
             self?.controlAPIClientCount = count
         }
         controlAPIServer = server
-        controlAPIEventHub = ControlAPIEventHub(engine: self, server: server, router: router)
+        let hub = ControlAPIEventHub(engine: self, server: server, router: router)
+        hub.hasClients = { [weak self] in (self?.controlAPIClientCount ?? 0) > 0 }
+        controlAPIEventHub = hub
         return server
     }
 
     func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }
+        if let target = packet.to, target != deviceId { return }
+        if packet.anchorRejected { return }
         AppLog.cue.debug("handlePacket() type=\(packet.type.rawValue, privacy: .public) from=\(packet.senderId, privacy: .public) roleCues=\(packet.roleCues?.count ?? 0, privacy: .public) timerItem=\(packet.timerItem?.title ?? "nil", privacy: .public)")
 
+        let epochChanged = processEpoch(packet)
         noteProducerCapabilities(packet)
-        guard passesRevisionGate(packet) else { return }
+        guard passesRevisionGate(packet, epochChanged: epochChanged) else { return }
 
         switch packet.type {
         case .cueUpdate, .timerUpdate, .pong:
@@ -2044,6 +2059,10 @@ public final class CueEngine: ObservableObject {
             }
         default:
             break
+        }
+
+        if packet.type == .cueUpdate || packet.type == .timerUpdate {
+            noteLegacyPacket(packet, origin: origin)
         }
 
         let isV2Timer = !isMasterServer && syncV2.producerIsV2 && syncV2.held != nil
@@ -2073,7 +2092,7 @@ public final class CueEngine: ObservableObject {
         case .ping:
             if isMasterServer {
                 if packet.proto == CuePacket.protocolVersion {
-                    answerV2CatchUp(origin: origin)
+                    answerV2CatchUp(origin: origin, requester: packet.senderId)
                 } else {
                     broadcastCatchUp()
                 }
@@ -2106,6 +2125,11 @@ public final class CueEngine: ObservableObject {
             }
         case .digest:
             if !isMasterServer { verifyDigest(packet) }
+        }
+
+        if epochChanged {
+            startSyncBurst()
+            if packet.type != .pong { requestCatchUpOnce() }
         }
     }
 }

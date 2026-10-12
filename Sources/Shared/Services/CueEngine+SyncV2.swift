@@ -17,10 +17,13 @@ enum OutboundTarget {
 struct HeldAnchor {
     var anchor: TimerAnchor
     var item: PCOTimerItem
+    var receivedMonoMs: Double = 0
+    var fallbackProducerMs: Double = 0
 }
 
 struct SyncV2State {
     var rev = 0
+    var epoch = Int.random(in: 1...Int(Int32.max))
     var anchor: TimerAnchor?
     var writtenSeconds = 0
     var lastBroadcastRoles: [RoleCue]?
@@ -35,6 +38,15 @@ struct SyncV2State {
     var ticksSinceSync = 0
     var mirrorOffsetMs: Double?
     var displayWorkItem: DispatchWorkItem?
+    var producerWorkItem: DispatchWorkItem?
+    var producerTickDelayMs: Int?
+    var producerEpoch: Int?
+    var lastLegacyCatchUpMono: Double?
+    var lastV2PacketMono: Double?
+    var messageMismatchStreak = 0
+    var lastMessageCatchUpMono: Double?
+    var lastBurstMono: Double?
+    var relayLinked = false
 }
 
 extension CueEngine {
@@ -43,6 +55,20 @@ extension CueEngine {
     static let syncIntervalTicks = 30
     static let digestIntervalTicks = 10
     static let v2StalenessInterval: TimeInterval = 25
+    static let catchUpMessageLimit = 20
+    static let maxCatchUpPongBytes = 4096
+    static let legacyCatchUpMinGapMs = 5_000.0
+    static let v2SilenceBeforeLegacyCatchUpMs = 12_000.0
+    static let burstReissueGapMs = 3_000.0
+    static let messageMismatchFreeStreak = 2
+    static let messageCatchUpBackoffMs = 30_000.0
+
+    var monotonicMs: Double { monotonicMsClock() }
+
+    static func clampedInt(_ value: Double) -> Int {
+        guard value.isFinite else { return 0 }
+        return Int(max(-1e15, min(1e15, value)))
+    }
 
     var nowMsInt: Int {
         Int((timerClock().timeIntervalSince1970 * 1000).rounded())
@@ -94,6 +120,7 @@ extension CueEngine {
         guard var item = activeTimerItem else {
             syncV2.anchor = nil
             syncV2.writtenSeconds = 0
+            armProducerDisplayTick()
             return
         }
         let exact = exactElapsedMs(of: item, at: now)
@@ -110,12 +137,14 @@ extension CueEngine {
             isDurationActual: activeTimerActualForDisplay
         )
         syncV2.writtenSeconds = item.elapsedSeconds
+        armProducerDisplayTick()
     }
 
     func publishTimerAnchorToV2() {
         guard isMasterServer, !isRemoteMirror else { return }
         var packet = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
         packet.rev = nextRev()
+        packet.epoch = syncV2.epoch
         packet.anchor = syncV2.anchor
         emitToV2Peers(packet)
     }
@@ -128,6 +157,7 @@ extension CueEngine {
                 syncV2.anchor = nil
                 syncV2.writtenSeconds = 0
                 publishTimerAnchorToV2()
+                armProducerDisplayTick()
             }
             return
         }
@@ -152,6 +182,7 @@ extension CueEngine {
             )
             syncV2.writtenSeconds = item.elapsedSeconds
             publishTimerAnchorToV2()
+            armProducerDisplayTick()
             return
         }
         guard item.isRunning, let anchor = syncV2.anchor else { return }
@@ -171,10 +202,12 @@ extension CueEngine {
         )
     }
 
-    func makeDigestPacket() -> CuePacket {
+    func makeDigestPacket(to requester: String? = nil) -> CuePacket {
         var packet = CuePacket(type: .digest, senderId: deviceId)
         packet.hashes = currentHashes()
         packet.rev = syncV2.rev
+        packet.epoch = syncV2.epoch
+        packet.to = requester
         packet.digestMs = nowMsInt
         return packet
     }
@@ -206,32 +239,47 @@ extension CueEngine {
             var packet = CuePacket(type: .cueDelta, senderId: deviceId)
             packet.cueDeltas = deltas
             packet.rev = nextRev()
+            packet.epoch = syncV2.epoch
             emitToV2Peers(packet)
         } else {
             var packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles)
             packet.rev = nextRev()
+            packet.epoch = syncV2.epoch
             emitToV2Peers(packet)
         }
     }
 
-    func answerV2CatchUp(origin: PacketOrigin) {
-        evaluateMasterTimer()
-        if syncV2.lastBroadcastRoles == nil { syncV2.lastBroadcastRoles = roles }
-        var pong = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
+    func makeV2CatchUpPong(to requester: String?) -> CuePacket {
+        var messages = Array(SyncHash.sortedNewestFirst(recentMessages).prefix(Self.catchUpMessageLimit))
+        var pong = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: messages)
         pong.proto = CuePacket.protocolVersion
         pong.rev = syncV2.rev
+        pong.epoch = syncV2.epoch
+        pong.to = requester
+        while !messages.isEmpty, (pong.encode()?.count ?? 0) > Self.maxCatchUpPongBytes {
+            messages.removeLast()
+            pong.messages = messages
+        }
+        return pong
+    }
+
+    func answerV2CatchUp(origin: PacketOrigin, requester: String? = nil) {
+        evaluateMasterTimer()
+        if syncV2.lastBroadcastRoles == nil { syncV2.lastBroadcastRoles = roles }
+        let pong = makeV2CatchUpPong(to: requester)
         var anchorPacket = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
         anchorPacket.rev = syncV2.rev
+        anchorPacket.epoch = syncV2.epoch
+        anchorPacket.to = requester
         anchorPacket.anchor = syncV2.anchor
-        let digest = makeDigestPacket()
+        let digest = makeDigestPacket(to: requester)
         switch origin {
         case .lanServer(let id):
             server.markProtocolV2(id)
             for packet in [pong, anchorPacket, digest] { emit(packet, .lan(.connection(id))) }
         case .relay:
             syncV2.relayHasV2Peer = true
-            broadcastCatchUp()
-            for packet in [anchorPacket, digest] { emit(packet, .relay) }
+            for packet in [pong, anchorPacket, digest] { emit(packet, .relay) }
         case .lanClient:
             break
         }
@@ -242,6 +290,8 @@ extension CueEngine {
         var reply = CuePacket(type: .syncReply, senderId: deviceId)
         reply.t0 = t0
         reply.t1 = Int((packet.receivedAtMs ?? SyncClock.nowMs()).rounded())
+        reply.epoch = syncV2.epoch
+        reply.to = packet.senderId
         switch origin {
         case .lanServer(let id):
             emit(reply, .lan(.connection(id)))
@@ -254,22 +304,67 @@ extension CueEngine {
 
     func noteProducerCapabilities(_ packet: CuePacket) {
         guard !isMasterServer else { return }
+        let marksV2: Bool
         switch packet.type {
-        case .timerAnchor, .cueDelta, .digest, .syncReply:
-            syncV2.producerIsV2 = true
-        default:
-            if packet.proto == CuePacket.protocolVersion { syncV2.producerIsV2 = true }
+        case .pong: marksV2 = packet.rev != nil
+        case .timerAnchor, .cueDelta, .digest: marksV2 = true
+        case .syncReply: marksV2 = packet.to == deviceId
+        default: marksV2 = false
+        }
+        guard marksV2 else { return }
+        syncV2.lastV2PacketMono = monotonicMs
+        syncV2.producerIsV2 = true
+        if syncV2.estimator.offsetMs == nil { ensureSyncBurst() }
+    }
+
+    func processEpoch(_ packet: CuePacket) -> Bool {
+        guard !isMasterServer, !isRemoteMirror, let epoch = packet.epoch else { return false }
+        let known = syncV2.producerEpoch
+        syncV2.producerEpoch = epoch
+        guard let known, known != epoch else { return false }
+        discardProducerState()
+        return true
+    }
+
+    func discardProducerState() {
+        cancelDisplayTick()
+        syncV2.held = nil
+        syncV2.gate.reset()
+        syncV2.estimator.reset()
+        syncV2.pendingSyncT0 = []
+        syncV2.catchUpInFlight = false
+        syncV2.messageMismatchStreak = 0
+        syncV2.lastMessageCatchUpMono = nil
+        if var item = activeTimerItem, item.isRunning {
+            item.isRunning = false
+            activeTimerItem = item
         }
     }
 
-    func passesRevisionGate(_ packet: CuePacket) -> Bool {
+    func noteLegacyPacket(_ packet: CuePacket, origin: PacketOrigin) {
+        guard !isMasterServer, !isRemoteMirror, syncV2.producerIsV2, packet.rev == nil else { return }
+        let now = monotonicMs
+        var silent = true
+        if let last = syncV2.lastV2PacketMono { silent = now - last > Self.v2SilenceBeforeLegacyCatchUpMs }
+        var viaLAN = false
+        if case .lanClient = origin { viaLAN = true }
+        guard viaLAN || silent else { return }
+        if let last = syncV2.lastLegacyCatchUpMono, now - last < Self.legacyCatchUpMinGapMs { return }
+        syncV2.lastLegacyCatchUpMono = now
+        requestCatchUp()
+    }
+
+    func passesRevisionGate(_ packet: CuePacket, epochChanged: Bool = false) -> Bool {
         guard !isMasterServer, syncV2.producerIsV2 else { return true }
+        let addressed = packet.to == deviceId
         switch packet.type {
         case .pong:
-            syncV2.gate.rebase(to: packet.rev)
+            if packet.rev != nil { syncV2.gate.rebase(to: packet.rev) }
             return true
-        case .cueUpdate, .timerAnchor, .cueDelta, .digest:
-            return syncV2.gate.accept(packet.rev)
+        case .cueUpdate, .timerAnchor, .cueDelta:
+            return syncV2.gate.accept(packet.rev, strict: !addressed, allowJump: epochChanged)
+        case .digest:
+            return syncV2.gate.accept(packet.rev, strict: false, allowJump: epochChanged, advance: false)
         default:
             return true
         }
@@ -282,12 +377,11 @@ extension CueEngine {
             if activeTimerItem != nil { activeTimerItem = nil }
             return
         }
-        syncV2.held = HeldAnchor(anchor: anchor, item: item)
-        if syncedProducerNowMs == nil {
-            if activeTimerItem != item { activeTimerItem = item }
-        } else {
-            refreshHeldTimer()
-        }
+        let stamp = packet.timestamp * 1000
+        let sinceAnchor = stamp - Double(anchor.anchorMs)
+        let fallback = stamp.isFinite && sinceAnchor >= 0 && sinceAnchor <= Double(TimerAnchor.maxElapsedMs) ? stamp : Double(anchor.anchorMs)
+        syncV2.held = HeldAnchor(anchor: anchor, item: item, receivedMonoMs: monotonicMs, fallbackProducerMs: fallback)
+        refreshHeldTimer()
         armDisplayTick()
     }
 
@@ -316,9 +410,21 @@ extension CueEngine {
 
     func verifyDigest(_ packet: CuePacket) {
         guard let remote = packet.hashes else { return }
-        if !localHashes().mismatches(against: remote).isEmpty {
-            requestCatchUpOnce()
+        let mismatches = localHashes().mismatches(against: remote)
+        if mismatches.isEmpty {
+            syncV2.messageMismatchStreak = 0
+            return
         }
+        if mismatches == [.messages] {
+            syncV2.messageMismatchStreak += 1
+            let now = monotonicMs
+            if syncV2.messageMismatchStreak > Self.messageMismatchFreeStreak,
+               let last = syncV2.lastMessageCatchUpMono, now - last < Self.messageCatchUpBackoffMs {
+                return
+            }
+            syncV2.lastMessageCatchUpMono = now
+        }
+        requestCatchUpOnce()
     }
 
     func requestCatchUpOnce() {
@@ -331,7 +437,8 @@ extension CueEngine {
     }
 
     func applyV2CatchUpMessages(_ messages: [InterTeamMessage]) {
-        let sorted = messages.sorted { $0.timestamp > $1.timestamp }
+        var sorted = SyncHash.sortedNewestFirst(messages)
+        if sorted.count > 200 { sorted.removeLast(sorted.count - 200) }
         if recentMessages != sorted { recentMessages = sorted }
     }
 
@@ -341,9 +448,15 @@ extension CueEngine {
         return offset.map { local + $0 }
     }
 
+    var heldProducerNowMs: Double? {
+        if let synced = syncedProducerNowMs { return synced }
+        guard !isRemoteMirror, let held = syncV2.held else { return nil }
+        return held.fallbackProducerMs + max(0, monotonicMs - held.receivedMonoMs)
+    }
+
     func refreshHeldTimer() {
-        guard let held = syncV2.held, let nowMs = syncedProducerNowMs else { return }
-        let item = held.anchor.applying(to: held.item, atProducerMs: Int(nowMs.rounded(.down)))
+        guard let held = syncV2.held, let nowMs = heldProducerNowMs else { return }
+        let item = held.anchor.applying(to: held.item, atProducerMs: Self.clampedInt(nowMs.rounded(.down)))
         if activeTimerItem != item { activeTimerItem = item }
     }
 
@@ -354,8 +467,8 @@ extension CueEngine {
 
     func armDisplayTick() {
         cancelDisplayTick()
-        guard let held = syncV2.held, held.anchor.isRunning, let nowMs = syncedProducerNowMs,
-              let wait = held.anchor.msUntilNextSecond(atProducerMs: Int(nowMs.rounded(.down))) else { return }
+        guard let held = syncV2.held, held.anchor.isRunning, let nowMs = heldProducerNowMs,
+              let wait = held.anchor.msUntilNextSecond(atProducerMs: Self.clampedInt(nowMs.rounded(.down))) else { return }
         let work = DispatchWorkItem { [weak self] in
             self?.refreshHeldTimer()
             self?.armDisplayTick()
@@ -367,8 +480,8 @@ extension CueEngine {
     func handleSyncReply(_ packet: CuePacket) {
         guard !isMasterServer, !isRemoteMirror, let t0 = packet.t0, let t1 = packet.t1, let t2 = packet.t2,
               let t3 = packet.receivedAtMs, syncV2.pendingSyncT0.remove(t0) != nil else { return }
-        let sample = ClockSyncSample(t0: Double(t0), t1: Double(t1), t2: Double(t2), t3: t3)
-        guard syncV2.estimator.add(sample) else { return }
+        let sample = ClockSyncSample(t0: Double(t0), t1: Double(t1), t2: Double(t2), t3: t3, monotonicMs: monotonicMs)
+        guard syncV2.estimator.add(sample, nowMonotonicMs: monotonicMs) else { return }
         refreshHeldTimer()
         armDisplayTick()
     }
@@ -384,8 +497,15 @@ extension CueEngine {
         emit(packet, .relay)
     }
 
+    func ensureSyncBurst() {
+        guard !isMasterServer, !isRemoteMirror else { return }
+        if let last = syncV2.lastBurstMono, monotonicMs - last < Self.burstReissueGapMs { return }
+        startSyncBurst()
+    }
+
     func startSyncBurst() {
         guard !isMasterServer, !isRemoteMirror else { return }
+        syncV2.lastBurstMono = monotonicMs
         for index in 0..<Self.syncBurstCount {
             let delay = Self.syncBurstSpacing * Double(index)
             if index == 0 {
@@ -401,10 +521,48 @@ extension CueEngine {
 
     public func deviceDidBecomeActive() {
         guard !isMasterServer, !isRemoteMirror else { return }
-        sendSyncSample()
-        syncV2.ticksSinceSync = 0
+        syncV2.estimator.clearSamples()
+        startSyncBurst()
         refreshHeldTimer()
         armDisplayTick()
+    }
+
+    func systemClockDidChange() {
+        deviceDidBecomeActive()
+    }
+
+    func relayDidConnect() {
+        syncV2.relayLinked = true
+        guard !isMasterServer, !isRemoteMirror else { return }
+        syncV2.estimator.clearSamples()
+        requestCatchUp()
+        startSyncBurst()
+    }
+
+    func relayDidDisconnect() {
+        syncV2.relayLinked = false
+    }
+
+    func cancelProducerDisplayTick() {
+        syncV2.producerWorkItem?.cancel()
+        syncV2.producerWorkItem = nil
+        syncV2.producerTickDelayMs = nil
+    }
+
+    func armProducerDisplayTick() {
+        cancelProducerDisplayTick()
+        guard isMasterServer, !isRemoteMirror, let anchor = syncV2.anchor, anchor.isRunning,
+              let wait = anchor.msUntilNextSecond(atProducerMs: nowMsInt) else { return }
+        let delay = wait + 1
+        syncV2.producerTickDelayMs = delay
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.syncV2.producerWorkItem = nil
+            self.evaluateMasterTimer()
+            self.armProducerDisplayTick()
+        }
+        syncV2.producerWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay), execute: work)
     }
 
     func resetClientSyncState() {
@@ -416,6 +574,10 @@ extension CueEngine {
         syncV2.gate.reset()
         syncV2.catchUpInFlight = false
         syncV2.ticksSinceSync = 0
+        syncV2.producerEpoch = nil
+        syncV2.messageMismatchStreak = 0
+        syncV2.lastMessageCatchUpMono = nil
+        syncV2.lastBurstMono = nil
     }
 
     func v2HeartbeatTick() {
@@ -428,6 +590,7 @@ extension CueEngine {
                 syncV2.ticksSinceSync = 0
                 sendSyncSample()
             }
+            syncV2.estimator.expire(nowMonotonicMs: monotonicMs)
             refreshHeldTimer()
             if syncV2.displayWorkItem == nil { armDisplayTick() }
         }

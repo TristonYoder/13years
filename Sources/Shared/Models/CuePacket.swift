@@ -48,11 +48,14 @@ public struct CuePacket: Codable, Sendable {
     public var cueDeltas: [CueDelta]?
     public var digestMs: Int?
     public var hashes: SyncHash.Hashes?
+    public var epoch: Int?
+    public var to: String?
     public var receivedAtMs: Double?
+    public private(set) var anchorRejected = false
 
     private enum CodingKeys: String, CodingKey {
         case type, timestamp, senderId, roleCues, timerItem, message, messages
-        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes
+        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to
     }
 
     public init(
@@ -87,10 +90,18 @@ public struct CuePacket: Codable, Sendable {
         t1 = try container.decodeIfPresent(Int.self, forKey: .t1)
         t2 = try container.decodeIfPresent(Int.self, forKey: .t2)
         rev = try container.decodeIfPresent(Int.self, forKey: .rev)
-        anchor = try? container.decodeIfPresent(TimerAnchor.self, forKey: .anchor)
+        if container.contains(.anchor), !((try? container.decodeNil(forKey: .anchor)) ?? false) {
+            if let decoded = try? container.decode(TimerAnchor.self, forKey: .anchor), decoded.isWithinBounds {
+                anchor = decoded
+            } else {
+                anchorRejected = true
+            }
+        }
         cueDeltas = try container.decodeIfPresent([CueDelta].self, forKey: .cueDeltas)
         digestMs = try container.decodeIfPresent(Int.self, forKey: .digestMs)
         hashes = try container.decodeIfPresent(SyncHash.Hashes.self, forKey: .hashes)
+        epoch = try container.decodeIfPresent(Int.self, forKey: .epoch)
+        to = try container.decodeIfPresent(String.self, forKey: .to)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -115,6 +126,8 @@ public struct CuePacket: Codable, Sendable {
         try container.encodeIfPresent(cueDeltas, forKey: .cueDeltas)
         try container.encodeIfPresent(digestMs, forKey: .digestMs)
         try container.encodeIfPresent(hashes, forKey: .hashes)
+        try container.encodeIfPresent(epoch, forKey: .epoch)
+        try container.encodeIfPresent(to, forKey: .to)
     }
 
     public func encode() -> Data? {

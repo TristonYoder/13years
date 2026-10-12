@@ -105,7 +105,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var remainingSeconds: Int {
-        lengthInSeconds - elapsedSeconds
+        lengthInSeconds.saturatingSubtracting(elapsedSeconds)
     }
 
     public var isOvertime: Bool {
@@ -113,7 +113,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var formattedRemainingTime: String {
-        let absSeconds = abs(remainingSeconds)
+        let absSeconds = Int(clamping: remainingSeconds.magnitude)
         let mins = absSeconds / 60
         let secs = absSeconds % 60
         let timeString = String(format: "%02d:%02d", mins, secs)
@@ -121,10 +121,10 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public mutating func adjustRemainingTime(bySeconds delta: Int) {
-        lengthInSeconds = max(0, lengthInSeconds + delta)
+        lengthInSeconds = max(0, lengthInSeconds.saturatingAdding(delta))
     }
 
     public mutating func setRemainingTime(seconds: Int) {
-        lengthInSeconds = elapsedSeconds + max(0, seconds)
+        lengthInSeconds = elapsedSeconds.saturatingAdding(max(0, seconds))
     }
 }

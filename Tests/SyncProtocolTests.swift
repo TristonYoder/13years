@@ -45,6 +45,16 @@ final class SyncHashTests: XCTestCase {
         XCTAssertEqual(SyncHash.messages([newer, older]), "dddb4a3dc4d94432")
     }
 
+    func testMessagesTieBreakVector() {
+        XCTAssertEqual(SyncHash.messagesCanonical(ids: ["a", "b"]), "a\(rs)b")
+        XCTAssertEqual(SyncHash.messages(ids: ["a", "b"]), "e5e7b9190438f91c")
+        let stamp = Date(timeIntervalSince1970: 100)
+        let a = InterTeamMessage(id: "a", text: "x", timestamp: stamp)
+        let b = InterTeamMessage(id: "b", text: "y", timestamp: stamp)
+        XCTAssertEqual(SyncHash.messages([b, a]), "e5e7b9190438f91c")
+        XCTAssertEqual(SyncHash.messages([a, b]), "e5e7b9190438f91c")
+    }
+
     func testPlanVector() {
         let items = [
             PCOTimerItem(id: "i1", title: "Song", lengthInSeconds: 300, isDurationActual: false),

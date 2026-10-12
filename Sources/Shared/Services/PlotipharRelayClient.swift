@@ -3,14 +3,16 @@
 
 import Foundation
 
-public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
+public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
     public var onPacketReceived: ((CuePacket) -> Void)?
     public var onTextMessageReceived: ((Data) -> Void)?
+    public var onConnected: (() -> Void)?
+    public var onDisconnected: (() -> Void)?
 
     public var relayHost: String = ""
     public var token: String = ""
 
-    private let session: URLSession
+    private var session: URLSession!
     private var task: URLSessionWebSocketTask?
     private let queue = DispatchQueue(label: "dev.7co.13years.relay")
     private var isRunning = false
@@ -22,9 +24,9 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
     private static let maxReconnectDelay: TimeInterval = 30
 
     public override init() {
-        self.session = URLSession(configuration: .default)
         self.reconnectDelay = PlotipharRelayClient.initialReconnectDelay
         super.init()
+        self.session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }
 
     public func start() {
@@ -70,6 +72,13 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
                     print("[PlotipharRelayClient] Text send error: \(error)")
                 }
             }
+        }
+    }
+
+    public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        queue.async { [self] in
+            guard isRunning, task === webSocketTask else { return }
+            DispatchQueue.main.async { [weak self] in self?.onConnected?() }
         }
     }
 
@@ -153,6 +162,7 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
     private func handleDisconnect(generation: Int) {
         guard generation == self.generation, isRunning else { return }
         task = nil
+        DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
         scheduleReconnect()
     }
 
