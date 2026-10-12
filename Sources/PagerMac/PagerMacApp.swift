@@ -7,6 +7,7 @@ import SwiftUI
 struct PagerMacApp: App {
     @StateObject private var cueEngine = CueEngine(isMasterServer: false)
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("keepOnTop") private var keepOnTop = false
 
     init() {
         AppFonts.registerIfNeeded()
@@ -18,7 +19,10 @@ struct PagerMacApp: App {
                 .environmentObject(cueEngine)
                 .frame(minWidth: 320, minHeight: 240)
                 .ignoresSafeArea()
-                .background(EdgelessWindow())
+                .background(EdgelessWindow(keepOnTop: keepOnTop))
+                .contextMenu {
+                    Toggle("Keep on Top", isOn: $keepOnTop)
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { cueEngine.deviceDidBecomeActive() }
                 }
@@ -29,6 +33,8 @@ struct PagerMacApp: App {
 }
 
 private struct EdgelessWindow: NSViewRepresentable {
+    let keepOnTop: Bool
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async { [weak view] in
@@ -38,6 +44,7 @@ private struct EdgelessWindow: NSViewRepresentable {
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
             window.backgroundColor = .black
+            window.level = keepOnTop ? .floating : .normal
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 window.standardWindowButton(button)?.isHidden = true
             }
@@ -45,5 +52,7 @@ private struct EdgelessWindow: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.window?.level = keepOnTop ? .floating : .normal
+    }
 }
