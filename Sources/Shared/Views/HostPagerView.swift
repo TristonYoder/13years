@@ -12,6 +12,7 @@ public struct HostPagerView: View {
     @State private var now = Date()
     @State private var dismissedMessageId: String?
     @State private var lastSeenMessageId: String?
+    @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
 
     public init() {}
 
@@ -76,7 +77,9 @@ public struct HostPagerView: View {
             #if os(tvOS)
             landscapeView(size: geo.size)
             #else
-            if !PortraitMetrics.isPortrait(geo.size) {
+            if PagerLayoutChoice.resolve(layoutRaw).usesLowerThird(for: geo.size) {
+                lowerThirdView(size: geo.size)
+            } else if !PortraitMetrics.isPortrait(geo.size) {
                 landscapeView(size: geo.size)
             } else {
                 portraitView(size: geo.size)
@@ -106,6 +109,20 @@ public struct HostPagerView: View {
 
     private func landscapeView(size: CGSize) -> some View {
         LandscapePagerView(
+            size: size,
+            presentation: presentation,
+            disconnectPhase: disconnectPhase,
+            standingMessage: visibleStandingMessage,
+            showMessages: openChat,
+            showSettings: { isShowingSettings = true },
+            openMessage: openChat,
+            dismissMessage: dismissStanding,
+            roleMenu: { roleMenuItems }
+        )
+    }
+
+    private func lowerThirdView(size: CGSize) -> some View {
+        LowerThirdPagerView(
             size: size,
             presentation: presentation,
             disconnectPhase: disconnectPhase,

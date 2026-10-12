@@ -8,6 +8,7 @@ public struct PagerSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PagerHaptics.strengthDefaultsKey) private var hapticStrength: Double = PagerHaptics.defaultStrength
     @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
+    @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
     #if PAGER_MAC
     @AppStorage("keepOnTop") private var keepOnTop = false
     #endif
@@ -64,6 +65,20 @@ public struct PagerSettingsView: View {
                 } footer: {
                     Text("Outline frames the screen in the cue colour. Full screen fills the whole screen with it.")
                 }
+
+                #if !os(tvOS)
+                Section {
+                    Picker("Layout", selection: $layoutRaw) {
+                        ForEach(PagerLayoutChoice.allCases) { choice in
+                            Text(choice.title).tag(choice.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Layout")
+                } footer: {
+                    Text("Lower third shows the clock, element name and countdown on a single line. Automatic switches to it on very wide windows. Tap the screen to show the role, messages and settings.")
+                }
+                #endif
 
                 #if PAGER_MAC
                 Section {
