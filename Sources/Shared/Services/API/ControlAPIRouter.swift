@@ -112,6 +112,8 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.RoleCreateBody.self, body) else { return badBody() }
             let trimmed = request.name.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return Self.error(400, "Role name cannot be empty") }
+            if let tooLong = tooLong(trimmed, ContentLimits.name, "Role name") { return tooLong }
+            guard engine.roles.count < ContentLimits.maxRoles else { return limitReached("roles", ContentLimits.maxRoles) }
             let role = engine.addRole(name: trimmed)
             return json(role, status: 201)
 
@@ -119,6 +121,7 @@ public final class ControlAPIRouter {
             if allows(method, "GET") { return json(engine.selectedRoleIds.sorted()) }
             guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.SelectionBody.self, body) else { return badBody() }
+            guard request.roleIds.count <= ContentLimits.maxRoles else { return Self.error(400, "Too many role ids", detail: "At most \(ContentLimits.maxRoles).") }
             let known = Set(engine.roles.map(\.id))
             let unknown = request.roleIds.filter { !known.contains($0) }
             guard unknown.isEmpty else {
@@ -141,6 +144,9 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.MessageBody.self, body) else { return badBody() }
             let text = request.text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { return Self.error(400, "Message text cannot be empty") }
+            if let tooLong = tooLong(text, ContentLimits.messageText, "Message text") { return tooLong }
+            if let tooLong = tooLong(request.targetRoleId ?? "", ContentLimits.identifier, "targetRoleId") { return tooLong }
+            if let tooLong = tooLong(request.senderRoleId ?? "", ContentLimits.identifier, "senderRoleId") { return tooLong }
             engine.sendMessage(
                 text,
                 targetRoleId: request.targetRoleId,
@@ -161,7 +167,9 @@ public final class ControlAPIRouter {
             guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.RelayBody.self, body) else { return badBody() }
             if let host = request.host?.trimmingCharacters(in: .whitespaces), !host.isEmpty {
-                engine.plotipharRelayHost = host
+                guard engine.setRelayHost(host) else {
+                    return Self.error(400, "Invalid relay host", detail: "Use a hostname or a wss:// or https:// address. Plain ws:// and http:// are not allowed.")
+                }
             }
             if let enabled = request.enabled {
                 guard !enabled || !engine.proxyToken.isEmpty else {
@@ -189,6 +197,8 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.WaypointCreateBody.self, body) else { return badBody() }
             let trimmed = request.name.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { return Self.error(400, "Waypoint name cannot be empty") }
+            if let tooLong = tooLong(trimmed, ContentLimits.name, "Waypoint name") { return tooLong }
+            guard engine.waypoints.count < ContentLimits.maxWaypoints else { return limitReached("waypoints", ContentLimits.maxWaypoints) }
             let slug = Waypoint.slug(for: trimmed)
             if let existing = engine.waypoints.first(where: { $0.slug == slug }) {
                 return Self.error(409, "A waypoint with this name already exists", detail: existing.name)
@@ -204,10 +214,16 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.ScheduleCreateBody.self, body) else { return badBody() }
             let title = request.title.trimmingCharacters(in: .whitespaces)
             guard !title.isEmpty else { return Self.error(400, "Schedule title cannot be empty") }
+            if let tooLong = tooLong(title, ContentLimits.title, "Schedule title") { return tooLong }
+            if let tooLong = tooLong(request.pcoServiceTypeId ?? "", ContentLimits.identifier, "pcoServiceTypeId") { return tooLong }
+            if let tooLong = tooLong(request.pcoPlanId ?? "", ContentLimits.identifier, "pcoPlanId") { return tooLong }
+            guard engine.serviceSchedules.count < ContentLimits.maxSchedules else { return limitReached("schedules", ContentLimits.maxSchedules) }
             let offsetSeconds: Int
             if let minutes = request.goLiveOffsetMinutes {
-                offsetSeconds = minutes * 60
+                guard let seconds = Self.offsetSeconds(fromMinutes: minutes) else { return offsetOutOfRange() }
+                offsetSeconds = seconds
             } else if let seconds = request.goLiveOffsetSeconds {
+                guard TimerLimits.isValidLength(seconds) else { return offsetOutOfRange() }
                 offsetSeconds = seconds
             } else {
                 offsetSeconds = 30 * 60
@@ -285,6 +301,9 @@ public final class ControlAPIRouter {
             guard allows(method, "POST") else { return methodNotAllowed() }
             guard engine.activeTimerItem != nil else { return noActiveItem() }
             guard let request = decode(ControlAPIRequests.TimerAdjustBody.self, body) else { return badBody() }
+            guard TimerLimits.isValidDelta(request.seconds) else {
+                return Self.error(400, "seconds out of range", detail: "Between -\(TimerLimits.maxSeconds) and \(TimerLimits.maxSeconds).")
+            }
             engine.adjustTimerRemainingTime(bySeconds: request.seconds)
             return json(snapshot())
 
@@ -303,6 +322,9 @@ public final class ControlAPIRouter {
                     engine.adjustTimerRemainingTime(bySeconds: delta)
                 }
             } else if let seconds = request.seconds {
+                guard TimerLimits.isValidLength(seconds) else {
+                    return Self.error(400, "seconds out of range", detail: "Between 0 and \(TimerLimits.maxSeconds).")
+                }
                 engine.setTimerRemainingTime(seconds: seconds)
             } else {
                 return Self.error(400, "Provide either seconds or input")
@@ -352,10 +374,15 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.PlanItemCreateBody.self, body) else { return badBody() }
             let title = request.title.trimmingCharacters(in: .whitespaces)
             guard !title.isEmpty else { return Self.error(400, "Item title cannot be empty") }
+            if let tooLong = tooLong(title, ContentLimits.title, "Item title") { return tooLong }
+            if let tooLong = tooLong(request.itemType ?? "", ContentLimits.name, "itemType") { return tooLong }
+            let length = request.lengthInSeconds ?? 300
+            guard TimerLimits.isValidLength(length) else { return lengthOutOfRange() }
+            guard engine.planItems.count < ContentLimits.maxPlanItems else { return limitReached("plan items", ContentLimits.maxPlanItems) }
             engine.addPlanItem(
                 title: title,
                 itemType: request.itemType ?? "Item",
-                lengthInSeconds: request.lengthInSeconds ?? 300,
+                lengthInSeconds: length,
                 isDurationActual: request.isDurationActual ?? false
             )
             return json(planStatus(), status: 201)
@@ -367,6 +394,11 @@ public final class ControlAPIRouter {
             guard !items.isEmpty else {
                 return Self.error(400, "Nothing to import", detail: "Expected one item per line: Title | Type | Duration")
             }
+            guard items.count <= ContentLimits.maxPlanItems else { return limitReached("plan items", ContentLimits.maxPlanItems) }
+            if items.contains(where: { $0.title.count > ContentLimits.title || $0.itemType.count > ContentLimits.name }) {
+                return Self.error(400, "An imported title or type is too long", detail: "Titles: \(ContentLimits.title) characters, types: \(ContentLimits.name).")
+            }
+            if let tooLong = tooLong(request.title ?? "", ContentLimits.title, "Plan title") { return tooLong }
             engine.importFlow(title: request.title, items: items)
             return json(planStatus(), status: 201)
 
@@ -439,6 +471,9 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.PingBody.self, body) else { return badBody() }
             let ip = request.ip.trimmingCharacters(in: .whitespaces)
             guard !ip.isEmpty else { return Self.error(400, "Provide an IP address") }
+            guard AssignedHostPolicy.isAcceptable(ip) else {
+                return Self.error(400, "Not a local address", detail: "Use a private, link-local or loopback IPv4 address, or a .local name.")
+            }
             guard engine.pingDevice(atIP: ip) else {
                 return Self.error(503, "Could not determine this device's own LAN address")
             }
@@ -501,6 +536,7 @@ public final class ControlAPIRouter {
             if let name = request.name {
                 let trimmed = name.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return Self.error(400, "Waypoint name cannot be empty") }
+                if let tooLong = tooLong(trimmed, ContentLimits.name, "Waypoint name") { return tooLong }
                 let newSlug = Waypoint.slug(for: trimmed)
                 if let collision = engine.waypoints.first(where: { $0.id != waypoint.id && $0.slug == newSlug }) {
                     return Self.error(409, "A different waypoint already uses this name", detail: collision.name)
@@ -523,10 +559,15 @@ public final class ControlAPIRouter {
             }
             guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.ScheduleUpdateBody.self, body) else { return badBody() }
+            if let title = request.title, let tooLong = tooLong(title, ContentLimits.title, "Schedule title") { return tooLong }
+            if let tooLong = tooLong(request.pcoServiceTypeId ?? "", ContentLimits.identifier, "pcoServiceTypeId") { return tooLong }
+            if let tooLong = tooLong(request.pcoPlanId ?? "", ContentLimits.identifier, "pcoPlanId") { return tooLong }
             var offsetSeconds: Int?
             if let minutes = request.goLiveOffsetMinutes {
-                offsetSeconds = minutes * 60
+                guard let seconds = Self.offsetSeconds(fromMinutes: minutes) else { return offsetOutOfRange() }
+                offsetSeconds = seconds
             } else if let seconds = request.goLiveOffsetSeconds {
+                guard TimerLimits.isValidLength(seconds) else { return offsetOutOfRange() }
                 offsetSeconds = seconds
             }
             var recurrence: ServiceSchedule.Recurrence?
@@ -701,6 +742,17 @@ public final class ControlAPIRouter {
     }
 
     private func updateRole(id: String, with request: ControlAPIRequests.RoleUpdateBody) -> HTTPResponse {
+        if let name = request.name, let tooLong = tooLong(name.trimmingCharacters(in: .whitespaces), ContentLimits.name, "Role name") { return tooLong }
+        if let tooLong = tooLong(request.personName ?? "", ContentLimits.name, "personName") { return tooLong }
+        if let tooLong = tooLong(request.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+        if let categories = request.assignedNoteCategories {
+            guard categories.count <= ContentLimits.maxNoteCategories else {
+                return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
+            }
+            for category in categories {
+                if let tooLong = tooLong(category, ContentLimits.identifier, "Note category") { return tooLong }
+            }
+        }
         if let name = request.name?.trimmingCharacters(in: .whitespaces) {
             guard !name.isEmpty else { return Self.error(400, "Role name cannot be empty") }
             engine.renameRole(id: id, name: name)
@@ -734,6 +786,21 @@ public final class ControlAPIRouter {
     private func updatePlanItem(id: String, with request: ControlAPIRequests.PlanItemUpdateBody) -> HTTPResponse {
         guard let existing = engine.planItems.first(where: { $0.id == id }) else {
             return Self.error(404, "Unknown plan item id", detail: id)
+        }
+        if let title = request.title {
+            guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return Self.error(400, "Item title cannot be empty") }
+            if let tooLong = tooLong(title, ContentLimits.title, "Item title") { return tooLong }
+        }
+        if let tooLong = tooLong(request.itemType ?? "", ContentLimits.name, "itemType") { return tooLong }
+        if let length = request.lengthInSeconds, !TimerLimits.isValidLength(length) { return lengthOutOfRange() }
+        if let notes = request.notes {
+            guard notes.count <= ContentLimits.maxNoteCategories else {
+                return Self.error(400, "Too many notes", detail: "At most \(ContentLimits.maxNoteCategories) categories.")
+            }
+            for (key, value) in notes {
+                if let tooLong = tooLong(key, ContentLimits.identifier, "Note category") { return tooLong }
+                if let tooLong = tooLong(value, ContentLimits.noteValue, "Note value") { return tooLong }
+            }
         }
         engine.updatePlanItem(
             id: id,
@@ -957,6 +1024,27 @@ public final class ControlAPIRouter {
             "device": Self.deviceName(),
             "role": engine.isMasterServer ? "master" : "client",
         ]
+    }
+
+    private func tooLong(_ value: String, _ limit: Int, _ field: String) -> HTTPResponse? {
+        ContentValidation.tooLong(value, limit: limit, field: field).map { Self.error(400, $0.message, detail: $0.detail) }
+    }
+
+    private func limitReached(_ what: String, _ limit: Int) -> HTTPResponse {
+        Self.error(409, "Limit reached", detail: "At most \(limit) \(what).")
+    }
+
+    private func offsetOutOfRange() -> HTTPResponse {
+        Self.error(400, "Lead time out of range", detail: "Between 0 and \(TimerLimits.maxSeconds) seconds.")
+    }
+
+    private func lengthOutOfRange() -> HTTPResponse {
+        Self.error(400, "lengthInSeconds out of range", detail: "Between 0 and \(TimerLimits.maxSeconds).")
+    }
+
+    static func offsetSeconds(fromMinutes minutes: Int) -> Int? {
+        guard let seconds = TimerLimits.seconds(fromMinutes: minutes), TimerLimits.isValidLength(seconds) else { return nil }
+        return seconds
     }
 
     public static let apiVersion = "1.0.0"

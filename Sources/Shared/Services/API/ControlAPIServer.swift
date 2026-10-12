@@ -21,6 +21,8 @@ public final class ControlAPIServer: @unchecked Sendable {
     private var bindAttempt = 0
     private var port: UInt16 = ControlAPIServer.defaultPort
     private var clients: [ObjectIdentifier: Client] = [:]
+    private var admission = ConnectionAdmission()
+    private var sweepTimer: DispatchSourceTimer?
 
     public init(router: ControlAPIRouter) {
         self.router = router
@@ -52,6 +54,9 @@ public final class ControlAPIServer: @unchecked Sendable {
             client.connection.cancel()
         }
         clients.removeAll()
+        admission = ConnectionAdmission()
+        sweepTimer?.cancel()
+        sweepTimer = nil
         notifyClientCount()
         DispatchQueue.main.async { [weak self] in self?.onStatusChanged?(false) }
     }
@@ -75,7 +80,7 @@ public final class ControlAPIServer: @unchecked Sendable {
                     self.bindAttempt = 0
                     DispatchQueue.main.async { self.onStatusChanged?(true) }
                 case .failed(let error):
-                    AppLog.networking.error("ControlAPIServer listener failed: \(String(describing: error), privacy: .public)")
+                    AppLog.networking.error("ControlAPIServer listener failed: \(String(describing: error), privacy: .private)")
                     self.retryAfterFailure()
                 default:
                     break
@@ -87,7 +92,7 @@ public final class ControlAPIServer: @unchecked Sendable {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            AppLog.networking.error("ControlAPIServer: failed to create listener: \(String(describing: error), privacy: .public)")
+            AppLog.networking.error("ControlAPIServer: failed to create listener: \(String(describing: error), privacy: .private)")
             retryAfterFailure()
         }
     }
@@ -110,15 +115,56 @@ public final class ControlAPIServer: @unchecked Sendable {
         let session = ControlAPIConnection()
         var inFlightBroadcasts = 0
         let assembler = WebSocketMessageAssembler()
+        let remoteIP: String
+        var deadlines = ConnectionDeadlines(acceptedAt: Date())
 
-        init(connection: NWConnection) {
+        init(connection: NWConnection, remoteIP: String) {
             self.connection = connection
+            self.remoteIP = remoteIP
+        }
+    }
+
+    static func remoteIP(of endpoint: NWEndpoint) -> String {
+        guard case let .hostPort(host, _) = endpoint else { return "unknown" }
+        let text: String
+        switch host {
+        case .ipv4(let address): text = address.debugDescription
+        case .ipv6(let address): text = address.debugDescription
+        case .name(let name, _): text = name
+        @unknown default: text = "unknown"
+        }
+        return text.split(separator: "%", maxSplits: 1).first.map(String.init) ?? text
+    }
+
+    private func startSweeping() {
+        guard sweepTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.sweep(now: Date()) }
+        timer.resume()
+        sweepTimer = timer
+    }
+
+    private func sweep(now: Date) {
+        for (key, client) in clients {
+            if client.deadlines.httpExpired(now: now) || client.deadlines.unupgradedExpired(now: now) {
+                AppLog.networking.notice("ControlAPIServer: closing connection that missed its deadline")
+                client.connection.cancel()
+                removeClient(key)
+            }
         }
     }
 
     private func accept(_ connection: NWConnection) {
         let key = ObjectIdentifier(connection)
-        clients[key] = Client(connection: connection)
+        let remoteIP = Self.remoteIP(of: connection.endpoint)
+        guard isRunning, admission.admit(ip: remoteIP) else {
+            AppLog.networking.notice("ControlAPIServer: refusing connection, client limit reached")
+            connection.cancel()
+            return
+        }
+        clients[key] = Client(connection: connection, remoteIP: remoteIP)
+        startSweeping()
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
@@ -132,7 +178,8 @@ public final class ControlAPIServer: @unchecked Sendable {
     }
 
     private func removeClient(_ key: ObjectIdentifier) {
-        guard clients.removeValue(forKey: key) != nil else { return }
+        guard let removed = clients.removeValue(forKey: key) else { return }
+        admission.release(ip: removed.remoteIP)
         notifyClientCount()
     }
 
@@ -152,6 +199,11 @@ public final class ControlAPIServer: @unchecked Sendable {
             self.queue.async {
                 guard let client = self.clients[key] else { return }
                 if let data, !data.isEmpty {
+                    let now = Date()
+                    client.deadlines.lastReceivedAt = now
+                    if !client.isWebSocket, client.deadlines.requestStartedAt == nil {
+                        client.deadlines.requestStartedAt = now
+                    }
                     client.buffer.append(contentsOf: data)
                     self.drain(client, key: key)
                 }
@@ -172,7 +224,7 @@ public final class ControlAPIServer: @unchecked Sendable {
                 case .incomplete:
                     return
                 case .failure(let reason):
-                    AppLog.networking.error("ControlAPIServer: bad WebSocket frame — \(reason, privacy: .public)")
+                    AppLog.networking.error("ControlAPIServer: bad WebSocket frame — \(reason, privacy: .private)")
                     send(WebSocketCodec.close(code: 1002, reason: "Protocol error"), to: client)
                     client.connection.cancel()
                     removeClient(key)
@@ -186,12 +238,13 @@ public final class ControlAPIServer: @unchecked Sendable {
                 case .incomplete:
                     return
                 case .failure(let reason):
-                    AppLog.networking.error("ControlAPIServer: bad HTTP request — \(reason, privacy: .public)")
+                    AppLog.networking.error("ControlAPIServer: bad HTTP request — \(reason, privacy: .private)")
                     write(ControlAPIRouter.error(400, "Malformed HTTP request", detail: reason), to: client, close: true)
                     removeClient(key)
                     return
                 case .request(let request, let consumed):
                     client.buffer.removeFirst(consumed)
+                    client.deadlines.requestStartedAt = client.buffer.isEmpty ? nil : Date()
                     handle(request, client: client, key: key)
                     if client.isWebSocket { continue }
                 }
@@ -206,14 +259,26 @@ public final class ControlAPIServer: @unchecked Sendable {
             return
         }
 
-        if request.method == "OPTIONS" {
-            var response = HTTPResponse.empty(status: 204)
-            response.headers.merge(Self.corsHeaders) { current, _ in current }
-            write(response, to: client, close: false)
+        let upgrading = isWebSocketUpgrade(request)
+        if upgrading {
+            guard ControlAPIGuard.isAllowedWebSocketUpgrade(request) else {
+                write(ControlAPIRouter.error(403, "WebSocket origin or host not allowed"), to: client, close: true)
+                removeClient(key)
+                return
+            }
+        } else if case .reject(let status, let message) = ControlAPIGuard.evaluate(request) {
+            let close = status == 403
+            write(ControlAPIRouter.error(status, message), to: client, close: close)
+            if close { removeClient(key) }
             return
         }
 
-        if isWebSocketUpgrade(request) {
+        if request.method == "OPTIONS" {
+            write(HTTPResponse.empty(status: 204), to: client, close: false)
+            return
+        }
+
+        if upgrading {
             guard request.path == "/v1/socket" else {
                 write(ControlAPIRouter.error(404, "WebSocket lives at /v1/socket"), to: client, close: true)
                 removeClient(key)
@@ -231,8 +296,7 @@ public final class ControlAPIServer: @unchecked Sendable {
         let router = self.router
         let receivedAtMs = Self.nowMs()
         Task { @MainActor in
-            var response = router.handle(request, receivedAtMs: receivedAtMs)
-            response.headers.merge(Self.corsHeaders) { current, _ in current }
+            let response = router.handle(request, receivedAtMs: receivedAtMs)
             self.queue.async { self.write(response, to: client, close: false) }
         }
     }
@@ -254,7 +318,7 @@ public final class ControlAPIServer: @unchecked Sendable {
         let data = response.serialize()
         client.connection.send(content: data, completion: .contentProcessed { [weak self] error in
             if let error {
-                AppLog.networking.error("ControlAPIServer send error: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("ControlAPIServer send error: \(String(describing: error), privacy: .private)")
             }
             if close {
                 self?.queue.async { client.connection.cancel() }
@@ -273,9 +337,11 @@ public final class ControlAPIServer: @unchecked Sendable {
 
         """
         client.isWebSocket = true
+        client.deadlines.isUpgraded = true
+        client.deadlines.requestStartedAt = nil
         client.connection.send(content: Data(handshake.utf8), completion: .contentProcessed { error in
             if let error {
-                AppLog.networking.error("ControlAPIServer handshake send error: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("ControlAPIServer handshake send error: \(String(describing: error), privacy: .private)")
             }
         })
         notifyClientCount()
@@ -296,7 +362,7 @@ public final class ControlAPIServer: @unchecked Sendable {
             return true
 
         case .failure(let reason):
-            AppLog.networking.error("ControlAPIServer: WebSocket message error — \(reason, privacy: .public)")
+            AppLog.networking.error("ControlAPIServer: WebSocket message error — \(reason, privacy: .private)")
             send(WebSocketCodec.close(code: 1002, reason: "Protocol error"), to: client)
             client.connection.cancel()
             removeClient(key)
@@ -336,7 +402,7 @@ public final class ControlAPIServer: @unchecked Sendable {
     private func send(_ frame: WebSocketFrame, to client: Client) {
         client.connection.send(content: WebSocketCodec.encode(frame), completion: .contentProcessed { error in
             if let error {
-                AppLog.networking.error("ControlAPIServer frame send error: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("ControlAPIServer frame send error: \(String(describing: error), privacy: .private)")
             }
         })
     }
@@ -372,18 +438,12 @@ public final class ControlAPIServer: @unchecked Sendable {
                 client.connection.send(content: frame, completion: .contentProcessed { error in
                     client.inFlightBroadcasts -= 1
                     if let error {
-                        AppLog.networking.error("ControlAPIServer broadcast error: \(String(describing: error), privacy: .public)")
+                        AppLog.networking.error("ControlAPIServer broadcast error: \(String(describing: error), privacy: .private)")
                     }
                 })
             }
         }
     }
-
-    private static let corsHeaders = [
-        "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        "access-control-allow-headers": "Content-Type",
-    ]
 
     public static func localAddresses() -> [String] {
         DirectPeerChannel.localIPv4Addresses()

@@ -63,6 +63,10 @@ public final class LANUnicastServer: @unchecked Sendable {
     private var bindAttempt = 0
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private var v2Connections: Set<ObjectIdentifier> = []
+    private var deadlines: [ObjectIdentifier: ConnectionDeadlines] = [:]
+    private var remoteIPs: [ObjectIdentifier: String] = [:]
+    private var admission = ConnectionAdmission()
+    private var sweepTimer: DispatchSourceTimer?
 
     public init() {}
 
@@ -87,6 +91,11 @@ public final class LANUnicastServer: @unchecked Sendable {
             }
             connections.removeAll()
             v2Connections.removeAll()
+            deadlines.removeAll()
+            remoteIPs.removeAll()
+            admission = ConnectionAdmission()
+            sweepTimer?.cancel()
+            sweepTimer = nil
         }
     }
 
@@ -123,7 +132,7 @@ public final class LANUnicastServer: @unchecked Sendable {
             for connection in targets {
                 connection.send(content: framed, completion: .contentProcessed { error in
                     if let error {
-                        AppLog.networking.error("LANUnicastServer send error: \(String(describing: error), privacy: .public)")
+                        AppLog.networking.error("LANUnicastServer send error: \(String(describing: error), privacy: .private)")
                     }
                 })
             }
@@ -140,7 +149,7 @@ public final class LANUnicastServer: @unchecked Sendable {
             var txt = NWTXTRecord()
             if let ownIP = LocalNetworkAddress.ipv4String() {
                 txt["ip"] = ownIP
-                AppLog.networking.info("LANUnicastServer advertising own IPv4 \(ownIP, privacy: .public) in TXT")
+                AppLog.networking.info("LANUnicastServer advertising own IPv4 \(ownIP, privacy: .private) in TXT")
             }
             if let apiPort = advertisedControlAPIPort {
                 txt["apiport"] = String(apiPort)
@@ -149,11 +158,11 @@ public final class LANUnicastServer: @unchecked Sendable {
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    AppLog.networking.info("LANUnicastServer listening, advertising as \"\(Self.hostDisplayName(), privacy: .public)\"")
+                    AppLog.networking.info("LANUnicastServer listening, advertising as \"\(Self.hostDisplayName(), privacy: .private)\"")
                     self?.bindAttempt = 0
                     DispatchQueue.main.async { self?.onStatusChanged?(true) }
                 case .failed(let error):
-                    AppLog.networking.error("LANUnicastServer listener failed: \(String(describing: error), privacy: .public)")
+                    AppLog.networking.error("LANUnicastServer listener failed: \(String(describing: error), privacy: .private)")
                     self?.retryAfterFailure()
                 default:
                     break
@@ -165,7 +174,7 @@ public final class LANUnicastServer: @unchecked Sendable {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            AppLog.networking.error("LANUnicastServer: failed to create listener: \(String(describing: error), privacy: .public)")
+            AppLog.networking.error("LANUnicastServer: failed to create listener: \(String(describing: error), privacy: .private)")
             retryAfterFailure()
         }
     }
@@ -181,16 +190,48 @@ public final class LANUnicastServer: @unchecked Sendable {
         }
     }
 
+    private func forget(_ key: ObjectIdentifier) {
+        connections.removeValue(forKey: key)
+        v2Connections.remove(key)
+        deadlines.removeValue(forKey: key)
+        if let ip = remoteIPs.removeValue(forKey: key) {
+            admission.release(ip: ip)
+        }
+    }
+
+    private func startSweeping() {
+        guard sweepTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in self?.sweep(now: Date()) }
+        timer.resume()
+        sweepTimer = timer
+    }
+
+    private func sweep(now: Date) {
+        for (key, window) in deadlines where window.lanExpired(now: now) {
+            AppLog.networking.notice("LANUnicastServer: closing idle connection")
+            connections[key]?.cancel()
+            forget(key)
+        }
+    }
+
     private func accept(_ connection: NWConnection) {
         let key = ObjectIdentifier(connection)
+        let remoteIP = ControlAPIServer.remoteIP(of: connection.endpoint)
+        guard isRunning, admission.admit(ip: remoteIP) else {
+            AppLog.networking.notice("LANUnicastServer: refusing connection, client limit reached")
+            connection.cancel()
+            return
+        }
         connections[key] = connection
+        remoteIPs[key] = remoteIP
+        deadlines[key] = ConnectionDeadlines(acceptedAt: Date())
+        startSweeping()
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.queue.async {
-                    self?.connections.removeValue(forKey: key)
-                    self?.v2Connections.remove(key)
-                }
+                self?.queue.async { self?.forget(key) }
             default:
                 break
             }
@@ -203,11 +244,12 @@ public final class LANUnicastServer: @unchecked Sendable {
         LANFraming.receiveFrame(on: connection, queue: queue) { [weak self] data in
             guard let self else { return }
             guard let data else {
-                self.connections.removeValue(forKey: key)
-                self.v2Connections.remove(key)
+                self.forget(key)
                 connection.cancel()
                 return
             }
+            self.deadlines[key]?.lastReceivedAt = Date()
+            self.deadlines[key]?.hasReceivedFrame = true
             if let packet = CuePacket.decode(from: data) {
                 let id = LANConnectionID(raw: key)
                 DispatchQueue.main.async { self.onPacketReceived?(packet, id) }
@@ -292,7 +334,7 @@ public final class LANUnicastClient: @unchecked Sendable {
             guard let connection, let data = packet.encode(), let framed = LANFraming.frame(data) else { return }
             connection.send(content: framed, completion: .contentProcessed { error in
                 if let error {
-                    AppLog.networking.error("LANUnicastClient send error: \(String(describing: error), privacy: .public)")
+                    AppLog.networking.error("LANUnicastClient send error: \(String(describing: error), privacy: .private)")
                 }
             })
         }
@@ -320,7 +362,7 @@ public final class LANUnicastClient: @unchecked Sendable {
             listener.start(queue: queue)
             self.assignListener = listener
         } catch {
-            AppLog.networking.error("LANUnicastClient: failed to start assign listener: \(String(describing: error), privacy: .public)")
+            AppLog.networking.error("LANUnicastClient: failed to start assign listener: \(String(describing: error), privacy: .private)")
         }
     }
 
@@ -328,7 +370,11 @@ public final class LANUnicastClient: @unchecked Sendable {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               json["type"] as? String == "ASSIGN_PRODUCER",
               let host = json["host"] as? String, !host.isEmpty else { return }
-        AppLog.networking.info("LANUnicastClient: producer assigned via network ping: \(host, privacy: .public)")
+        guard AssignedHostPolicy.isAcceptable(host) else {
+            AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER with a non-local host \(host, privacy: .private)")
+            return
+        }
+        AppLog.networking.info("LANUnicastClient: producer assigned via network ping: \(host, privacy: .private)")
         Self.saveAssignedHost(host)
         queue.async { [self] in
             guard isRunning else { return }
@@ -342,7 +388,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     }
 
     private static func loadAssignedHost() -> String? {
-        UserDefaults.standard.string(forKey: assignedHostDefaultsKey)
+        UserDefaults.standard.string(forKey: assignedHostDefaultsKey).flatMap { AssignedHostPolicy.isAcceptable($0) ? $0 : nil }
     }
 
     private static func ipString(from endpoint: NWEndpoint?) -> String? {
@@ -388,7 +434,7 @@ public final class LANUnicastClient: @unchecked Sendable {
         }
         browser.stateUpdateHandler = { state in
             if case .failed(let error) = state {
-                AppLog.networking.error("LANUnicastClient browser failed: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("LANUnicastClient browser failed: \(String(describing: error), privacy: .private)")
             }
         }
         browser.start(queue: queue)
@@ -403,18 +449,18 @@ public final class LANUnicastClient: @unchecked Sendable {
             guard let self else { return }
             switch state {
             case .ready:
-                AppLog.networking.info("LANUnicastClient connected to \"\(masterName, privacy: .public)\"")
+                AppLog.networking.info("LANUnicastClient connected to \"\(masterName, privacy: .private)\"")
                 self.assignedHostFailureCount = 0
                 var resolvedHost = Self.ipString(from: connection.currentPath?.remoteEndpoint)
                 if let pathHost = resolvedHost, pathHost.contains(":"), let advertised = advertisedIPv4 {
-                    AppLog.networking.info("LANUnicastClient using TXT-advertised IPv4 \(advertised, privacy: .public) (path resolved \(pathHost, privacy: .public))")
+                    AppLog.networking.info("LANUnicastClient using TXT-advertised IPv4 \(advertised, privacy: .private) (path resolved \(pathHost, privacy: .private))")
                     resolvedHost = advertised
                 }
                 DispatchQueue.main.async {
                     self.onStatusChanged?(true)
                     self.onMasterDiscovered?(masterName)
                     if let resolvedHost {
-                        AppLog.networking.info("LANUnicastClient resolved producer address \(resolvedHost, privacy: .public)")
+                        AppLog.networking.info("LANUnicastClient resolved producer address \(resolvedHost, privacy: .private)")
                         self.onConnectedHost?(resolvedHost)
                         if let advertisedAPIPort {
                             self.onConnectedAPIPort?(advertisedAPIPort)
@@ -423,7 +469,7 @@ public final class LANUnicastClient: @unchecked Sendable {
                 }
                 self.queue.async { self.receiveLoop(on: connection) }
             case .failed(let error):
-                AppLog.networking.error("LANUnicastClient connection failed: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("LANUnicastClient connection failed: \(String(describing: error), privacy: .private)")
                 self.handleDisconnect(connection)
             case .cancelled:
                 self.handleDisconnect(connection)

@@ -100,7 +100,7 @@ public final class CueEngine: ObservableObject {
             updateRelayConnection()
         }
     }
-    @Published public var plotipharRelayHost: String = "relay.13years.app" {
+    @Published public private(set) var plotipharRelayHost: String = RelayHostPolicy.defaultHost {
         didSet {
             write(plotipharRelayHost, forKey: Self.relayHostDefaultsKey)
             updateRelayConnection()
@@ -187,7 +187,7 @@ public final class CueEngine: ObservableObject {
         self.pcoUserName = UserDefaults.standard.string(forKey: Self.pcoUserNameDefaultsKey)
         self.isPCOConnected = pcoOAuthTokens != nil
         KeychainStore.setString(nil, forKey: "pcoSecret")
-        self.plotipharRelayHost = UserDefaults.standard.string(forKey: Self.relayHostDefaultsKey) ?? "relay.13years.app"
+        self.plotipharRelayHost = UserDefaults.standard.string(forKey: Self.relayHostDefaultsKey).flatMap(RelayHostPolicy.normalized) ?? RelayHostPolicy.defaultHost
         self.proxyToken = KeychainStore.string(forKey: Self.proxyTokenKeychainKey) ?? ""
         self.isProxyEnabled = UserDefaults.standard.object(forKey: Self.proxyEnabledDefaultsKey) != nil
             ? UserDefaults.standard.bool(forKey: Self.proxyEnabledDefaultsKey)
@@ -244,7 +244,7 @@ public final class CueEngine: ObservableObject {
             do {
                 self.pcoOAuthTokens = try await OAuthTokenExchange.refresh(tokens.refreshToken)
             } catch {
-                print("[CueEngine] PCO token refresh failed: \(error.localizedDescription)")
+                AppLog.cue.error("CueEngine: PCO token refresh failed: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -324,7 +324,7 @@ public final class CueEngine: ObservableObject {
                     selectPCOServiceType(defaultId)
                 }
             } catch {
-                print("[CueEngine] PCO OAuth sign-in error: \(error.localizedDescription)")
+                AppLog.cue.error("CueEngine: PCO OAuth sign-in error: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -360,7 +360,7 @@ public final class CueEngine: ObservableObject {
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
             } catch {
                 pcoLastError = error.localizedDescription
-                print("[CueEngine] PCO sync error: \(error.localizedDescription)")
+                AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -386,7 +386,7 @@ public final class CueEngine: ObservableObject {
             pcoServiceTypes = try await pcoClient.fetchServiceTypes()
             pcoLastError = nil
         } catch {
-            print("[CueEngine] fetchPCOServiceTypes error: \(error.localizedDescription)")
+            AppLog.cue.error("CueEngine: fetchPCOServiceTypes error: \(error.localizedDescription, privacy: .private)")
             pcoLastError = error.localizedDescription
         }
     }
@@ -411,7 +411,7 @@ public final class CueEngine: ObservableObject {
                 pcoPlans = try await pcoClient.fetchPlans(serviceTypeId: serviceTypeId, filter: pcoPlanFilter)
                 pcoLastError = nil
             } catch {
-                print("[CueEngine] fetchPCOPlans: FAILED — \(error)")
+                AppLog.cue.error("CueEngine: fetchPCOPlans: FAILED — \(String(describing: error), privacy: .private)")
                 pcoLastError = error.localizedDescription
             }
         }
@@ -456,6 +456,17 @@ public final class CueEngine: ObservableObject {
         plotipharPollTask?.cancel()
         plotipharPollTask = nil
         plotipharPairingState = .idle
+    }
+
+    @discardableResult
+    public func setRelayHost(_ raw: String) -> Bool {
+        guard !isRemoteMirror, let host = RelayHostPolicy.normalized(raw) else { return false }
+        guard host.caseInsensitiveCompare(plotipharRelayHost) != .orderedSame else { return true }
+        cancelPlotipharPairing()
+        isProxyEnabled = false
+        proxyToken = ""
+        plotipharRelayHost = host
+        return true
     }
 
     public func disconnectPlotiphar() {
@@ -570,7 +581,6 @@ public final class CueEngine: ObservableObject {
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
-        plotipharRelayHost = document.settings.plotipharRelayHost
 
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false }
@@ -803,7 +813,7 @@ public final class CueEngine: ObservableObject {
         guard !slug.isEmpty, !waypoints.contains(where: { $0.slug == slug }) else { return nil }
         let waypoint = Waypoint(name: trimmed)
         waypoints.append(waypoint)
-        AppLog.cue.info("addWaypoint(\"\(trimmed, privacy: .public)\") -> \(waypoint.id, privacy: .public)")
+        AppLog.cue.info("addWaypoint(\"\(trimmed, privacy: .private)\") -> \(waypoint.id, privacy: .public)")
         return waypoint
     }
 
@@ -910,18 +920,18 @@ public final class CueEngine: ObservableObject {
             return .fired(itemId: itemId)
         }
         guard let waypoint = waypoint(matching: raw) else {
-            AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .public)\") -> unknown waypoint")
+            AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .private)\") -> unknown waypoint")
             return .unknownWaypoint
         }
         guard let itemId = itemId(forWaypointId: waypoint.id) else {
-            AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .public)\") -> waypoint \(waypoint.id, privacy: .public) has no item assigned this week")
+            AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .private)\") -> waypoint \(waypoint.id, privacy: .public) has no item assigned this week")
             return .unassigned(waypointId: waypoint.id)
         }
         setActivePlanItem(id: itemId)
         if let item = activeTimerItem, item.isRunning != startTimer {
             toggleTimerRunning()
         }
-        AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .public)\") -> item \(itemId, privacy: .public)")
+        AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .private)\") -> item \(itemId, privacy: .public)")
         return .fired(itemId: itemId)
     }
 
@@ -986,7 +996,7 @@ public final class CueEngine: ObservableObject {
             isEnabled: isEnabled
         )
         serviceSchedules = sortedByStartsAt(serviceSchedules + [schedule])
-        AppLog.cue.info("addServiceSchedule(\"\(trimmed, privacy: .public)\") -> \(schedule.id, privacy: .public)")
+        AppLog.cue.info("addServiceSchedule(\"\(trimmed, privacy: .private)\") -> \(schedule.id, privacy: .public)")
         return schedule
     }
 
@@ -1083,7 +1093,7 @@ public final class CueEngine: ObservableObject {
         var updated = serviceSchedules
         updated[index] = schedule
         serviceSchedules = sortedByStartsAt(updated)
-        AppLog.cue.info("goLiveWithSchedule(\"\(schedule.title, privacy: .public)\") -> \(schedule.id, privacy: .public)")
+        AppLog.cue.info("goLiveWithSchedule(\"\(schedule.title, privacy: .private)\") -> \(schedule.id, privacy: .public)")
     }
 
     private func checkServiceSchedules() {
@@ -1142,7 +1152,7 @@ public final class CueEngine: ObservableObject {
             do {
                 try await pcoClient.toggleLiveControl(serviceTypeId: serviceTypeId, planId: planId)
             } catch {
-                print("[CueEngine] Failed to release PCO Live control: \(error.localizedDescription)")
+                AppLog.cue.error("CueEngine: Failed to release PCO Live control: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -1712,18 +1722,18 @@ public final class CueEngine: ObservableObject {
             case .ready:
                 connection.send(content: payload, completion: .contentProcessed { error in
                     if let error {
-                        AppLog.networking.error("pingDevice: send failed: \(String(describing: error), privacy: .public)")
+                        AppLog.networking.error("pingDevice: send failed: \(String(describing: error), privacy: .private)")
                     }
                     connection.cancel()
                 })
             case .failed(let error):
-                AppLog.networking.error("pingDevice: connection failed: \(String(describing: error), privacy: .public)")
+                AppLog.networking.error("pingDevice: connection failed: \(String(describing: error), privacy: .private)")
             default:
                 break
             }
         }
         connection.start(queue: .global(qos: .utility))
-        AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .public)) to \(ipString, privacy: .public)")
+        AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .private)) to \(ipString, privacy: .private)")
         return true
     }
 
@@ -1814,7 +1824,7 @@ public final class CueEngine: ObservableObject {
 
     func addMessages(_ incoming: [InterTeamMessage]) {
         let existingIds = Set(recentMessages.map(\.id))
-        let newOnes = incoming.filter { !existingIds.contains($0.id) }
+        let newOnes = incoming.prefix(Self.maxStoredMessages).map { $0.clampedForStorage() }.filter { !existingIds.contains($0.id) }
         guard !newOnes.isEmpty else { return }
         recentMessages.append(contentsOf: newOnes)
         recentMessages.sort { $0.timestamp > $1.timestamp }
@@ -1881,7 +1891,7 @@ public final class CueEngine: ObservableObject {
         guard !isRemoteMirror else { return }
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
-            AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .public) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .public)")
+            AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .private) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .private)")
         }
 
         if isPCOLiveSyncEnabled {
@@ -1978,7 +1988,7 @@ public final class CueEngine: ObservableObject {
         publishTimerAnchorToV2()
         guard let item = activeTimerItemForBroadcast else { return }
         let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
-        AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .public)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
+        AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .private)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
             emit(packet, .lan(.legacy))
         }
@@ -2026,7 +2036,11 @@ public final class CueEngine: ObservableObject {
 
     func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }
-        AppLog.cue.debug("handlePacket() type=\(packet.type.rawValue, privacy: .public) from=\(packet.senderId, privacy: .public) roleCues=\(packet.roleCues?.count ?? 0, privacy: .public) timerItem=\(packet.timerItem?.title ?? "nil", privacy: .public)")
+        guard acceptsInbound(packet) else {
+            AppLog.networking.notice("Dropped \(packet.type.rawValue, privacy: .public) packet: a producer only accepts PING, SYNC and MESSAGE")
+            return
+        }
+        AppLog.cue.debug("handlePacket() type=\(packet.type.rawValue, privacy: .public) from=\(packet.senderId, privacy: .private) roleCues=\(packet.roleCues?.count ?? 0, privacy: .public) timerItem=\(packet.timerItem?.title ?? "nil", privacy: .private)")
 
         noteProducerCapabilities(packet)
         guard passesRevisionGate(packet) else { return }
