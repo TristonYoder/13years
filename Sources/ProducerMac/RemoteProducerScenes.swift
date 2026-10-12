@@ -19,9 +19,35 @@ enum RemoteWindowIDs {
     static let remote = "remote"
     static let connectTitle = "Connect To…"
     static let remoteTitlePrefix = "Remote:"
+    static let identifierPrefix = "dev.7co.13years.aux."
 
-    static func isAuxiliary(title: String) -> Bool {
-        title == connectTitle || title.hasPrefix(remoteTitlePrefix)
+    static func identifier(for id: String) -> NSUserInterfaceItemIdentifier {
+        NSUserInterfaceItemIdentifier(identifierPrefix + id)
+    }
+
+    static func isAuxiliary(identifier: NSUserInterfaceItemIdentifier?) -> Bool {
+        identifier?.rawValue.hasPrefix(identifierPrefix) == true
+    }
+}
+
+struct WindowIdentifierTag: NSViewRepresentable {
+    let identifier: NSUserInterfaceItemIdentifier
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        apply(to: view)
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        apply(to: view)
+    }
+
+    private func apply(to view: NSView) {
+        let identifier = identifier
+        DispatchQueue.main.async { [weak view] in
+            view?.window?.identifier = identifier
+        }
     }
 }
 
@@ -39,6 +65,7 @@ struct MacConnectWindow: View {
             },
             onCancel: { dismissWindow(id: RemoteWindowIDs.connect) }
         )
+        .background(WindowIdentifierTag(identifier: RemoteWindowIDs.identifier(for: RemoteWindowIDs.connect)))
     }
 }
 
@@ -58,9 +85,11 @@ struct MacRemoteWindow: View {
                 Text("Not connected")
                     .foregroundStyle(.secondary)
                     .navigationTitle("\(RemoteWindowIDs.remoteTitlePrefix) Not Connected")
+                    .onAppear { dismissWindow(id: RemoteWindowIDs.remote) }
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .background(WindowIdentifierTag(identifier: RemoteWindowIDs.identifier(for: RemoteWindowIDs.remote)))
         .focusedSceneValue(\.isRemoteProducerWindow, true)
         .onChange(of: hub.session == nil) { _, isGone in
             if isGone { dismissWindow(id: RemoteWindowIDs.remote) }
@@ -120,5 +149,21 @@ struct MacFileCommands: Commands {
             .keyboardShortcut("F", modifiers: [.command, .shift])
             .disabled(isLocalDisabled)
         }
+    }
+}
+
+struct RemoteMenuBarItems: View {
+    @ObservedObject var session: RemoteProducerSession
+
+    var body: some View {
+        Text("Remote: \(session.displayName)")
+        Button("Standby Selected (Yellow)") { session.engine.setCueForSelectedRoles(.standby) }
+            .disabled(!session.isLive)
+        Button("GO Selected (Green)") { session.engine.setCueForSelectedRoles(.go) }
+            .disabled(!session.isLive)
+        Button("Clear All Cues") { session.engine.clearAllCues() }
+            .disabled(!session.isLive)
+        Divider()
+        Text("Local")
     }
 }

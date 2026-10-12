@@ -1038,6 +1038,7 @@ public final class ControlAPIRouter {
             "version": Self.apiVersion,
             "device": Self.deviceName(),
             "role": engine.isMasterServer ? "master" : "client",
+            "deviceId": engine.deviceId,
         ]
     }
 

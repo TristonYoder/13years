@@ -52,6 +52,7 @@ struct ProducerIOSApp: App {
                     if phase == .active {
                         cueEngine.deviceDidBecomeActive()
                         remoteHub.session?.resync()
+                        Task { await remoteHub.session?.checkLiveness() }
                     }
                 }
                 .onChange(of: remoteHub.isRemoteActive) { _, active in

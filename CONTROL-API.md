@@ -220,7 +220,7 @@ Grouped by function. Dates in requests and responses are ISO-8601. Every request
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `GET /v1/health` | GET | Returns `{"service": "13 Years Control API", "version": "1.0.0", "device": "<hostname>", "role": "master\|client"}` so monitoring can verify the API is alive and identify this device. |
+| `GET /v1/health` | GET | Returns `{"service": "13 Years Control API", "version": "1.0.0", "device": "<hostname>", "role": "master\|client", "deviceId": "<uuid>"}` so monitoring can verify the API is alive and identify this device. `deviceId` is a stable per-install identifier (persisted on first use); remote controllers record it at connect and require the same value on every reconnect, and the same id is published as the `did` key in the `_13years._tcp` Bonjour TXT record (`apiport` is only published while the Control API is switched on). |
 | `GET /v1/state` | GET | Full state snapshot (see above). |
 
 ### Roles

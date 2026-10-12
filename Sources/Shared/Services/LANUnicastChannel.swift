@@ -80,6 +80,7 @@ public final class LANUnicastServer: @unchecked Sendable {
     public init() {}
 
     public var advertisedControlAPIPort: Int?
+    public var advertisedDeviceId: String?
 
     public func start() {
         queue.async { [self] in
@@ -162,6 +163,9 @@ public final class LANUnicastServer: @unchecked Sendable {
             }
             if let apiPort = advertisedControlAPIPort {
                 txt["apiport"] = String(apiPort)
+            }
+            if let advertisedDeviceId {
+                txt["did"] = advertisedDeviceId
             }
             listener.service = NWListener.Service(name: Self.hostDisplayName(), type: "_13years._tcp", txtRecord: txt)
             listener.stateUpdateHandler = { [weak self] state in
