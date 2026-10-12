@@ -649,6 +649,325 @@
     <div id="waitingText">Waiting for Producer…</div>
   </div>
 
+<script id="core">
+"use strict";
+
+const HEARTBEAT_MS = 2000;
+const STALE_AFTER_MS = 6500;
+const V2_SILENCE_MS = 25000;
+const POLL_DOWN_MS = 5000;
+const PROTO_TIMEOUT_MS = 3000;
+const SYNC_KEEP = 8;
+const SYNC_BURST = 5;
+const SYNC_BURST_GAP_MS = 100;
+const SYNC_PERIOD_MS = 30000;
+const SLEW_LIMIT_MS = 20;
+const SLEW_FACTOR = 0.25;
+const FNV_BASIS = 0xcbf29ce484222325n;
+const FNV_PRIME = 0x100000001b3n;
+const FNV_MASK = 0xffffffffffffffffn;
+const US = "\u001f";
+const RS = "\u001e";
+
+function fnv1a64(text) {
+  let hash = FNV_BASIS;
+  for (const byte of new TextEncoder().encode(text)) {
+    hash ^= BigInt(byte);
+    hash = (hash * FNV_PRIME) & FNV_MASK;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+function rolesCanonical(roles) {
+  return (roles || []).map((r) => r.id + US + r.name + US + r.state + RS).join("");
+}
+
+function timerCanonical(anchor) {
+  if (!anchor) return "none";
+  return [
+    anchor.itemId,
+    anchor.lengthInSeconds,
+    anchor.isRunning ? 1 : 0,
+    anchor.isDurationActual ? 1 : 0,
+    anchor.elapsedMs,
+    anchor.anchorMs,
+  ].join(US);
+}
+
+function messagesCanonical(messages) {
+  return (messages || []).map((m) => m.id).join(RS);
+}
+
+function planCanonical(plan) {
+  const items = (plan && plan.items) || [];
+  return items
+    .map((i) => i.id + US + i.title + US + i.lengthInSeconds + US + (i.isDurationActual ? 1 : 0) + RS)
+    .join("") + String(plan ? plan.activeItemIndex : 0);
+}
+
+function localHashes(snap) {
+  return {
+    roles: fnv1a64(rolesCanonical(snap.roles)),
+    timer: fnv1a64(timerCanonical(snap.timer && snap.timer.anchor)),
+    messages: fnv1a64(messagesCanonical(snap.messages)),
+    plan: snap.plan ? fnv1a64(planCanonical(snap.plan)) : undefined,
+  };
+}
+
+function createClockSync() {
+  const samples = [];
+  let offset = 0;
+  let ready = false;
+  return {
+    addSample(t0, t1, t2, t3) {
+      samples.push({ rtt: (t3 - t0) - (t2 - t1), offset: ((t1 - t0) + (t2 - t3)) / 2 });
+      if (samples.length > SYNC_KEEP) samples.shift();
+      let best = samples[0];
+      for (const s of samples) if (s.rtt <= best.rtt) best = s;
+      if (!ready) {
+        offset = best.offset;
+        ready = true;
+      } else {
+        const delta = best.offset - offset;
+        offset = Math.abs(delta) < SLEW_LIMIT_MS ? offset + delta * SLEW_FACTOR : best.offset;
+      }
+      return offset;
+    },
+    get offset() { return offset; },
+    get ready() { return ready; },
+    producerNow(localNow) { return localNow + offset; },
+  };
+}
+
+function anchorElapsedRaw(anchor, producerNowMs) {
+  return anchor.elapsedMs + (anchor.isRunning ? producerNowMs - anchor.anchorMs : 0);
+}
+
+function anchorElapsedMs(anchor, producerNowMs) {
+  return Math.max(0, anchorElapsedRaw(anchor, producerNowMs));
+}
+
+function anchorRemainingSeconds(anchor, producerNowMs) {
+  return anchor.lengthInSeconds - Math.floor(anchorElapsedMs(anchor, producerNowMs) / 1000);
+}
+
+function anchorNextBoundaryMs(anchor, producerNowMs) {
+  if (!anchor.isRunning) return null;
+  const raw = anchorElapsedRaw(anchor, producerNowMs);
+  return 1000 - (((raw % 1000) + 1000) % 1000) + 1;
+}
+
+function createLink(env) {
+  const clock = createClockSync();
+  const pending = new Map();
+  let ws = null;
+  let mode = null;
+  let heldRev = -1;
+  let lastFrameAt = 0;
+  let snapshotAt = 0;
+  let lastPollAt = env.now();
+  let reconnectDelay = 500;
+  let nextId = 1;
+  let fetching = null;
+  let syncTimer = null;
+  let protoTimer = null;
+
+  function isOpen() { return ws !== null && ws.readyState === 1; }
+
+  function setMode(value) {
+    mode = value;
+    if (env.onMode) env.onMode();
+  }
+
+  function send(op, body, handler) {
+    const id = "c" + nextId++;
+    pending.set(id, handler);
+    ws.send(JSON.stringify({ id, op, body }));
+  }
+
+  function full(state) {
+    snapshotAt = env.now();
+    env.onFull(state);
+  }
+
+  function sampleOnce() {
+    if (mode !== "v2" || !isOpen()) return;
+    const t0 = env.now();
+    send("sync", { t0 }, (reply) => {
+      if (reply.status !== 200 || !reply.data) return;
+      const t3 = env.now();
+      clock.addSample(typeof reply.data.t0 === "number" ? reply.data.t0 : t0, reply.data.t1, reply.data.t2, t3);
+      if (env.onClock) env.onClock();
+    });
+  }
+
+  function schedulePeriodic() {
+    env.clearTimeout(syncTimer);
+    syncTimer = env.setTimeout(() => {
+      sampleOnce();
+      schedulePeriodic();
+    }, SYNC_PERIOD_MS);
+  }
+
+  function startSync() {
+    sampleOnce();
+    for (let i = 1; i < SYNC_BURST; i++) env.setTimeout(sampleOnce, i * SYNC_BURST_GAP_MS);
+    schedulePeriodic();
+  }
+
+  function fetchState() {
+    if (fetching) return fetching;
+    fetching = (async () => {
+      try {
+        const response = await env.fetch("/v1/state", { cache: "no-store" });
+        if (!response.ok) return;
+        const state = await response.json();
+        heldRev = typeof state.rev === "number" ? state.rev : -1;
+        full(state);
+      } catch (_) {
+        env.onStatus();
+      } finally {
+        fetching = null;
+      }
+    })();
+    return fetching;
+  }
+
+  function guard(rev) {
+    if (mode !== "v2" || typeof rev !== "number") return true;
+    if (rev < heldRev) return false;
+    heldRev = rev;
+    return true;
+  }
+
+  function onDigest(data) {
+    if (mode !== "v2" || !data || !data.hashes) return;
+    if (typeof data.rev === "number" && data.rev < heldRev) return;
+    const snap = env.getSnapshot();
+    if (!snap) {
+      fetchState();
+      return;
+    }
+    const local = localHashes(snap);
+    for (const key of ["roles", "timer", "plan", "messages"]) {
+      if (typeof data.hashes[key] === "string" && local[key] !== undefined && local[key] !== data.hashes[key]) {
+        fetchState();
+        return;
+      }
+    }
+  }
+
+  function onFrame(text) {
+    let payload;
+    try { payload = JSON.parse(text); } catch (_) { return; }
+    lastFrameAt = env.now();
+    if (payload.id !== undefined && pending.has(payload.id)) {
+      const handler = pending.get(payload.id);
+      pending.delete(payload.id);
+      handler(payload);
+      return;
+    }
+    const data = payload.data;
+    if (payload.event === "hello") {
+      heldRev = data && typeof data.rev === "number" ? data.rev : -1;
+      full(data);
+    } else if (payload.event === "state") {
+      if (guard(data && data.rev)) full(data);
+    } else if (payload.event === "timer" && env.getSnapshot()) {
+      const rev = data && typeof data.rev === "number" ? data.rev : payload.rev;
+      if (!guard(rev)) return;
+      snapshotAt = env.now();
+      env.onTimer(data.timer);
+    } else if (payload.event === "digest") {
+      onDigest(data);
+    }
+  }
+
+  function connect() {
+    let sock;
+    try {
+      sock = new env.WebSocket(env.url);
+    } catch (_) {
+      return;
+    }
+    ws = sock;
+
+    sock.onopen = () => {
+      if (ws !== sock) return;
+      reconnectDelay = 500;
+      lastFrameAt = env.now();
+      setMode("pending");
+      send("proto", { version: 2 }, (reply) => {
+        if (ws !== sock) return;
+        env.clearTimeout(protoTimer);
+        if (reply.status === 200) {
+          setMode("v2");
+          startSync();
+        } else if (mode === "pending") {
+          setMode("legacy");
+        }
+      });
+      protoTimer = env.setTimeout(() => {
+        if (ws === sock && mode === "pending") setMode("legacy");
+      }, PROTO_TIMEOUT_MS);
+    };
+
+    sock.onmessage = (event) => {
+      if (ws === sock) onFrame(event.data);
+    };
+
+    sock.onclose = () => {
+      if (ws !== sock) return;
+      ws = null;
+      lastPollAt = env.now();
+      pending.clear();
+      env.clearTimeout(protoTimer);
+      env.clearTimeout(syncTimer);
+      setMode(null);
+      env.onStatus();
+      reconnectDelay = Math.min(reconnectDelay * 2, 1000);
+      env.setTimeout(connect, reconnectDelay);
+    };
+
+    sock.onerror = () => { try { sock.close(); } catch (_) {} };
+  }
+
+  function pollTick() {
+    const now = env.now();
+    if (!isOpen()) {
+      if (now - lastPollAt >= POLL_DOWN_MS) {
+        lastPollAt = now;
+        fetchState();
+      }
+      return;
+    }
+    if (mode === "legacy" && now - snapshotAt >= HEARTBEAT_MS) {
+      fetchState();
+    } else if (mode === "v2" && now - lastFrameAt >= V2_SILENCE_MS) {
+      try { ws.close(); } catch (_) {}
+    }
+  }
+
+  function isLive() {
+    if (env.getSnapshot() === null) return false;
+    if (mode === "v2") return isOpen() && env.now() - lastFrameAt < V2_SILENCE_MS;
+    return env.now() - snapshotAt < STALE_AFTER_MS;
+  }
+
+  return {
+    connect,
+    fetchState,
+    pollTick,
+    isLive,
+    resync: sampleOnce,
+    producerNow() { return clock.producerNow(env.now()); },
+    get mode() { return mode; },
+    get clockReady() { return clock.ready; },
+    get offset() { return clock.offset; },
+  };
+}
+</script>
+
 <script>
 "use strict";
 
@@ -665,8 +984,6 @@ let snapshotAt = 0;
 let producerName = "";
 let selectedRoleId = ROLE_PARAM || readStoredRole() || "";
 let dismissedMessageId = null;
-let socket = null;
-let reconnectDelay = 500;
 
 const root = document.documentElement;
 
@@ -811,6 +1128,9 @@ function latestRelevantMessage() {
 function remainingSeconds() {
   if (!snapshot || !snapshot.timer) return null;
   const timer = snapshot.timer;
+  if (link.mode === "v2" && link.clockReady && timer.anchor) {
+    return anchorRemainingSeconds(timer.anchor, link.producerNow());
+  }
   if (!timer.isRunning) return timer.remainingSeconds;
   const elapsed = (Date.now() - snapshotAt) / 1000;
   return Math.round(timer.remainingSeconds - elapsed);
@@ -1006,9 +1326,6 @@ function render() {
   }
 }
 
-const HEARTBEAT_MS = 2000;
-const STALE_AFTER_MS = 6500;
-
 function threadMessages() {
   if (!snapshot) return [];
   return (snapshot.messages || [])
@@ -1061,7 +1378,7 @@ function formatTime(timestamp) {
 }
 
 function renderConnection() {
-  const live = snapshot !== null && Date.now() - snapshotAt < STALE_AFTER_MS;
+  const live = link.isLive();
   el.link.dataset.live = live ? "1" : "0";
   el.linkLabel.textContent = live
     ? (producerName ? "Live — " + producerName : "Live")
@@ -1097,16 +1414,31 @@ function fitWaiting() {
   el.waitingMark.style.height = markHeight + "px";
 }
 
-setInterval(() => {
-  if (!snapshot) {
-    renderConnection();
-    return;
-  }
+function paintCountdown() {
+  if (!snapshot) return;
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
   } else if (!el.countdown.classList.contains("hidden")) {
     el.countdown.textContent = formatDuration(remainingSeconds() || 0);
   }
+}
+
+let tickTimer = null;
+
+function scheduleTick() {
+  clearTimeout(tickTimer);
+  tickTimer = null;
+  if (link.mode !== "v2" || !link.clockReady || !snapshot || !snapshot.timer || !snapshot.timer.anchor) return;
+  const delay = anchorNextBoundaryMs(snapshot.timer.anchor, link.producerNow());
+  if (delay === null) return;
+  tickTimer = setTimeout(() => {
+    paintCountdown();
+    scheduleTick();
+  }, delay);
+}
+
+setInterval(() => {
+  paintCountdown();
   renderConnection();
 }, 250);
 
@@ -1125,51 +1457,39 @@ function adopt(state) {
   }
   render();
   renderConnection();
+  scheduleTick();
 }
 
-function connect() {
-  const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/v1/socket";
-  let ws;
-  try {
-    ws = new WebSocket(url);
-  } catch (_) {
-    return;
-  }
-  socket = ws;
-
-  ws.onopen = () => {
-    reconnectDelay = 500;
-  };
-
-  ws.onmessage = (event) => {
-    let payload;
-    try { payload = JSON.parse(event.data); } catch (_) { return; }
-    if (payload.event === "hello" || payload.event === "state") adopt(payload.data);
-    else if (payload.event === "timer" && snapshot) {
-      snapshot.timer = payload.data.timer;
-      snapshotAt = Date.now();
-      render();
-    }
-  };
-
-  ws.onclose = () => {
-    socket = null;
-    renderConnection();
-    reconnectDelay = Math.min(reconnectDelay * 2, 1000);
-    setTimeout(connect, reconnectDelay);
-  };
-
-  ws.onerror = () => { try { ws.close(); } catch (_) {} };
+function adoptTimer(timer) {
+  snapshot.timer = timer;
+  snapshotAt = Date.now();
+  render();
+  scheduleTick();
 }
 
-async function fetchOnce() {
-  try {
-    const response = await fetch("/v1/state", { cache: "no-store" });
-    if (!response.ok) return;
-    adopt(await response.json());
-  } catch (_) {
+const link = createLink({
+  WebSocket,
+  fetch: (...args) => fetch(...args),
+  now: () => Date.now(),
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (id) => clearTimeout(id),
+  url: (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/v1/socket",
+  getSnapshot: () => snapshot,
+  onFull: adopt,
+  onTimer: adoptTimer,
+  onStatus: renderConnection,
+  onMode: () => {
+    scheduleTick();
     renderConnection();
-  }
+  },
+  onClock: () => {
+    paintCountdown();
+    scheduleTick();
+  },
+});
+
+function fetchOnce() {
+  return link.fetchState();
 }
 
 async function fetchProducerName() {
@@ -1182,8 +1502,12 @@ async function fetchProducerName() {
   } catch (_) {  }
 }
 
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") link.resync();
+});
+
 setInterval(() => {
-  if (Date.now() - snapshotAt >= HEARTBEAT_MS) fetchOnce();
+  link.pollTick();
   if (!producerName && snapshot) fetchProducerName();
 }, 1000);
 
@@ -1310,7 +1634,7 @@ el.banner.addEventListener("click", async () => {
 
 fetchOnce();
 fetchProducerName();
-connect();
+link.connect();
 </script>
 </body>
 </html>
