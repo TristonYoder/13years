@@ -24,8 +24,16 @@ struct ProducerMacApp: App {
                 .disabled(documents.isLauncherPresented)
                 .overlay {
                     if documents.isLauncherPresented {
-                        LauncherView(documents: documents)
-                            .environmentObject(cueEngine)
+                        LauncherView(
+                            recentURLs: documents.recentURLs,
+                            actions: LauncherActions(
+                                newDocument: { documents.newDocument(cueEngine) },
+                                newFromTemplate: { documents.newFromTemplate(cueEngine) },
+                                open: { documents.open(cueEngine) },
+                                openRecent: { documents.open($0, in: cueEngine) },
+                                skip: { documents.dismissLauncher() }
+                            )
+                        )
                             .transition(.opacity)
                     }
                 }

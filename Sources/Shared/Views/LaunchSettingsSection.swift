@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -10,7 +10,13 @@ struct LaunchSettingsSection: View {
     @State private var isChoosingFile = false
 
     private var fileTypes: [UTType] {
-        [.thirteenYearsDocument, .thirteenYearsTemplate]
+        [
+            .thirteenYearsDocument,
+            .thirteenYearsTemplate,
+            UTType(filenameExtension: ProducerDocument.fileExtension),
+            UTType(filenameExtension: ProducerDocument.templateExtension),
+            .json
+        ].compactMap { $0 }
     }
 
     var body: some View {

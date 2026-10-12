@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import Foundation
 
 public enum LaunchBehavior: String, CaseIterable, Identifiable, Sendable {
@@ -38,7 +38,7 @@ public final class LaunchPreferences: ObservableObject {
         self.behavior = defaults.string(forKey: Self.behaviorKey).flatMap(LaunchBehavior.init(rawValue:)) ?? .showLauncher
         if let data = defaults.data(forKey: Self.fileBookmarkKey) {
             var stale = false
-            self.fileURL = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)
+            self.fileURL = try? URL(resolvingBookmarkData: data, options: DocumentBookmark.resolve, relativeTo: nil, bookmarkDataIsStale: &stale)
         }
     }
 
@@ -49,7 +49,7 @@ public final class LaunchPreferences: ObservableObject {
     public func setFile(_ url: URL) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
+        guard let data = try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
         defaults.set(data, forKey: Self.fileBookmarkKey)
         fileURL = url
     }

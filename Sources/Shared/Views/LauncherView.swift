@@ -1,16 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
+#if os(macOS) || os(iOS)
 import SwiftUI
 
+struct LauncherActions {
+    var newDocument: () -> Void
+    var newFromTemplate: () -> Void
+    var open: () -> Void
+    var openRecent: (URL) -> Void
+    var skip: () -> Void
+}
+
 struct LauncherView: View {
-    @ObservedObject var documents: DocumentController
-    @EnvironmentObject var engine: CueEngine
+    let recentURLs: [URL]
+    let actions: LauncherActions
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
+            launcherGround
                 .overlay(
                     RadialGradient(
                         colors: [Color.purple.opacity(colorScheme == .dark ? 0.28 : 0.14), .clear],
@@ -26,19 +35,19 @@ struct LauncherView: View {
 
                 HStack(spacing: 12) {
                     actionCard(title: "New", subtitle: "A blank service", systemImage: "plus") {
-                        documents.newDocument(engine)
+                        actions.newDocument()
                     }
                     actionCard(title: "From Template", subtitle: "Start from a saved layout", systemImage: "doc.on.doc") {
-                        documents.newFromTemplate(engine)
+                        actions.newFromTemplate()
                     }
                     actionCard(title: "Open…", subtitle: "An existing file", systemImage: "folder") {
-                        documents.open(engine)
+                        actions.open()
                     }
                 }
 
                 recents
 
-                Button("Skip for now") { documents.dismissLauncher() }
+                Button("Skip for now") { actions.skip() }
                     .buttonStyle(.plain)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -54,6 +63,14 @@ struct LauncherView: View {
             )
             .shadow(color: .black.opacity(0.25), radius: 30, y: 14)
         }
+    }
+
+    private var launcherGround: Color {
+        #if os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color(uiColor: .systemBackground)
+        #endif
     }
 
     private var header: some View {
@@ -99,7 +116,7 @@ struct LauncherView: View {
                 .tracking(1)
                 .padding(.horizontal, 4)
 
-            if documents.recentURLs.isEmpty {
+            if recentURLs.isEmpty {
                 Text("Files you open or save will show up here.")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
@@ -107,12 +124,12 @@ struct LauncherView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(documents.recentURLs, id: \.self) { url in
-                            RecentRow(url: url) { documents.open(url, in: engine) }
+                        ForEach(recentURLs, id: \.self) { url in
+                            RecentRow(url: url) { actions.openRecent(url) }
                         }
                     }
                 }
-                .frame(height: min(CGFloat(documents.recentURLs.count) * 54, 240))
+                .frame(height: min(CGFloat(recentURLs.count) * 54, 240))
             }
         }
     }
@@ -177,3 +194,4 @@ private struct RecentRow: View {
         .help(url.path)
     }
 }
+#endif

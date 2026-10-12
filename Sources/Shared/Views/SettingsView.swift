@@ -140,7 +140,7 @@ public struct SettingsView: View {
                 Text("Devices on the same LAN — Pager apps and ESP32 hardware pagers — discover this device via Bonjour and connect directly for real-time cue delivery.")
             }
 
-            #if os(macOS)
+            #if os(macOS) || os(iOS)
             Section {
                 LaunchSettingsSection()
             } header: {

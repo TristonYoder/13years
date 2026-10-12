@@ -77,6 +77,12 @@ final class ProducerDocumentTests: XCTestCase {
         XCTAssertEqual(LaunchPreferences(defaults: defaults).behavior, .reopenLast)
     }
 
+    func testRecentDocumentsMoveToFrontAndCap() {
+        XCTAssertEqual(RecentDocuments.updated([1, 2, 3], adding: 3), [3, 1, 2])
+        XCTAssertEqual(RecentDocuments.updated([1, 2, 3], adding: 4, limit: 3), [4, 1, 2])
+        XCTAssertEqual(RecentDocuments.updated(Array(1...10), adding: 11), [11] + Array(1...9))
+    }
+
     func testRejectsNewerFormat() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ProducerDocument.fileExtension)")
         defer { try? FileManager.default.removeItem(at: url) }

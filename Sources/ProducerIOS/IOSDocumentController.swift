@@ -14,6 +14,75 @@ final class IOSDocumentController: ObservableObject {
         settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
     ))
     @Published var errorMessage: String?
+    @Published var isLauncherPresented = true
+    @Published private(set) var recents: [RecentEntry] = []
+
+    struct RecentEntry: Equatable {
+        let url: URL
+        let bookmark: Data
+        static func == (lhs: RecentEntry, rhs: RecentEntry) -> Bool { lhs.url == rhs.url }
+    }
+
+    private static let recentsDefaultsKey = "recentDocumentBookmarks"
+    private let defaults: UserDefaults
+
+    var recentURLs: [URL] { recents.map(\.url) }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let bookmarks = defaults.array(forKey: Self.recentsDefaultsKey) as? [Data] ?? []
+        recents = bookmarks.compactMap { data in
+            var stale = false
+            guard let url = try? URL(resolvingBookmarkData: data, options: DocumentBookmark.resolve, relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            let fresh = stale ? (try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil)) : nil
+            return RecentEntry(url: url, bookmark: fresh ?? data)
+        }
+    }
+
+    func dismissLauncher() {
+        isLauncherPresented = false
+    }
+
+    func newDocument(_ engine: CueEngine) {
+        engine.resetToNewDocument()
+        isLauncherPresented = false
+    }
+
+    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+        switch preferences.behavior {
+        case .showLauncher:
+            return
+        case .reopenLast:
+            guard let url = recentURLs.first else { return }
+            open(url, in: engine)
+        case .openFile:
+            guard let url = preferences.fileURL else { return }
+            open(url, in: engine)
+        }
+    }
+
+    func clearRecents() {
+        recents = []
+        persistRecents()
+    }
+
+    private func noteRecent(_ url: URL) {
+        guard let data = try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
+        recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: data))
+        persistRecents()
+    }
+
+    private func forget(_ url: URL) {
+        recents.removeAll { $0.url == url }
+        persistRecents()
+    }
+
+    private func persistRecents() {
+        defaults.set(recents.map(\.bookmark), forKey: Self.recentsDefaultsKey)
+    }
 
     var importTypes: [UTType] {
         let base: UTType = importsTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument
@@ -63,7 +132,10 @@ final class IOSDocumentController: ObservableObject {
             let isTemplate = url.pathExtension.lowercased() == ProducerDocument.templateExtension
             engine.apply(document)
             engine.currentDocumentURL = isTemplate ? nil : url
+            isLauncherPresented = false
+            if !isTemplate { noteRecent(url) }
         } catch {
+            forget(url)
             errorMessage = "Couldn’t open “\(url.lastPathComponent)”. \(error.localizedDescription)"
         }
     }
@@ -77,6 +149,14 @@ struct DocumentCommands: Commands {
         CommandGroup(after: .newItem) {
             Button("Open…") { documents.beginImport(template: false) }
                 .keyboardShortcut("o")
+            Menu("Open Recent") {
+                ForEach(documents.recentURLs, id: \.self) { url in
+                    Button(url.deletingPathExtension().lastPathComponent) { documents.open(url, in: engine) }
+                }
+                Divider()
+                Button("Clear Menu") { documents.clearRecents() }
+                    .disabled(documents.recentURLs.isEmpty)
+            }
             Button("New from Template…") { documents.beginImport(template: true) }
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s")
