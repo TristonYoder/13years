@@ -738,20 +738,20 @@
     grid-template-columns: 1fr 1fr;
     align-items: stretch;
     gap: var(--pad);
-    min-height: calc(var(--u) * 0.2);
   }
+  #lsBottom[data-mode="left"], #lsBottom[data-mode="right"] { grid-template-columns: 1fr; }
   #lsNotes, #lsNext {
+    --k: 1;
     min-width: 0;
-    max-height: calc(var(--u) * 0.3);
+    max-height: calc(var(--u) * 0.28);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: calc(var(--u) * 0.012);
+    gap: calc(var(--u) * 0.012 * var(--k));
     border-radius: calc(var(--u) * 0.02);
     background: rgba(255, 255, 255, 0.08);
     padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
   }
-  #lsNotes.ghost, #lsNext.ghost { visibility: hidden; }
   #lsNextHead {
     display: flex;
     justify-content: space-between;
@@ -760,32 +760,56 @@
   }
   #lsNextTitle {
     min-width: 0;
-    font-size: calc(var(--u) * 0.035);
+    font-size: calc(var(--u) * 0.035 * var(--k));
     font-weight: 800;
     letter-spacing: 0.03em;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
   }
   #lsNextLength {
     flex: 0 0 auto;
-    font-size: calc(var(--u) * 0.035);
+    font-size: calc(var(--u) * 0.035 * var(--k));
     font-weight: 800;
     opacity: 0.85;
     white-space: nowrap;
   }
-  #lsNextNotes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01); overflow: hidden; }
+  #lsNextNotes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01 * var(--k)); overflow: hidden; }
   #lsNextNotes:empty { display: none; }
-  #landscape .note { background: transparent; padding: 0; border-radius: 0; font-size: calc(var(--u) * 0.026); font-weight: 600; }
-  #landscape .note[data-current="1"] { font-size: calc(var(--u) * 0.026); font-weight: 600; }
+  #landscape .note, #landscape .note[data-current="1"] { background: transparent; padding: 0; border-radius: 0; font-size: calc(var(--u) * 0.026 * var(--k, 1)); font-weight: 600; }
 
-  #lsBanner {
-    position: absolute;
-    left: calc(var(--frame) + var(--pad));
-    right: calc(var(--frame) + var(--pad));
-    bottom: calc(var(--frame) + var(--pad));
+  #lsMessage {
+    --k: 1;
+    margin-top: auto;
+    position: relative;
     z-index: 5;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--u) * 0.01);
+    width: 100%;
+    max-height: calc(var(--u) * 0.3);
+    overflow: hidden;
+    border: 0;
+    font-family: inherit;
+    text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    background: #ffd60a;
+    color: #0b0b0d;
+    border-radius: calc(var(--u) * 0.02);
+    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
+  }
+  #lsMessageText {
+    font-size: calc(var(--u) * 0.07 * var(--k));
+    font-weight: 800;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  #lsMessageFrom {
+    font-size: calc(var(--u) * 0.02);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.7;
   }
 </style>
 </head>
@@ -869,9 +893,9 @@
         <div id="lsCountdown" class="tnum"></div>
         <div id="lsTag"></div>
       </div>
-      <div id="lsBottom">
-        <div id="lsNotes" class="ghost"></div>
-        <div id="lsNext" class="ghost">
+      <div id="lsBottom" data-mode="none">
+        <div id="lsNotes" class="hidden"></div>
+        <div id="lsNext" class="hidden">
           <div id="lsNextHead">
             <div id="lsNextTitle"></div>
             <div id="lsNextLength" class="tnum"></div>
@@ -879,7 +903,10 @@
           <div id="lsNextNotes"></div>
         </div>
       </div>
-      <div id="lsBanner"></div>
+      <button id="lsMessage" type="button" class="hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
+        <div id="lsMessageText"></div>
+        <div id="lsMessageFrom"></div>
+      </button>
     </div>
 
   </div>
@@ -1240,6 +1267,27 @@ function formatProjectedLength(seconds, cutoff) {
     return Math.floor(total / 3600) + ":" + two(Math.floor(total / 60) % 60) + ":" + two(total % 60);
   }
   return Math.floor(total / 60) + ":" + two(total % 60);
+}
+
+function fitScale(measure, cap, min, steps) {
+  const floor = min > 0 ? min : 0.3;
+  if (measure(1) <= cap) return 1;
+  if (measure(floor) > cap) return floor;
+  let lo = floor;
+  let hi = 1;
+  for (let i = 0; i < (steps || 8); i++) {
+    const mid = (lo + hi) / 2;
+    if (measure(mid) <= cap) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
+function bottomRowMode(hasMessage, hasNotes, hasNext) {
+  if (hasMessage) return "message";
+  if (hasNotes && hasNext) return "both";
+  if (hasNotes) return "left";
+  if (hasNext) return "right";
+  return "none";
 }
 
 function clockSlotFor(state) {
@@ -1734,7 +1782,10 @@ const el = {
   lsNext: document.getElementById("lsNext"),
   lsNextTitle: document.getElementById("lsNextTitle"),
   lsNextNotes: document.getElementById("lsNextNotes"),
-  lsBanner: document.getElementById("lsBanner"),
+  lsBottom: document.getElementById("lsBottom"),
+  lsMessage: document.getElementById("lsMessage"),
+  lsMessageText: document.getElementById("lsMessageText"),
+  lsMessageFrom: document.getElementById("lsMessageFrom"),
   role: document.getElementById("role"),
   rolepick: document.getElementById("rolepick"),
   link: document.getElementById("link"),
@@ -1787,9 +1838,7 @@ function placeShared(layout) {
   if (el.rolepick.parentNode !== home) {
     home.append(el.rolepick, el.link);
   }
-  if (landscape) {
-    if (el.banner.parentNode !== el.lsBanner) el.lsBanner.appendChild(el.banner);
-  } else if (el.banner.parentNode !== el.standard) {
+  if (el.banner.parentNode !== el.standard) {
     el.standard.insertBefore(el.banner, el.notifyBar);
   }
 }
@@ -2033,11 +2082,15 @@ function renderLandscape() {
   renderLandscapeCountdown();
 
   const current = notesFor(item);
-  el.lsNotes.classList.toggle("ghost", current.length === 0);
-  fillNotes(el.lsNotes, current.map((n) => n.category + n.text).join("|"), current);
-
   const upcoming = nextItem();
-  el.lsNext.classList.toggle("ghost", !upcoming);
+  const message = activeNotification();
+  const mode = bottomRowMode(Boolean(message), current.length > 0, Boolean(upcoming));
+  fillNotes(el.lsNotes, current.map((n) => n.category + n.text).join("|"), current);
+  setHidden(el.lsBottom, mode === "message" || mode === "none");
+  setHidden(el.lsMessage, mode !== "message");
+  setHidden(el.lsNotes, mode === "right");
+  setHidden(el.lsNext, mode === "left");
+  if (el.lsBottom.dataset.mode !== mode) el.lsBottom.dataset.mode = mode;
   if (upcoming) {
     setText(el.lsNextTitle, (upcoming.title || "").toUpperCase());
     const length = upcoming.lengthInSeconds;
@@ -2050,9 +2103,42 @@ function renderLandscape() {
     );
   }
 
-  const notification = activeNotification();
-  setHidden(el.banner, !notification);
-  if (notification) setText(el.banner, notification.text);
+  if (message) {
+    setText(el.lsMessageText, message.text);
+    setText(el.lsMessageFrom, "From " + (message.sender || "Producer"));
+  }
+  fitLandscapeBottom(mode);
+}
+
+let lastFitKey = "";
+
+function fitLandscapeBottom(mode) {
+  const u = Math.min(window.innerWidth, window.innerHeight);
+  const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
+  if (key === lastFitKey) return;
+  lastFitKey = key;
+  if (mode === "message") {
+    const panel = el.lsMessage;
+    const text = el.lsMessageText;
+    const measure = (k) => {
+      panel.style.setProperty("--k", String(k));
+      const lineHeight = u * 0.07 * k * 1.15;
+      const lines = Math.round(text.scrollHeight / lineHeight);
+      return lines > 3 ? Infinity : panel.scrollHeight;
+    };
+    panel.style.setProperty("--k", String(fitScale(measure, u * 0.3, 0.25)));
+    return;
+  }
+  for (const card of [el.lsNotes, el.lsNext]) {
+    if (card.classList.contains("hidden")) continue;
+    card.style.alignSelf = "start";
+    const k = fitScale((value) => {
+      card.style.setProperty("--k", String(value));
+      return card.scrollHeight;
+    }, u * 0.28, 0.3);
+    card.style.setProperty("--k", String(k));
+    card.style.alignSelf = "";
+  }
 }
 
 function renderLowerThird() {
@@ -2548,7 +2634,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") el.chat.classList.add("hidden");
 });
 
-el.banner.addEventListener("click", async () => {
+async function dismissStanding() {
   const message = activeNotification();
   if (!message) return;
   dismissedMessageId = message.id;
@@ -2561,7 +2647,10 @@ el.banner.addEventListener("click", async () => {
     render();
     showStatus("Couldn't clear — check the connection");
   }
-});
+}
+
+el.banner.addEventListener("click", dismissStanding);
+el.lsMessage.addEventListener("click", dismissStanding);
 
 wakeLock.acquire();
 fetchOnce();

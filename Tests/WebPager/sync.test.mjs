@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -917,4 +917,31 @@ test("clock slot: cue word replaces the clock while STANDBY or GO", () => {
   assert.deepEqual({ ...core.clockSlotFor("FLASH_GO") }, { mode: "cue", word: "GO!" });
   assert.deepEqual({ ...core.clockSlotFor("OFF") }, { mode: "clock", word: "" });
   assert.deepEqual({ ...core.clockSlotFor(undefined) }, { mode: "clock", word: "" });
+});
+
+test("fitScale keeps full size when content fits", () => {
+  assert.equal(core.fitScale((k) => 100 * k, 100, 0.3), 1);
+});
+
+test("fitScale shrinks to the largest scale that fits", () => {
+  const k = core.fitScale((s) => 200 * s, 100, 0.3);
+  assert.ok(k <= 0.5 && k > 0.49);
+});
+
+test("fitScale never goes below the floor", () => {
+  assert.equal(core.fitScale((s) => 1000 * s, 100, 0.3), 0.3);
+});
+
+test("fitScale treats infinite measures as not fitting", () => {
+  const k = core.fitScale((s) => (s > 0.6 ? Infinity : 10), 100, 0.25);
+  assert.ok(k <= 0.6 && k > 0.59);
+});
+
+test("bottomRowMode picks message, both, one card, or none", () => {
+  assert.equal(core.bottomRowMode(true, true, true), "message");
+  assert.equal(core.bottomRowMode(true, false, false), "message");
+  assert.equal(core.bottomRowMode(false, true, true), "both");
+  assert.equal(core.bottomRowMode(false, true, false), "left");
+  assert.equal(core.bottomRowMode(false, false, true), "right");
+  assert.equal(core.bottomRowMode(false, false, false), "none");
 });
