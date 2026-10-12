@@ -686,6 +686,7 @@
     letter-spacing: 0.12em;
     opacity: 0.85;
   }
+  #lsRoleSlot { display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * 0.008); max-width: 100%; }
   #landscape .link { margin-left: 0; font-size: calc(var(--u) * 0.02); }
 
   #lsCenter {
@@ -1836,7 +1837,8 @@ function placeShared(layout) {
   const rolebar = document.querySelector(".rolebar");
   const home = landscape ? el.lsRoleSlot : rolebar;
   if (el.rolepick.parentNode !== home) {
-    home.append(el.rolepick, el.link);
+    if (landscape) home.append(el.link, el.rolepick);
+    else home.append(el.rolepick, el.link);
   }
   if (el.banner.parentNode !== el.standard) {
     el.standard.insertBefore(el.banner, el.notifyBar);
