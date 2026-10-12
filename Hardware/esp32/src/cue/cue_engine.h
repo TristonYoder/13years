@@ -91,6 +91,19 @@ public:
   bool producerIsV2() const { return producerV2_; }
   void onConnected();
   bool takeCatchUpRequest();
+  bool takeSyncBurstRequest();
+  unsigned long silenceMs() const { return millis() - lastRxAnyMillis_; }
+  unsigned long stalenessLimitMs() const { return producerV2_ ? kProducerStalenessV2Ms : kProducerStalenessMs; }
+
+  const String &selectedRoleIdRef() const { return selectedRoleId_; }
+  const RoleView *activeRoleRef() const;
+  const MessageView *latestRelevantMessageRef() const;
+  const char *currentNoteText() const;
+  bool timerFound() const { return timer_.found; }
+  bool timerIsHeader() const { return timer_.isHeader(); }
+  bool timerIsDurationActual() const { return timer_.isDurationActual; }
+  const String &timerTitle() const { return timer_.title; }
+  int timerRemainingSeconds() const;
 
   String currentNote() const;
   MessageView latestRelevantMessage() const;
@@ -114,9 +127,14 @@ private:
   static const unsigned long kProducerStalenessMs = 12000;
   static const unsigned long kProducerStalenessV2Ms = 25000;
   static const int kMaxMessageMismatchStreak = 2;
+  static const unsigned long kCatchUpRateLimitMs = 5000;
+  static constexpr double kMaxMonotonicOffsetMs = 4.2e12;
 
   bool hasSyncedWithProducer_ = false;
   unsigned long lastProducerPacketAtMillis_ = 0;
+  unsigned long lastRxAnyMillis_ = 0;
+  unsigned long lastLegacyCatchUpMillis_ = 0;
+  unsigned long lastParseErrorCatchUpMillis_ = 0;
 
   struct NoteEntry { String category; String text; };
 
@@ -141,15 +159,20 @@ private:
   int64_t anchorRecvLocalMs_ = 0;
   bool producerV2_ = false;
   bool catchUpWanted_ = false;
+  bool syncBurstWanted_ = false;
+  bool noOffsetBurstDone_ = false;
+  pagersync::EpochTracker epoch_;
   bool rolesTruncated_ = false;
   bool messagesOverflowed_ = false;
   int messageMismatchStreak_ = 0;
 
   void applyRoleCues(JsonArrayConst roles);
   void applyTimerItem(JsonObjectConst timer, bool timing = true);
-  void applyAnchor(JsonVariantConst anchor);
+  bool applyAnchor(JsonVariantConst anchor);
+  void resetForEpochChange();
   void applyCueDeltas(JsonArrayConst deltas);
   void handleSyncReply(JsonObjectConst doc);
+  void insertMessageSorted(const MessageView &v);
   void handleDigest(JsonObjectConst doc);
   std::string rolesHash() const;
   std::string timerHash() const;

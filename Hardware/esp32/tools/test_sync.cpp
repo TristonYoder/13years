@@ -4,6 +4,8 @@
 #include "../src/sync/sync_core.h"
 #include <stdio.h>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 #if defined(__has_include)
 #if __has_include(<ArduinoJson.h>)
@@ -119,6 +121,7 @@ static void testSlewVsJump() {
 
 static void testProducerNow() {
   pagersync::OffsetEstimator e;
+  e.setMaxAbsOffsetMs(4.2e12);
   e.addSample(0, 1760000000000LL + 5, 1760000000000LL + 5, 10);
   CHECK(e.producerNow(100) == 100 + (int64_t)llround(e.offsetMs()));
   CHECK(e.producerNow(100) > 1760000000000LL);
@@ -158,10 +161,11 @@ static void testAnchor() {
 }
 
 static void testRevGuard() {
+  using pagersync::RevKind;
   pagersync::RevGuard g;
   CHECK(g.accept(5));
   CHECK(g.accept(6));
-  CHECK(g.accept(6));
+  CHECK(!g.accept(6));
   CHECK(!g.accept(5));
   CHECK(g.accept(7));
   CHECK(g.accept(-1));
@@ -170,7 +174,246 @@ static void testRevGuard() {
   CHECK(g.accept(3));
   g.resetTo(2);
   CHECK(!g.accept(1));
-  CHECK(g.accept(2));
+  CHECK(!g.accept(2));
+  CHECK(g.accept(3));
+
+  g.reset();
+  CHECK(g.accept(10, RevKind::Rebase));
+  CHECK(g.accept(10, RevKind::NotLower));
+  CHECK(!g.accept(9, RevKind::NotLower));
+  CHECK(!g.accept(10, RevKind::Strict));
+  CHECK(g.accept(11, RevKind::Strict));
+  CHECK(g.accept(4, RevKind::Rebase));
+  CHECK(g.highest == 4);
+  CHECK(g.accept(3, RevKind::Rebase));
+  CHECK(g.highest == 3);
+
+  g.reset();
+  CHECK(g.accept(100));
+  CHECK(g.accept(100 + 1000000));
+  CHECK(!g.accept(100 + 1000000 + 1000001));
+  CHECK(g.highest == 100 + 1000000);
+  CHECK(g.accept(100 + 1000000 + 1000001, RevKind::Strict, true));
+  CHECK(g.accept(5000000, RevKind::Rebase));
+  g.reset();
+  CHECK(g.accept(9999999, RevKind::Strict));
+  CHECK(!g.accept(9999999 + 1000001, RevKind::NotLower));
+  CHECK(g.accept(9999999 + 1000000, RevKind::NotLower));
+}
+
+static void testEpoch() {
+  pagersync::EpochTracker e;
+  CHECK(!e.observe(1234));
+  CHECK(!e.observe(1234));
+  CHECK(e.observe(99));
+  CHECK(!e.observe(99));
+  e.reset();
+  CHECK(!e.observe(5));
+}
+
+static void testAnchorBounds() {
+  CHECK(pagersync::anchorInBounds(0, 0));
+  CHECK(pagersync::anchorInBounds(604800, 604800000LL));
+  CHECK(!pagersync::anchorInBounds(604801, 0));
+  CHECK(!pagersync::anchorInBounds(-1, 0));
+  CHECK(!pagersync::anchorInBounds(300, -1));
+  CHECK(!pagersync::anchorInBounds(300, 604800001LL));
+}
+
+struct Msg { std::string id; double ts; };
+
+static std::string messagesHashOf(std::vector<Msg> m) {
+  std::sort(m.begin(), m.end(), [](const Msg &x, const Msg &y) {
+    return pagersync::messageOrderBefore(x.ts, x.id.c_str(), y.ts, y.id.c_str());
+  });
+  std::string c;
+  for (const Msg &x : m) pagersync::appendMessageId(c, x.id);
+  return pagersync::hashHex(c);
+}
+
+static void testMessageOrder() {
+  CHECK(pagersync::messageOrderBefore(5, "a", 4, "a"));
+  CHECK(!pagersync::messageOrderBefore(4, "a", 5, "a"));
+  CHECK(pagersync::messageOrderBefore(5, "a", 5, "b"));
+  CHECK(!pagersync::messageOrderBefore(5, "b", 5, "a"));
+  CHECK(!pagersync::messageOrderBefore(5, "a", 5, "a"));
+  CHECK_STR(messagesHashOf({{"b", 7}, {"a", 7}}), "e5e7b9190438f91c");
+  CHECK_STR(messagesHashOf({{"a", 7}, {"b", 7}}), "e5e7b9190438f91c");
+  CHECK_STR(messagesHashOf({{"m1", 1}, {"m2", 2}}), "dddb4a3dc4d94432");
+}
+
+static void testSampleAging() {
+  pagersync::OffsetEstimator e;
+  CHECK(e.addSample(0, 1000, 1000, 10));
+  CHECK(e.sampleCount() == 1);
+  CHECK(e.addSample(100, 1100, 1100, 120));
+  CHECK(e.sampleCount() == 2);
+  CHECK(e.addSample(95000, 96000, 96000, 95010));
+  CHECK(e.sampleCount() == 1);
+  CHECK_NEAR(e.bestOffset(), 995, 1e-9);
+
+  e.reset();
+  e.addSample(0, 1000, 1000, 10);
+  e.addSample(100, 1105, 1105, 110);
+  e.addSample(200, 1200, 1200, 210);
+  CHECK(e.sampleCount() == 3);
+  e.prune(90010);
+  CHECK(e.sampleCount() == 3);
+  e.prune(90011);
+  CHECK(e.sampleCount() == 2);
+  e.prune(90111);
+  CHECK(e.sampleCount() == 1);
+  e.prune(90211);
+  CHECK(e.sampleCount() == 0);
+
+  e.reset();
+  e.addSample(0, 1000, 1000, 10);
+  e.addSample(100, 1100, 1100, 110);
+  e.addSample(200, 1200, 1200, 210);
+  CHECK(e.sampleCount() == 3);
+  e.addSample(300, 1400, 1400, 310);
+  CHECK(e.sampleCount() == 1);
+  CHECK_NEAR(e.bestOffset(), 1095, 1e-9);
+
+  e.reset();
+  e.addSample(0, 1000, 1000, 400);
+  CHECK_NEAR(e.bestOffset(), 800, 1e-9);
+  e.addSample(1000, 2050, 2050, 1200);
+  CHECK(e.sampleCount() == 2);
+  e.addSample(2000, 3000, 3000, 2010);
+  CHECK(e.sampleCount() == 3);
+  e.addSample(3000, 4105, 4105, 3010);
+  CHECK(e.sampleCount() == 1);
+
+  e.reset();
+  CHECK(e.addSample(0, 1000, 1000, 0));
+  CHECK(e.addSample(100, 1100, 1099, 100));
+  pagersync::Sample neg = pagersync::OffsetEstimator::compute(100, 1100, 1101, 100);
+  CHECK(neg.rtt < 0);
+  e.reset();
+  CHECK(e.addSample(100, 1100, 1101, 100));
+  CHECK(e.sampleCount() == 1);
+  CHECK_NEAR(e.bestOffset(), 1000.5, 1e-9);
+
+  e.reset();
+  CHECK(!e.addSample(0, 50000, 50000, 10001));
+  CHECK(e.sampleCount() == 0);
+  CHECK(e.addSample(0, 1000, 1000, 10000));
+  CHECK(!e.addSample(0, 1000, 1000, 10001));
+  e.reset();
+  CHECK(!e.addSample(0, 86400000LL + 1000, 86400000LL + 1000, 10));
+  CHECK(e.addSample(0, 86400000LL - 1000, 86400000LL - 1000, 10));
+  CHECK(e.hasOffset());
+  e.reset();
+  e.setMaxAbsOffsetMs(4.2e12);
+  CHECK(e.addSample(0, 1760000000000LL, 1760000000000LL, 10));
+  pagersync::OffsetEstimator fresh;
+  CHECK(!fresh.addSample(0, -86400000LL - 100, -86400000LL - 100, 10));
+  CHECK(!fresh.hasOffset());
+}
+
+struct Collector {
+  std::vector<std::string> frames;
+  std::vector<size_t> skipped;
+  size_t maxFrame = 0;
+};
+
+static bool feedAll(pagersync::FrameAssembler &fa, Collector &c, const std::string &bytes, size_t chunk) {
+  for (size_t i = 0; i < bytes.size(); i += chunk) {
+    size_t n = std::min(chunk, bytes.size() - i);
+    bool ok = fa.feed((const uint8_t *)bytes.data() + i, n,
+      [&](const uint8_t *d, size_t len) { c.frames.push_back(std::string((const char *)d, len)); },
+      [&](size_t len) { c.skipped.push_back(len); });
+    if (!ok) return false;
+  }
+  return true;
+}
+
+static std::string frameOf(const std::string &body) {
+  uint32_t n = (uint32_t)body.size();
+  std::string out;
+  out += (char)((n >> 24) & 0xFF);
+  out += (char)((n >> 16) & 0xFF);
+  out += (char)((n >> 8) & 0xFF);
+  out += (char)(n & 0xFF);
+  return out + body;
+}
+
+static void testFrameAssembler() {
+  uint8_t buf[64];
+  std::string big(200, 'x');
+  std::string stream = frameOf("hello") + frameOf(big) + frameOf("world") + frameOf(std::string(64, 'y')) + frameOf(std::string(65, 'z')) + frameOf("end");
+  size_t chunks[] = {1, 2, 3, 7, 64, 1000};
+  for (size_t chunk : chunks) {
+    pagersync::FrameAssembler fa;
+    fa.init(buf, sizeof(buf));
+    Collector c;
+    CHECK(feedAll(fa, c, stream, chunk));
+    CHECK(c.frames.size() == 4);
+    CHECK(c.skipped.size() == 2);
+    if (c.frames.size() == 4) {
+      CHECK_STR(c.frames[0], "hello");
+      CHECK_STR(c.frames[1], "world");
+      CHECK(c.frames[2] == std::string(64, 'y'));
+      CHECK_STR(c.frames[3], "end");
+    }
+    if (c.skipped.size() == 2) {
+      CHECK(c.skipped[0] == 200);
+      CHECK(c.skipped[1] == 65);
+    }
+    CHECK(!fa.desynced());
+  }
+
+  pagersync::FrameAssembler fa;
+  fa.init(buf, sizeof(buf));
+  Collector c;
+  CHECK(feedAll(fa, c, frameOf("") + frameOf("a"), 2));
+  CHECK(c.frames.size() == 1);
+
+  std::string huge;
+  huge += (char)0x7F; huge += (char)0xFF; huge += (char)0xFF; huge += (char)0xFF;
+  Collector c2;
+  fa.reset();
+  CHECK(!feedAll(fa, c2, huge, 4));
+  CHECK(fa.desynced());
+  fa.reset();
+  CHECK(!fa.desynced());
+
+  std::string mid = frameOf(std::string(300, 'q'));
+  Collector c3;
+  CHECK(feedAll(fa, c3, mid.substr(0, 100), 50));
+  CHECK(c3.skipped.empty());
+  CHECK(feedAll(fa, c3, mid.substr(100) + frameOf("ok"), 33));
+  CHECK(c3.skipped.size() == 1);
+  CHECK(c3.frames.size() == 1);
+}
+
+static void testFilteredLargeFrame() {
+#ifdef HAVE_ARDUINOJSON
+  JsonDocument filter;
+  filter["type"] = true;
+  filter["rev"] = true;
+  filter["roleCues"] = true;
+  JsonObject m = filter["messages"][0].to<JsonObject>();
+  m["id"] = true;
+  m["text"] = true;
+  std::string src = "{\"type\":\"PONG\",\"rev\":9,\"junk\":{\"a\":[1,2,3]},\"roleCues\":[{\"id\":\"host\"}],\"messages\":[";
+  for (int i = 0; i < 20; i++) {
+    if (i) src += ",";
+    src += "{\"id\":\"m" + std::to_string(i) + "\",\"text\":\"t\",\"extra\":\"" + std::string(100, 'e') + "\"}";
+  }
+  src += "]}";
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, src.data(), src.size(), DeserializationOption::Filter(filter));
+  CHECK(!err);
+  CHECK(doc["messages"].size() == 20);
+  CHECK(doc["messages"][0]["extra"].isNull());
+  CHECK(doc["junk"].isNull());
+  CHECK(doc["rev"].as<int>() == 9);
+  CHECK(doc["roleCues"].is<JsonArrayConst>());
+  JsonDocument bad;
+  CHECK(deserializeJson(bad, src.data(), src.size() / 2, DeserializationOption::Filter(filter)));
+#endif
 }
 
 static void testJson64() {
@@ -201,6 +444,12 @@ int main() {
   testProducerNow();
   testAnchor();
   testRevGuard();
+  testEpoch();
+  testAnchorBounds();
+  testMessageOrder();
+  testSampleAging();
+  testFrameAssembler();
+  testFilteredLargeFrame();
   testJson64();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;

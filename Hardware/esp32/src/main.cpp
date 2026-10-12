@@ -226,6 +226,8 @@ static void handleSerialLine(String line) {
                     timer.title.c_str(), timer.remainingSeconds(), timer.isRunning, timer.isDurationActual,
                     engine.currentNote().c_str());
     }
+    Serial.printf("[serial] heap free=%u min=%u maxblock=%u\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
     cue::MessageView msg = engine.latestRelevantMessage();
     if (msg.found) {
       Serial.printf("[serial]   latest relevant message: \"%s\" (from=%s target=%s)\n",

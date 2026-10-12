@@ -121,7 +121,18 @@ static void ensureMessageScreen() {
   lv_obj_add_flag(messageDetail, LV_OBJ_FLAG_HIDDEN);
 }
 
+static int shownKind = -1;
+static String shownText;
+
+static bool messageScreenCurrent(int kind, const char *text) {
+  if (messageScreen && lv_scr_act() == messageScreen && shownKind == kind && shownText.equals(text)) return true;
+  shownKind = kind;
+  shownText = text;
+  return false;
+}
+
 static void showMessageScreen(const char *text) {
+  if (messageScreenCurrent(0, text)) return;
   ensureMessageScreen();
   lv_obj_add_flag(messageLogo, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(messageDetail, LV_OBJ_FLAG_HIDDEN);
@@ -142,6 +153,7 @@ static void showWifiHelpScreen(const char *title, const char *detail) {
 }
 
 static void showBrandedMessageScreen(const char *text) {
+  if (messageScreenCurrent(3, text)) return;
   ensureMessageScreen();
   lv_obj_clear_flag(messageLogo, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(messageDetail, LV_OBJ_FLAG_HIDDEN);
@@ -151,9 +163,14 @@ static void showBrandedMessageScreen(const char *text) {
 }
 
 static void showWaitingForDataScreen(bool wifiConnected) {
-  String msg = "Waiting for Producer...\n";
-  msg += wifiConnected ? "IP: " + WiFi.localIP().toString() : String("(WiFi not connected)");
-  showBrandedMessageScreen(msg.c_str());
+  char msg[80];
+  if (wifiConnected) {
+    IPAddress ip = WiFi.localIP();
+    snprintf(msg, sizeof(msg), "Waiting for Producer...\nIP: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+  } else {
+    snprintf(msg, sizeof(msg), "Waiting for Producer...\n(WiFi not connected)");
+  }
+  showBrandedMessageScreen(msg);
 }
 
 static lv_obj_t *pagerScreen = nullptr;
@@ -287,16 +304,32 @@ static void buildPagerScreen() {
   lv_obj_set_style_text_align(msgBannerLabel, LV_TEXT_ALIGN_CENTER, 0);
 }
 
-static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lanConnected) {
-  cue::RoleView role = engine.activeRole();
-  CueState state = role.state;
+struct PagerCache {
+  bool valid = false;
+  CueState state = CueState::Off;
+  int link = -1;
+  String role;
+  bool personShown = false;
+  String person;
+  bool timerShown = false;
+  bool timerHeader = false;
+  String title;
+  int remaining = 0;
+  bool remainingValid = false;
+  bool actual = false;
+  bool actualValid = false;
+  bool noteShown = false;
+  String note;
+  bool msgShown = false;
+  String msgId;
+  String msgText;
+};
 
+static PagerCache pc;
+
+static void applyStateColors(CueState state) {
   lv_obj_set_style_bg_color(pagerScreen, lv_color_hex(cueStateBgColor(state)), 0);
   lv_color_t textColor = lv_color_hex(cueStateTextColor(state));
-
-  String roleLabelText = role.name.length() > 0 ? role.name : engine.selectedRoleId();
-  lv_label_set_text(roleBtnLabel, roleLabelText.c_str());
-
   lv_obj_set_style_text_color(roleBtnLabel, textColor, 0);
   lv_obj_set_style_text_color(connLabel, textColor, 0);
   lv_obj_set_style_text_color(stateLabel, textColor, 0);
@@ -307,69 +340,114 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
   lv_obj_set_style_text_color(noteLabel, textColor, 0);
   lv_obj_set_style_img_recolor(roleBtnChevron, textColor, 0);
   lv_obj_set_style_img_recolor_opa(roleBtnChevron, LV_OPA_COVER, 0);
+}
+
+static void setHidden(lv_obj_t *obj, bool hidden) {
+  if (hidden) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lanConnected) {
+  const cue::RoleView *role = engine.activeRoleRef();
+  CueState state = role ? role->state : CueState::Off;
+
+  if (!pc.valid || state != pc.state) {
+    applyStateColors(state);
+    lv_label_set_text(stateLabel, cueStateDisplayName(state));
+    pc.state = state;
+  }
+
+  const String &roleLabelText = (role && role->name.length() > 0) ? role->name : engine.selectedRoleIdRef();
+  if (!pc.valid || !pc.role.equals(roleLabelText.c_str())) {
+    pc.role = roleLabelText;
+    lv_label_set_text(roleBtnLabel, pc.role.c_str());
+  }
 
   bool isLive = wifiConnected && lanConnected && engine.isProducerLive();
-  lv_obj_set_style_bg_color(connDot, isLive ? lv_palette_main(LV_PALETTE_GREEN) : lv_palette_main(LV_PALETTE_RED), 0);
-  if (!wifiConnected) {
-    lv_label_set_text(connLabel, "No WiFi");
-  } else if (!lanConnected) {
-    lv_label_set_text(connLabel, "Connecting...");
-  } else if (isLive) {
-    lv_label_set_text(connLabel, "Live");
-  } else {
-    lv_label_set_text(connLabel, "Disconnected");
+  int link = !wifiConnected ? 0 : !lanConnected ? 1 : isLive ? 2 : 3;
+  if (!pc.valid || link != pc.link) {
+    pc.link = link;
+    lv_obj_set_style_bg_color(connDot, isLive ? lv_palette_main(LV_PALETTE_GREEN) : lv_palette_main(LV_PALETTE_RED), 0);
+    lv_label_set_text(connLabel, link == 0 ? "No WiFi" : link == 1 ? "Connecting..." : link == 2 ? "Live" : "Disconnected");
   }
 
-  lv_label_set_text(stateLabel, cueStateDisplayName(state));
-
-  if (role.personName.length() > 0) {
-    String forLine = "FOR: " + role.personName;
-    forLine.toUpperCase();
-    lv_label_set_text(personLabel, forLine.c_str());
-    lv_obj_clear_flag(personLabel, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(personLabel, LV_OBJ_FLAG_HIDDEN);
-  }
-
-  cue::TimerView timer = engine.activeTimer();
-  if (timer.found) {
-    lv_obj_clear_flag(itemCard, LV_OBJ_FLAG_HIDDEN);
-    String title = timer.title;
-    title.toUpperCase();
-    lv_label_set_text(itemTitleLabel, title.c_str());
-
-    if (timer.isHeader()) {
-      lv_obj_add_flag(timerLabel, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(projActualLabel, LV_OBJ_FLAG_HIDDEN);
-    } else {
-      lv_obj_clear_flag(timerLabel, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_clear_flag(projActualLabel, LV_OBJ_FLAG_HIDDEN);
-      int remaining = timer.remainingSeconds();
-      int absRemaining = remaining < 0 ? -remaining : remaining;
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%s%02d:%02d", remaining < 0 ? "+" : "", absRemaining / 60, absRemaining % 60);
-      lv_label_set_text(timerLabel, buf);
-      lv_label_set_text(projActualLabel, timer.isDurationActual ? "ACTUAL" : "PROJECTED");
+  bool personShown = role && role->personName.length() > 0;
+  if (!pc.valid || personShown != pc.personShown || (personShown && !pc.person.equals(role->personName.c_str()))) {
+    pc.personShown = personShown;
+    if (personShown) {
+      pc.person = role->personName;
+      String forLine = "FOR: " + role->personName;
+      forLine.toUpperCase();
+      lv_label_set_text(personLabel, forLine.c_str());
     }
-  } else {
-    lv_obj_add_flag(itemCard, LV_OBJ_FLAG_HIDDEN);
+    setHidden(personLabel, !personShown);
   }
 
-  String note = engine.currentNote();
-  if (note.length() > 0) {
-    lv_label_set_text(noteLabel, note.c_str());
-    lv_obj_clear_flag(noteLabel, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(noteLabel, LV_OBJ_FLAG_HIDDEN);
+  bool timerShown = engine.timerFound();
+  bool header = timerShown && engine.timerIsHeader();
+  bool actual = engine.timerIsDurationActual();
+  if (!pc.valid || timerShown != pc.timerShown) {
+    pc.timerShown = timerShown;
+    setHidden(itemCard, !timerShown);
+    pc.remainingValid = false;
+  }
+  if (timerShown) {
+    const String &titleSrc = engine.timerTitle();
+    if (!pc.valid || !pc.title.equals(titleSrc.c_str())) {
+      pc.title = titleSrc;
+      String title = titleSrc;
+      title.toUpperCase();
+      lv_label_set_text(itemTitleLabel, title.c_str());
+    }
+    if (!pc.valid || header != pc.timerHeader) {
+      pc.timerHeader = header;
+      setHidden(timerLabel, header);
+      setHidden(projActualLabel, header);
+      pc.remainingValid = false;
+    }
+    if (!header) {
+      int remaining = engine.timerRemainingSeconds();
+      if (!pc.remainingValid || remaining != pc.remaining) {
+        pc.remaining = remaining;
+        pc.remainingValid = true;
+        int absRemaining = remaining < 0 ? -remaining : remaining;
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%s%02d:%02d", remaining < 0 ? "+" : "", absRemaining / 60, absRemaining % 60);
+        lv_label_set_text(timerLabel, buf);
+      }
+      if (!pc.valid || !pc.actualValid || actual != pc.actual) {
+        pc.actual = actual;
+        pc.actualValid = true;
+        lv_label_set_text(projActualLabel, actual ? "ACTUAL" : "PROJECTED");
+      }
+    }
   }
 
-  cue::MessageView msg = engine.latestRelevantMessage();
-  if (msg.found) {
-    lv_label_set_text(msgBannerLabel, msg.text.c_str());
-    lv_obj_clear_flag(msgBanner, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(msgBanner, LV_OBJ_FLAG_HIDDEN);
+  const char *note = engine.currentNoteText();
+  bool noteShown = note[0] != '\0';
+  if (!pc.valid || noteShown != pc.noteShown || (noteShown && !pc.note.equals(note))) {
+    pc.noteShown = noteShown;
+    if (noteShown) {
+      pc.note = note;
+      lv_label_set_text(noteLabel, note);
+    }
+    setHidden(noteLabel, !noteShown);
   }
+
+  const cue::MessageView *msg = engine.latestRelevantMessageRef();
+  bool msgShown = msg != nullptr;
+  if (!pc.valid || msgShown != pc.msgShown ||
+      (msgShown && (!pc.msgId.equals(msg->id.c_str()) || !pc.msgText.equals(msg->text.c_str())))) {
+    pc.msgShown = msgShown;
+    if (msgShown) {
+      pc.msgId = msg->id;
+      pc.msgText = msg->text;
+      lv_label_set_text(msgBannerLabel, msg->text.c_str());
+    }
+    setHidden(msgBanner, !msgShown);
+  }
+
+  pc.valid = true;
 }
 
 static const int kMaxRolePickerRows = 8;
@@ -513,12 +591,15 @@ void update(Phase phase, cue::Engine &engine, bool wifiConnected, bool lanConnec
       buildRolePickerScreen(engine);
       rolePickerNeedsBuild = false;
     }
-    lv_scr_load(rolePickerScreen);
+    if (lv_scr_act() != rolePickerScreen) lv_scr_load(rolePickerScreen);
     return;
   }
 
   if (!pagerScreen) buildPagerScreen();
-  lv_scr_load(pagerScreen);
+  if (lv_scr_act() != pagerScreen) {
+    lv_scr_load(pagerScreen);
+    pc.valid = false;
+  }
   refreshPagerScreen(engine, wifiConnected, lanConnected);
 }
 

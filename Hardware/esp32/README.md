@@ -63,7 +63,27 @@ everything it sends is handled exactly as before. Against a v2 producer
   timer and message ids). A mismatch sends one catch-up `PING`.
 - treats the producer as lost after 25 s of silence (12 s for a legacy one).
 
-The pure logic (hash, offset estimator, anchor math, rev guard) lives in
+Spec v2.1 on the device: a changed `epoch` discards the anchor, rev gate and
+clock samples and triggers a sync burst plus one catch-up `PING`; packets with a
+`to` other than this device are ignored; v2 is only inferred from packets
+addressed to this device; clock samples age out after 90 s and are discarded
+when a fresh one diverges by more than `max(50 ms, 2*rtt)`; non-`PONG` `rev`
+must be strictly greater than the held one (`DIGEST` may equal it, since it
+repeats the current `rev`) and a jump over 1,000,000 is ignored; anchors outside
+the spec bounds are ignored; messages sort by timestamp descending then id
+ascending and a v2 `PONG` replaces the list.
+
+Receive path: frames are reassembled into a heap buffer of up to 12 KB (4 KB
+fallback when free heap is short; see `kRxBufPreferred` in `lan_client.cpp`).
+Larger frames are consumed and discarded without dropping the connection and a
+catch-up `PING` follows after 5 s. Packets are parsed with an ArduinoJson filter
+that keeps only the fields the pager uses. A parse failure is logged and
+requests a (rate-limited) catch-up. If the producer is silent for the
+staleness limit plus 5 s the pager sends one `PING`, and closes the socket if
+nothing arrives within another 5 s. `status` also prints free, minimum free and
+largest-block heap.
+
+The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly) lives in
 `src/sync/sync_core.h` with no Arduino dependency. The host test runs on a Mac
 without hardware:
 

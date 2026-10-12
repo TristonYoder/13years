@@ -7,6 +7,7 @@
 using cue::Engine;
 
 void Engine::begin() {
+  clock_.setMaxAbsOffsetMs(kMaxMonotonicOffsetMs);
   selectedRoleId_ = store::getRoleId();
 }
 
@@ -42,15 +43,38 @@ void Engine::onConnected() {
   producerV2_ = false;
   rev_.reset();
   clock_.reset();
+  epoch_.reset();
   catchUpWanted_ = false;
+  syncBurstWanted_ = false;
+  noOffsetBurstDone_ = false;
   messageMismatchStreak_ = 0;
   anchorKnown_ = false;
+  lastRxAnyMillis_ = millis();
 }
 
 bool Engine::takeCatchUpRequest() {
   bool wanted = catchUpWanted_;
   catchUpWanted_ = false;
   return wanted;
+}
+
+bool Engine::takeSyncBurstRequest() {
+  bool wanted = syncBurstWanted_;
+  syncBurstWanted_ = false;
+  return wanted;
+}
+
+void Engine::resetForEpochChange() {
+  Serial.println("[cue] producer epoch changed — discarding anchor, rev gate and clock samples");
+  anchor_ = pagersync::Anchor();
+  anchored_ = false;
+  anchorKnown_ = false;
+  rev_.reset();
+  clock_.reset();
+  messageMismatchStreak_ = 0;
+  syncBurstWanted_ = true;
+  noOffsetBurstDone_ = true;
+  catchUpWanted_ = true;
 }
 
 void Engine::handleSyncReply(JsonObjectConst doc) {
@@ -117,13 +141,23 @@ void Engine::applyCueDeltas(JsonArrayConst deltas) {
   }
 }
 
-void Engine::applyAnchor(JsonVariantConst a) {
+static bool anchorPayloadOk(JsonVariantConst a) {
+  if (!a.is<JsonObjectConst>()) return true;
+  JsonObjectConst o = a.as<JsonObjectConst>();
+  return pagersync::anchorInBounds(jsonInt64(o["lengthInSeconds"]), jsonInt64(o["elapsedMs"]));
+}
+
+bool Engine::applyAnchor(JsonVariantConst a) {
+  if (!anchorPayloadOk(a)) {
+    Serial.println("[cue] anchor out of bounds — ignored");
+    return false;
+  }
   anchorKnown_ = true;
   if (!a.is<JsonObjectConst>()) {
     anchor_ = pagersync::Anchor();
     anchored_ = false;
     timer_.found = false;
-    return;
+    return true;
   }
   JsonObjectConst o = a.as<JsonObjectConst>();
   anchor_.valid = true;
@@ -139,42 +173,111 @@ void Engine::applyAnchor(JsonVariantConst a) {
   timer_.lengthInSeconds = (int)anchor_.lengthInSeconds;
   timer_.isRunning = anchor_.isRunning;
   timer_.isDurationActual = anchor_.isDurationActual;
+  return true;
+}
+
+static JsonDocument &packetFilter() {
+  static JsonDocument filter;
+  static bool built = false;
+  if (!built) {
+    built = true;
+    filter["type"] = true;
+    filter["senderId"] = true;
+    filter["to"] = true;
+    filter["rev"] = true;
+    filter["epoch"] = true;
+    filter["t0"] = true;
+    filter["t1"] = true;
+    filter["t2"] = true;
+    filter["roleCues"] = true;
+    filter["timerItem"] = true;
+    filter["anchor"] = true;
+    filter["hashes"] = true;
+    filter["cueDeltas"] = true;
+    filter["message"] = true;
+    JsonObject m = filter["messages"][0].to<JsonObject>();
+    m["id"] = true;
+    m["sender"] = true;
+    m["text"] = true;
+    m["targetRoleId"] = true;
+    m["senderRoleId"] = true;
+    m["timestamp"] = true;
+    m["isHighPriority"] = true;
+  }
+  return filter;
 }
 
 void Engine::handlePacketJson(const char *json, size_t len) {
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, json, len);
-  if (err) return;
+  DeserializationError err = deserializeJson(doc, json, len, DeserializationOption::Filter(packetFilter()));
+  if (err) {
+    Serial.printf("[cue] packet parse failed: %s (%u bytes, free heap %u)\n", err.c_str(), (unsigned)len, (unsigned)ESP.getFreeHeap());
+    unsigned long now = millis();
+    if (now - lastParseErrorCatchUpMillis_ >= kCatchUpRateLimitMs) {
+      lastParseErrorCatchUpMillis_ = now;
+      catchUpWanted_ = true;
+    }
+    return;
+  }
 
   const char *senderId = doc["senderId"] | "";
-  if (String(senderId) == store::deviceId()) return;
+  if (store::deviceId().equals(senderId)) return;
+
+  bool hasTo = doc["to"].is<const char *>();
+  if (hasTo && !store::deviceId().equals(doc["to"].as<const char *>())) return;
+
+  lastRxAnyMillis_ = millis();
 
   const char *type = doc["type"] | "";
   int64_t rev = doc["rev"].isNull() ? -1 : jsonInt64(doc["rev"], -1);
 
   bool isCueUpdate = strcmp(type, "CUE_UPDATE") == 0;
+  bool isTimerUpdate = strcmp(type, "TIMER_UPDATE") == 0;
   bool isPong = strcmp(type, "PONG") == 0;
   bool isAnchor = strcmp(type, "TIMER_ANCHOR") == 0;
   bool isDelta = strcmp(type, "CUE_DELTA") == 0;
   bool isDigest = strcmp(type, "DIGEST") == 0;
   bool isSyncReply = strcmp(type, "SYNC_REPLY") == 0;
 
-  if (isCueUpdate || strcmp(type, "TIMER_UPDATE") == 0 || isPong) {
+  if (isSyncReply && !hasTo) return;
+
+  bool epochChanged = false;
+  if (!doc["epoch"].isNull() && (isPong || isAnchor || isDelta || isDigest || isSyncReply)) {
+    epochChanged = epoch_.observe(jsonInt64(doc["epoch"], 0));
+    if (epochChanged) resetForEpochChange();
+  }
+
+  if (isCueUpdate || isTimerUpdate || isPong) {
     hasSyncedWithProducer_ = true;
     lastProducerPacketAtMillis_ = millis();
   }
 
-  if (isAnchor || isDelta || isDigest || isSyncReply) {
+  bool v2Evidence = isAnchor || isDelta || isDigest || isSyncReply || (isPong && rev >= 0);
+  if (v2Evidence) {
     producerV2_ = true;
     lastProducerPacketAtMillis_ = millis();
+    if (!isSyncReply && !clock_.hasOffset() && !noOffsetBurstDone_) {
+      noOffsetBurstDone_ = true;
+      syncBurstWanted_ = true;
+    }
   }
 
+  if (producerV2_ && rev < 0 && (isCueUpdate || isTimerUpdate)) {
+    unsigned long now = millis();
+    if (now - lastLegacyCatchUpMillis_ >= kCatchUpRateLimitMs) {
+      lastLegacyCatchUpMillis_ = now;
+      catchUpWanted_ = true;
+    }
+  }
+
+  bool pongV2 = isPong && rev >= 0;
   if (isPong) {
-    if (!doc["rev"].isNull()) producerV2_ = true;
-    rev_.resetTo(rev);
+    if (pongV2) rev_.accept(rev, pagersync::RevKind::Rebase);
     messageMismatchStreak_ = 0;
-  } else if ((isCueUpdate || isAnchor || isDelta || isDigest) && !rev_.accept(rev)) {
-    return;
+  } else if (isCueUpdate || isAnchor || isDelta) {
+    if (!rev_.accept(rev, pagersync::RevKind::Strict, epochChanged)) return;
+  } else if (isDigest) {
+    if (!rev_.accept(rev, pagersync::RevKind::NotLower, epochChanged)) return;
   }
 
   if (isSyncReply) {
@@ -189,24 +292,33 @@ void Engine::handlePacketJson(const char *json, size_t len) {
 
   if (isCueUpdate || isPong) {
     if (doc["roleCues"].is<JsonArrayConst>()) applyRoleCues(doc["roleCues"].as<JsonArrayConst>());
-    bool hasAnchor = doc.as<JsonObjectConst>()["anchor"].is<JsonObjectConst>();
-    if (doc["timerItem"].is<JsonObjectConst>()) {
-      applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), hasAnchor || !(anchored_ && producerV2_));
+    bool hasAnchor = doc["anchor"].is<JsonObjectConst>();
+    bool anchorOk = !hasAnchor || anchorPayloadOk(doc["anchor"]);
+    if (anchorOk) {
+      if (doc["timerItem"].is<JsonObjectConst>()) {
+        applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), hasAnchor || !(anchored_ && producerV2_));
+      }
+      if (hasAnchor) applyAnchor(doc["anchor"]);
+    } else {
+      Serial.println("[cue] anchor out of bounds — timer ignored");
     }
-    if (hasAnchor) applyAnchor(doc["anchor"]);
     if (doc["messages"].is<JsonArrayConst>()) {
-      if (isPong && producerV2_) {
+      if (pongV2) {
         messageCount_ = 0;
         messagesOverflowed_ = false;
       }
       mergeMessages(doc["messages"].as<JsonArrayConst>());
     }
   } else if (isAnchor) {
+    if (!anchorPayloadOk(doc["anchor"])) {
+      Serial.println("[cue] anchor out of bounds — ignored");
+      return;
+    }
     if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), false);
     applyAnchor(doc["anchor"]);
   } else if (isDelta) {
     if (doc["cueDeltas"].is<JsonArrayConst>()) applyCueDeltas(doc["cueDeltas"].as<JsonArrayConst>());
-  } else if (strcmp(type, "TIMER_UPDATE") == 0) {
+  } else if (isTimerUpdate) {
     if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>());
   } else if (strcmp(type, "MESSAGE") == 0) {
     if (doc["message"].is<JsonObjectConst>()) addOneMessage(doc["message"].as<JsonObjectConst>());
@@ -278,14 +390,32 @@ void Engine::applyTimerItem(JsonObjectConst t, bool timing) {
   }
 }
 
+void Engine::insertMessageSorted(const MessageView &v) {
+  for (int i = 0; i < messageCount_; i++) {
+    if (messages_[i].id == v.id) {
+      for (int j = i; j < messageCount_ - 1; j++) messages_[j] = messages_[j + 1];
+      messageCount_--;
+      break;
+    }
+  }
+  int pos = 0;
+  while (pos < messageCount_ &&
+         pagersync::messageOrderBefore(messages_[pos].timestamp, messages_[pos].id.c_str(), v.timestamp, v.id.c_str())) {
+    pos++;
+  }
+  if (messageCount_ >= kMaxMessages) {
+    messagesOverflowed_ = true;
+    if (pos >= kMaxMessages) return;
+    messageCount_ = kMaxMessages - 1;
+  }
+  for (int j = messageCount_; j > pos; j--) messages_[j] = messages_[j - 1];
+  messages_[pos] = v;
+  messageCount_++;
+}
+
 void Engine::addOneMessage(JsonObjectConst msg) {
   String id = msg["id"] | "";
   if (id.length() == 0) return;
-
-  int existingIndex = -1;
-  for (int i = 0; i < messageCount_; i++) {
-    if (messages_[i].id == id) { existingIndex = i; break; }
-  }
 
   MessageView v;
   v.found = true;
@@ -296,25 +426,7 @@ void Engine::addOneMessage(JsonObjectConst msg) {
   v.senderRoleId = msg["senderRoleId"] | "";
   v.timestamp = msg["timestamp"] | 0.0;
   v.isHighPriority = msg["isHighPriority"] | false;
-
-  if (existingIndex >= 0) {
-    messages_[existingIndex] = v;
-  } else if (messageCount_ < kMaxMessages) {
-    messages_[messageCount_++] = v;
-  } else {
-    messages_[kMaxMessages - 1] = v;
-    messagesOverflowed_ = true;
-  }
-
-  for (int i = messageCount_ - 1; i > 0; i--) {
-    if (messages_[i].timestamp > messages_[i - 1].timestamp) {
-      MessageView tmp = messages_[i];
-      messages_[i] = messages_[i - 1];
-      messages_[i - 1] = tmp;
-    } else {
-      break;
-    }
-  }
+  insertMessageSorted(v);
 }
 
 void Engine::mergeMessages(JsonArrayConst msgs) {
@@ -361,4 +473,39 @@ void Engine::checkForRelevantNewMessage() {
   lastSeenMessageId_ = latest.id;
   if (latest.senderRoleId == selectedRoleId_) return;
   if (onMessageReceived) onMessageReceived(activeRole().state);
+}
+
+const cue::RoleView *Engine::activeRoleRef() const {
+  for (int i = 0; i < roleCount_; i++) {
+    if (roles_[i].id == selectedRoleId_) return &roles_[i];
+  }
+  if (roleCount_ > 0) return &roles_[0];
+  return nullptr;
+}
+
+const cue::MessageView *Engine::latestRelevantMessageRef() const {
+  for (int i = 0; i < messageCount_; i++) {
+    if (messages_[i].targetRoleId.length() == 0 || messages_[i].targetRoleId == selectedRoleId_) {
+      return &messages_[i];
+    }
+  }
+  return nullptr;
+}
+
+const char *Engine::currentNoteText() const {
+  const RoleView *role = activeRoleRef();
+  if (!role || role->assignedNoteCategoryCount == 0 || !timer_.found) return "";
+  for (int i = 0; i < noteCount_; i++) {
+    if (role->hasNoteCategory(notes_[i].category)) return notes_[i].text.c_str();
+  }
+  return "";
+}
+
+int Engine::timerRemainingSeconds() const {
+  if (anchored_ && anchor_.valid && timer_.found) {
+    return (int)pagersync::anchorRemainingSeconds(anchor_, producerNowMs());
+  }
+  int elapsed = timer_.elapsedSecondsAtSync;
+  if (timer_.isRunning) elapsed += (int)((millis() - timer_.syncedAtMillis) / 1000UL);
+  return timer_.lengthInSeconds - elapsed;
 }
