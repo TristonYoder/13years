@@ -54,6 +54,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var isOvertime: Bool
         public var formattedRemaining: String
         public var isDurationActualForDisplay: Bool
+        public var anchor: TimerAnchor?
     }
 
     public struct PlanStatus: Codable, Sendable {
@@ -394,4 +395,66 @@ public struct ControlAPITimerState: Codable, Sendable {
         try container.encode(serverNowMs, forKey: .serverNowMs)
         try container.encode(timer, forKey: .timer)
     }
+}
+
+
+public struct ControlAPIDigest: Codable, Sendable, Equatable {
+    public var rev: Int
+    public var serverNowMs: Int
+    public var hashes: SyncHash.Hashes
+
+    public init(rev: Int, serverNowMs: Int, hashes: SyncHash.Hashes) {
+        self.rev = rev
+        self.serverNowMs = serverNowMs
+        self.hashes = hashes
+    }
+}
+
+public struct ControlAPISyncReply: Codable, Sendable, Equatable {
+    public var t0: Int
+    public var t1: Int
+    public var t2: Int
+
+    public init(t0: Int, t1: Int, t2: Int) {
+        self.t0 = t0
+        self.t1 = t1
+        self.t2 = t2
+    }
+}
+
+public extension ControlAPIRequests {
+    struct SyncBody: Decodable, Sendable {
+        public var t0: Int
+
+        private enum CodingKeys: String, CodingKey { case t0 }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            if let whole = try? container.decode(Int.self, forKey: .t0) {
+                t0 = whole
+            } else {
+                t0 = Int(try container.decode(Double.self, forKey: .t0).rounded())
+            }
+        }
+    }
+
+    struct ProtoBody: Decodable, Sendable {
+        public var version: Int
+    }
+}
+
+public final class ControlAPIConnection: @unchecked Sendable {
+    public static let supportedVersions = [1, 2]
+
+    private let lock = NSLock()
+    private var storedVersion = 1
+
+    public init() {}
+
+    public var protocolVersion: Int {
+        get { lock.lock(); defer { lock.unlock() }; return storedVersion }
+        set { lock.lock(); defer { lock.unlock() }; storedVersion = newValue }
+    }
+
+    public var isV2: Bool { protocolVersion >= 2 }
 }

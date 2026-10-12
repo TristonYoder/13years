@@ -107,6 +107,7 @@ public final class ControlAPIServer: @unchecked Sendable {
         let connection: NWConnection
         var buffer: [UInt8] = []
         var isWebSocket = false
+        let session = ControlAPIConnection()
         var inFlightBroadcasts = 0
         let assembler = WebSocketMessageAssembler()
 
@@ -228,8 +229,9 @@ public final class ControlAPIServer: @unchecked Sendable {
         }
 
         let router = self.router
+        let receivedAtMs = Self.nowMs()
         Task { @MainActor in
-            var response = router.handle(request)
+            var response = router.handle(request, receivedAtMs: receivedAtMs)
             response.headers.merge(Self.corsHeaders) { current, _ in current }
             self.queue.async { self.write(response, to: client, close: false) }
         }
@@ -321,8 +323,10 @@ public final class ControlAPIServer: @unchecked Sendable {
                 return true
             }
             let router = self.router
+            let session = client.session
+            let receivedAtMs = Self.nowMs()
             Task { @MainActor in
-                let reply = router.handleCommand(command)
+                let reply = router.handleCommand(command, connection: session, receivedAtMs: receivedAtMs)
                 self.queue.async { self.sendJSON(reply, to: client) }
             }
             return true
@@ -343,11 +347,26 @@ public final class ControlAPIServer: @unchecked Sendable {
         send(WebSocketCodec.text(text), to: client)
     }
 
-    public func broadcast(_ text: String) {
+    private static func nowMs() -> Int {
+        Int((Date().timeIntervalSince1970 * 1000).rounded())
+    }
+
+    public enum BroadcastAudience: Sendable {
+        case all
+        case legacy
+        case v2
+    }
+
+    public func broadcast(_ text: String, to audience: BroadcastAudience = .all) {
         queue.async { [self] in
             guard !clients.isEmpty else { return }
             let frame = WebSocketCodec.encode(WebSocketCodec.text(text))
             for (_, client) in clients where client.isWebSocket {
+                switch audience {
+                case .all: break
+                case .legacy: if client.session.isV2 { continue }
+                case .v2: if !client.session.isV2 { continue }
+                }
                 guard client.inFlightBroadcasts < Self.maxInFlightBroadcasts else { continue }
                 client.inFlightBroadcasts += 1
                 client.connection.send(content: frame, completion: .contentProcessed { error in

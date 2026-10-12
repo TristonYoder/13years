@@ -11,14 +11,18 @@ public final class ControlAPIRouter {
     private unowned let engine: CueEngine
     private let connectedClientCount: @MainActor () -> Int
     private var revision = 0
+    private var activeConnection: ControlAPIConnection?
+    private var activeReceivedAtMs: Int?
 
     public init(engine: CueEngine, connectedClientCount: @escaping @MainActor () -> Int = { 0 }) {
         self.engine = engine
         self.connectedClientCount = connectedClientCount
     }
 
-    public func handle(_ request: HTTPRequest) -> HTTPResponse {
+    public func handle(_ request: HTTPRequest, receivedAtMs: Int? = nil) -> HTTPResponse {
         if let response = WebPager.route(request) { return response }
+        activeReceivedAtMs = receivedAtMs
+        defer { activeReceivedAtMs = nil }
 
         let segments = request.path.split(separator: "/").map(String.init)
         guard segments.first == "v1" else {
@@ -27,7 +31,13 @@ public final class ControlAPIRouter {
         return dispatch(method: request.method.uppercased(), route: Array(segments.dropFirst()), body: request.body)
     }
 
-    public func handleCommand(_ command: ControlAPICommand) -> ControlAPICommandReply {
+    public func handleCommand(_ command: ControlAPICommand, connection: ControlAPIConnection? = nil, receivedAtMs: Int? = nil) -> ControlAPICommandReply {
+        activeConnection = connection
+        activeReceivedAtMs = receivedAtMs
+        defer {
+            activeConnection = nil
+            activeReceivedAtMs = nil
+        }
         let route = command.op
             .split(whereSeparator: { $0 == "." || $0 == "/" })
             .map(String.init)
@@ -77,6 +87,24 @@ public final class ControlAPIRouter {
         case "state":
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(snapshot())
+
+        case "sync":
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.SyncBody.self, body) else { return badBody() }
+            let receivedAt = activeReceivedAtMs ?? Self.nowMs()
+            return json(ControlAPISyncReply(t0: request.t0, t1: receivedAt, t2: Self.nowMs()))
+
+        case "proto":
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard let connection = activeConnection else {
+                return Self.error(400, "proto is a WebSocket op", detail: "Send it as {\"op\":\"proto\",\"body\":{\"version\":2}} on /v1/socket.")
+            }
+            guard let request = decode(ControlAPIRequests.ProtoBody.self, body) else { return badBody() }
+            guard ControlAPIConnection.supportedVersions.contains(request.version) else {
+                return Self.error(400, "Unsupported protocol version", detail: "Supported: 1, 2")
+            }
+            connection.protocolVersion = request.version
+            return json(["version": request.version])
 
         case "roles":
             if allows(method, "GET") { return json(engine.roles) }
@@ -774,6 +802,7 @@ public final class ControlAPIRouter {
     }
 
     private func activeTimer() -> ControlAPIState.ActiveTimer? {
+        let anchor = engine.currentAnchor
         guard let item = engine.activeTimerItem else { return nil }
         return ControlAPIState.ActiveTimer(
             item: item,
@@ -782,7 +811,21 @@ public final class ControlAPIRouter {
             remainingSeconds: item.remainingSeconds,
             isOvertime: item.isOvertime,
             formattedRemaining: TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold),
-            isDurationActualForDisplay: engine.activeTimerActualForDisplay
+            isDurationActualForDisplay: engine.activeTimerActualForDisplay,
+            anchor: anchor
+        )
+    }
+
+    public func digest() -> ControlAPIDigest {
+        ControlAPIDigest(
+            rev: revision,
+            serverNowMs: Self.nowMs(),
+            hashes: SyncHash.Hashes(
+                roles: SyncHash.roles(engine.roles),
+                timer: SyncHash.timer(engine.currentAnchor),
+                plan: SyncHash.plan(items: engine.planItems, activeItemIndex: engine.activeItemIndex),
+                messages: SyncHash.messages(engine.recentMessages)
+            )
         )
     }
 

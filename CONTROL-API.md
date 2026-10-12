@@ -192,6 +192,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 **Key pieces:**
 - **`appMode`** is one of the app's internal display modes (`producerControl`, `pagerLive`, etc.), expressed as the wire value. These are stable identifiers, not UI labels — `producerControl` is the section the Producer now shows as "Pagers".
 - **`notificationsClearedAt`** is the line between "already dealt with" and "somebody should be looking at this". A message newer than it is still notifying; everything at or before it has been acknowledged. `null` means nothing has ever been cleared. This is how a producer takes a message off a lower third without deleting the thread — a separate act from `DELETE /v1/messages`, and the reason both exist.
+- **`timer.anchor`** (additive) is the Sync Protocol v2 anchor, always present when `timer` is not `null`: `{"itemId", "lengthInSeconds", "elapsedMs", "anchorMs", "isRunning", "isDurationActual"}`. `elapsedMs` was true at `anchorMs` (producer epoch milliseconds); while `isRunning`, a client computes `elapsedMs + (producerNow - anchorMs)`, floors to seconds, and the digits flip at `anchorMs + k * 1000` on the producer clock. See [Clock sync and the anchor](#clock-sync-and-the-anchor-protocol-v2).
 - **`timer`** is `null` when no plan is loaded or when the loaded plan is nothing but headers — there's genuinely no active item then, and inventing a placeholder would make "is something running?" unanswerable.
 - **`roles`**, **`plan.items`**, **`messages`** use the app's own `Codable` models verbatim (`RoleCue`, `PCOTimerItem`, `InterTeamMessage`). An integrator reading this API and someone reading `Server/PROTOCOL.md` see one vocabulary.
 - **`formattedRemaining`** is the time string the producer's own screen shows, run through `TimeFormatting.string` so a Stream Deck button and the UI can't disagree about when a countdown reads `1:35:00` versus `95:00`.
@@ -353,6 +354,12 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 | `GET /v1/ui/mode` | GET | The current app mode (display screen). Returns `{"mode": "string"}`. |
 | `POST /v1/ui/mode` | POST | Switch the app's display mode. Body: `{"mode": "string"}`. Mode must be one of the app's actual `AppMode` cases (e.g., `producerControl`, `pagerLive`). Accepts either uppercase wire form (PRODUCER_CONTROL) or camelCase (producerControl). Returns `{"mode": "string"}`. |
 
+### Sync
+
+| Route | Method | What It Does |
+| --- | --- | --- |
+| `POST /v1/sync` | POST | Clock measurement for Sync Protocol v2. Body: `{"t0": number}` (the caller's send time, epoch ms). Returns `{"t0", "t1", "t2"}` where `t0` is echoed, `t1` is the producer clock (epoch ms) when the request was received and `t2` when the reply was built. See [Clock sync and the anchor](#clock-sync-and-the-anchor-protocol-v2). |
+
 ### Settings
 
 | Route | Method | Purpose |
@@ -401,7 +408,7 @@ Then, as the show runs:
 }
 ```
 
-`state` and `timer` events are coalesced; they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync.
+`state` and `timer` events are coalesced; on a legacy socket they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync. A socket that has negotiated protocol v2 (below) gets `timer` events only when the timer actually changes.
 
 ```json
 {
@@ -420,6 +427,31 @@ When the only thing that changed since the last push is the active timer (its re
 ```
 
 When a message is sent, each connected socket receives a `message` event (in addition to the next `state` event that includes the updated message list).
+
+### Clock sync and the anchor (protocol v2)
+
+Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PROTOCOL-V2.md](Server/PROTOCOL-V2.md). A socket that never negotiates it behaves exactly as described above, including the 1 Hz `timer` events. A producer that does not know the `proto` op answers it with an error status, and a client then simply stays on legacy behaviour.
+
+**Negotiation.** After the socket opens, send `{"id":"1","op":"proto","body":{"version":2}}`. The reply is `{"id":"1","status":200,"data":{"version":2}}`. The setting belongs to that connection only. `version: 1` returns the socket to legacy behaviour; any other value is a 400. The op does not exist over REST (400).
+
+**Clock measurement.** `{"id":"2","op":"sync","body":{"t0":<client send, epoch ms>}}` (or `POST /v1/sync` with the same body) returns `{"t0","t1","t2"}`: `t1` is the producer's clock when it received the request, `t2` when it replied. With `t3` the client's receive time, `rtt = (t3 - t0) - (t2 - t1)` and `offset = ((t1 - t0) + (t2 - t3)) / 2`, where `offset` is producer time minus local time. Keep the last 8 samples and use the one with the smallest `rtt`; send 5 samples (100 ms apart) on connect, one every 30 s, and one on every return to foreground. Apply a new offset gradually: move 25% of the way if it changed by under 20 ms, otherwise jump. `producerNow = localNow + offset`.
+
+**Timer.** Every `timer` object carries `anchor` (see above). A v2 client runs its timer locally from `anchor` and `producerNow` and does not wait for ticks. On a v2 socket the `timer` event is sent only when something about the timer changes (start, pause, reset, adjust, item change, Projected/Actual change, live-sync correction), never once a second.
+
+**Digest.** Every 10 seconds a v2 socket receives
+
+```json
+{
+  "event": "digest",
+  "data": {
+    "rev": 130,
+    "serverNowMs": 1760000010000,
+    "hashes": { "roles": "aded3b3c0e486304", "timer": "20a9d930a0849518", "plan": "218cc3247b5ee3f9", "messages": "dddb4a3dc4d94432" }
+  }
+}
+```
+
+Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets.
 
 ### Sending (Client to Server)
 
