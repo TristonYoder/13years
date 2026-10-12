@@ -61,6 +61,12 @@ struct PagerChromeSizes: Equatable {
     let roleFont: CGFloat
     let margin: CGFloat
     let cornerRadius: CGFloat
+
+    static let iconRowHeight: CGFloat = 44
+
+    var headerHeight: CGFloat {
+        max(topRowHeight, roleFont * 1.6 + margin * 0.2 + Self.iconRowHeight)
+    }
 }
 
 struct PagerTopRow<RoleMenu: View>: View {
@@ -69,6 +75,9 @@ struct PagerTopRow<RoleMenu: View>: View {
     let style: CueDisplayStyle
     let roleName: String
     let roleColumnMaxWidth: CGFloat
+    let hidesLeading: Bool
+    let showMessages: () -> Void
+    let showSettings: () -> Void
     let roleMenu: RoleMenu
 
     private var cueWord: String { PagerPresentationState.cueWordText(for: state) }
@@ -80,13 +89,14 @@ struct PagerTopRow<RoleMenu: View>: View {
                 badge
             }
             .frame(width: sizes.slotWidth, alignment: .leading)
+            .opacity(hidesLeading ? 0 : 1)
 
             Spacer(minLength: 0)
 
             roleColumn
                 .frame(maxWidth: roleColumnMaxWidth, alignment: .trailing)
         }
-        .frame(height: sizes.topRowHeight, alignment: .top)
+        .frame(height: sizes.headerHeight, alignment: .top)
     }
 
     private var clock: some View {
@@ -136,7 +146,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     }
 
     private var roleColumn: some View {
-        VStack(alignment: .trailing, spacing: sizes.margin * 0.2) {
+        ChipMatchedColumn(spacing: sizes.margin * 0.2) {
             Menu {
                 roleMenu
             } label: {
@@ -155,6 +165,8 @@ struct PagerTopRow<RoleMenu: View>: View {
                 .overlay(RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
             }
             .buttonStyle(.plain)
+
+            PagerHeaderIcons(sizes: sizes, style: style, state: state, showMessages: showMessages, showSettings: showSettings)
         }
     }
 }
@@ -197,51 +209,74 @@ public enum PagerConnectionState: Equatable, Sendable {
     }
 }
 
-struct PagerFooter: View {
-    let footerHeight: CGFloat
-    let buttonSide: CGFloat
-    let trailingInset: CGFloat
-    let leadingInset: CGFloat
-    let bottomInset: CGFloat
-    let noticeFont: CGFloat
+struct ChipMatchedColumn: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let chip = subviews[0].sizeThatFits(proposal)
+        let row = subviews[1].sizeThatFits(ProposedViewSize(width: chip.width, height: nil))
+        return CGSize(width: chip.width, height: chip.height + spacing + row.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let chip = subviews[0].sizeThatFits(proposal)
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY), anchor: .topLeading, proposal: ProposedViewSize(chip))
+        let row = subviews[1].sizeThatFits(ProposedViewSize(width: chip.width, height: nil))
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + chip.height + spacing),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: chip.width, height: row.height)
+        )
+    }
+}
+
+struct PagerHeaderIcons: View {
+    let sizes: PagerChromeSizes
     let style: CueDisplayStyle
     let state: CueState
-    let showsNotice: Bool
     let showMessages: () -> Void
     let showSettings: () -> Void
 
     var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            HStack(spacing: 0) {
-                if showsNotice {
-                    Label("No connection", systemImage: "wifi.slash")
-                        .font(.inter(size: noticeFont, weight: .bold))
-                        .foregroundColor(style.secondaryText(for: state, opacity: 0.8))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-                Spacer(minLength: 0)
-                footerButton("bubble.left.and.bubble.right", label: "Messages", action: showMessages)
-                footerButton("gearshape", label: "Settings", action: showSettings)
-            }
-            .frame(height: footerHeight)
-            .padding(.leading, leadingInset)
-            .padding(.trailing, trailingInset)
-            .padding(.bottom, bottomInset)
+        HStack(spacing: 0) {
+            button("bubble.left.and.bubble.right", label: "Messages", action: showMessages)
+            button("gearshape", label: "Settings", action: showSettings)
         }
+        .frame(height: PagerChromeSizes.iconRowHeight)
     }
 
-    private func footerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func button(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: footerHeight * 0.7))
-                .foregroundColor(style.secondaryText(for: state, opacity: 0.75))
-                .frame(width: buttonSide, height: buttonSide)
+                .font(.system(size: sizes.roleFont * 0.9))
+                .foregroundColor(style.secondaryText(for: state, opacity: 0.8))
+                .frame(maxWidth: .infinity, minHeight: PagerChromeSizes.iconRowHeight, maxHeight: PagerChromeSizes.iconRowHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+struct PagerNoConnectionNotice: View {
+    let font: CGFloat
+    let bottomInset: CGFloat
+    let style: CueDisplayStyle
+    let state: CueState
+
+    var body: some View {
+        VStack {
+            Spacer(minLength: 0)
+            Label("No connection", systemImage: "wifi.slash")
+                .font(.inter(size: font, weight: .bold))
+                .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
+                .lineLimit(1)
+                .padding(.bottom, bottomInset)
+        }
+        .frame(maxWidth: .infinity)
+        .allowsHitTesting(false)
     }
 }
 

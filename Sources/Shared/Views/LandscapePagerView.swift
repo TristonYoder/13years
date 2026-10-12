@@ -31,9 +31,7 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var messageFontSize: CGFloat { 0.06 * shorterSide }
     public var centreTagBottom: CGFloat { centreY + 0.185 * shorterSide }
     public var messageClearance: CGFloat { 0.01 * shorterSide }
-    public var footerHeight: CGFloat { 0.065 * shorterSide }
-    public var footerButtonSide: CGFloat { max(44, footerHeight) }
-    public var bottomRowBottom: CGFloat { size.height - frameThickness - margin - footerHeight }
+    public var bottomRowBottom: CGFloat { size.height - frameThickness - margin }
     public var messageMaxHeight: CGFloat {
         max(1, min(0.25 * shorterSide, bottomRowBottom - centreTagBottom - messageClearance))
     }
@@ -122,38 +120,39 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             style.groundColor(for: state).ignoresSafeArea()
 
             centre(m)
+                .opacity(disconnectPhase == .extended ? 0 : 1)
                 .padding(.horizontal, m.frameThickness + m.margin)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
             VStack(spacing: m.margin) {
+                Color.clear.frame(height: m.chrome.headerHeight)
+                Spacer(minLength: 0)
+                bottomRow(m)
+            }
+            .opacity(disconnectPhase == .extended ? 0 : 1)
+            .padding(m.frameThickness + m.margin)
+
+            PagerDisconnectOverlay(phase: disconnectPhase)
+
+            VStack(spacing: 0) {
                 PagerTopRow(
                     sizes: m.chrome,
                     state: state,
                     style: style,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
                     roleColumnMaxWidth: 0.2 * m.size.width,
+                    hidesLeading: disconnectPhase == .extended,
+                    showMessages: showMessages,
+                    showSettings: showSettings,
                     roleMenu: roleMenu
                 )
                 Spacer(minLength: 0)
-                bottomRow(m)
             }
-            .padding(.init(top: m.frameThickness + m.margin, leading: m.frameThickness + m.margin, bottom: m.frameThickness + m.margin + m.footerHeight, trailing: m.frameThickness + m.margin))
+            .padding(m.frameThickness + m.margin)
 
-            PagerDisconnectOverlay(phase: disconnectPhase)
-
-            PagerFooter(
-                footerHeight: m.footerHeight,
-                buttonSide: m.footerButtonSide,
-                trailingInset: m.frameThickness + m.margin * 0.5,
-                leadingInset: m.frameThickness + m.margin,
-                bottomInset: m.frameThickness,
-                noticeFont: m.statusFontSize,
-                style: style,
-                state: state,
-                showsNotice: disconnectPhase == .dimmed,
-                showMessages: showMessages,
-                showSettings: showSettings
-            )
+            if disconnectPhase == .dimmed {
+                PagerNoConnectionNotice(font: m.statusFontSize, bottomInset: m.frameThickness, style: style, state: state)
+            }
 
             if let frame = style.frameColor(for: state) {
                 FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)

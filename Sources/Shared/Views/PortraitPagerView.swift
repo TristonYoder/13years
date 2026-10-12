@@ -23,7 +23,8 @@ public struct PortraitMetrics: Equatable, Sendable {
     public var timeFontSize: CGFloat { min(0.07 * width, slotWidth / 6.2) }
     public var timeCaptionFontSize: CGFloat { 0.026 * width }
     public var topRowHeight: CGFloat { badgeFontSize * 1.3 }
-    public var topRowBottom: CGFloat { inset + topRowHeight }
+    public var headerHeight: CGFloat { chrome.headerHeight }
+    public var topRowBottom: CGFloat { inset + headerHeight }
     public var roleColumnMaxWidth: CGFloat { max(1, width - 2 * inset - slotWidth - margin) }
     public var statusFontSize: CGFloat { 0.028 * width }
     public var roleFontSize: CGFloat { 0.045 * width }
@@ -40,9 +41,7 @@ public struct PortraitMetrics: Equatable, Sendable {
     public static let messageMaxLines = 4
     public static let fitScales: [CGFloat] = [1, 0.85, 0.72, 0.6, 0.5, 0.4]
 
-    public var footerHeight: CGFloat { 0.065 * width }
-    public var footerButtonSide: CGFloat { max(44, footerHeight) }
-    public var bottomEdge: CGFloat { size.height - inset - footerHeight }
+    public var bottomEdge: CGFloat { size.height - inset }
 
     public func currentCardCentreY(bottomStackHeight: CGFloat) -> CGFloat {
         let top = topRowBottom + margin
@@ -113,36 +112,36 @@ public struct PortraitPagerView<RoleMenu: View>: View {
             style.groundColor(for: state).ignoresSafeArea()
 
             VStack(spacing: m.margin) {
+                Color.clear.frame(height: m.headerHeight)
+
+                currentRegion(m)
+
+                bottomStack(m)
+            }
+            .padding(m.inset)
+            .opacity(disconnectPhase == .extended ? 0 : 1)
+
+            PagerDisconnectOverlay(phase: disconnectPhase)
+
+            VStack(spacing: 0) {
                 PagerTopRow(
                     sizes: m.chrome,
                     state: state,
                     style: style,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
                     roleColumnMaxWidth: m.roleColumnMaxWidth,
+                    hidesLeading: disconnectPhase == .extended,
+                    showMessages: showMessages,
+                    showSettings: showSettings,
                     roleMenu: roleMenu
                 )
-
-                currentRegion(m)
-
-                bottomStack(m)
+                Spacer(minLength: 0)
             }
-            .padding(.init(top: m.inset, leading: m.inset, bottom: m.inset + m.footerHeight, trailing: m.inset))
+            .padding(m.inset)
 
-            PagerDisconnectOverlay(phase: disconnectPhase)
-
-            PagerFooter(
-                footerHeight: m.footerHeight,
-                buttonSide: m.footerButtonSide,
-                trailingInset: m.frameThickness + m.margin * 0.5,
-                leadingInset: m.inset,
-                bottomInset: m.frameThickness,
-                noticeFont: m.statusFontSize,
-                style: style,
-                state: state,
-                showsNotice: disconnectPhase == .dimmed,
-                showMessages: showMessages,
-                showSettings: showSettings
-            )
+            if disconnectPhase == .dimmed {
+                PagerNoConnectionNotice(font: m.statusFontSize, bottomInset: m.frameThickness, style: style, state: state)
+            }
 
             if let frame = style.frameColor(for: state) {
                 FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)

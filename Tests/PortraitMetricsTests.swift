@@ -68,11 +68,12 @@ final class PortraitMetricsTests: XCTestCase {
         XCTAssertEqual(s, s.sorted(by: >))
     }
 
-    func testFooterStripIsReservedBelowBottomStack() {
+    func testNoFooterReservedAndHeaderFitsIcons() {
         let m = PortraitMetrics(size: phone)
-        XCTAssertEqual(m.footerHeight, 0.065 * 390, accuracy: 0.001)
-        XCTAssertGreaterThanOrEqual(m.footerButtonSide, 44)
-        XCTAssertEqual(m.bottomEdge + m.margin + m.footerHeight + m.frameThickness, phone.height, accuracy: 0.001)
+        XCTAssertEqual(m.bottomEdge, phone.height - m.inset, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(m.headerHeight, m.topRowHeight)
+        XCTAssertGreaterThanOrEqual(m.headerHeight, PagerChromeSizes.iconRowHeight + m.roleFontSize)
+        XCTAssertEqual(m.topRowBottom, m.inset + m.headerHeight, accuracy: 0.001)
     }
 }
 
