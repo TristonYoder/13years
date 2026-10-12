@@ -7,21 +7,27 @@ import XCTest
 final class DocumentAutosaverTests: XCTestCase {
     private let url = URL(fileURLWithPath: "/tmp/autosave-test.13years")
 
-    private func makeSaver(_ engine: CueEngine, writes: Box, failing: Bool = false) -> DocumentAutosaver {
+    final class Box: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _count = 0
+        private var _failures = 0
+        var count: Int { lock.withLock { _count } }
+        var failures: Int { lock.withLock { _failures } }
+        func bump() { lock.withLock { _count += 1 } }
+        func fail() { lock.withLock { _failures += 1 } }
+    }
+
+    private func makeSaver(_ engine: CueEngine, writes: Box, failing: Bool = false, indexThrottle: TimeInterval = 10) -> DocumentAutosaver {
         DocumentAutosaver(
             engine: engine,
             debounce: 0.05,
+            indexThrottle: indexThrottle,
             write: { _, _ in
-                writes.count += 1
+                writes.bump()
                 if failing { throw CocoaError(.fileWriteUnknown) }
             },
-            onFailure: { _, _ in writes.failures += 1 }
+            onFailure: { _, _ in writes.fail() }
         )
-    }
-
-    final class Box {
-        var count = 0
-        var failures = 0
     }
 
     private func settle() async {
@@ -60,6 +66,7 @@ final class DocumentAutosaverTests: XCTestCase {
         await settle()
         XCTAssertEqual(writes.count, 1)
         XCTAssertFalse(saver.hasUnsavedChanges)
+        XCTAssertEqual(saver.status, .saved)
     }
 
     func testNoWriteWithoutURL() async {
@@ -102,28 +109,87 @@ final class DocumentAutosaverTests: XCTestCase {
         XCTAssertEqual(writes.count, 1)
     }
 
-    func testFailureReportedOnceUntilNextChange() async {
+    func testFailureSuspendsAutosaveUntilManualSave() async {
         let engine = CueEngine()
         engine.currentDocumentURL = url
         let writes = Box()
         let saver = makeSaver(engine, writes: writes, failing: true)
         engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
         await settle()
-        saver.flush()
         XCTAssertEqual(writes.count, 1)
         XCTAssertEqual(writes.failures, 1)
+        XCTAssertEqual(saver.status, .failed)
         engine.waypoints = [Waypoint(id: "w", name: "Two-\(UUID().uuidString)")]
         await settle()
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(saver.status, .failed)
+        saver.markManualSave()
+        XCTAssertFalse(saver.isAutosaveSuspended)
+    }
+
+    func testForcedFlushWritesOnlyWhenDirty() {
+        let engine = CueEngine()
+        engine.currentDocumentURL = url
+        let writes = Box()
+        let saver = makeSaver(engine, writes: writes)
+        XCTAssertNil(saver.flush(force: true))
+        XCTAssertEqual(writes.count, 0)
+        engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
+        XCTAssertNil(saver.flush(force: true))
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertNil(saver.flush(force: true))
+        XCTAssertEqual(writes.count, 1)
+    }
+
+    func testForcedFlushRetriesAfterFailureAndReportsError() {
+        let engine = CueEngine()
+        engine.currentDocumentURL = url
+        let writes = Box()
+        let saver = makeSaver(engine, writes: writes, failing: true)
+        engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
+        XCTAssertNotNil(saver.flush(force: true))
+        XCTAssertNotNil(saver.flush(force: true))
         XCTAssertEqual(writes.count, 2)
-        XCTAssertEqual(writes.failures, 2)
     }
 
-    private func revertSaver(_ engine: CueEngine, store: DocumentBaselineStore) -> DocumentAutosaver {
-        DocumentAutosaver(engine: engine, debounce: 0.05, store: store, write: { _, _ in }, onFailure: { _, _ in })
+    func testStatusTracksUntitledAndSaved() {
+        let engine = CueEngine()
+        let saver = makeSaver(engine, writes: Box())
+        saver.refreshStatus()
+        XCTAssertEqual(saver.status, .untitled)
+        engine.currentDocumentURL = url
+        saver.reseed()
+        XCTAssertEqual(saver.status, .saved)
     }
 
-    private func tempStore() -> DocumentBaselineStore {
-        DocumentBaselineStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+    func testUntitledChangesAreDetected() {
+        let engine = CueEngine()
+        let saver = makeSaver(engine, writes: Box())
+        XCTAssertFalse(saver.hasUnsavedUntitledChanges)
+        engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
+        XCTAssertTrue(saver.hasUnsavedUntitledChanges)
+    }
+
+    func testIndexOnlyChangesAreThrottledWhileTimerRuns() async {
+        let engine = CueEngine()
+        engine.currentDocumentURL = url
+        engine.planItems = [PCOTimerItem(id: "a", title: "A"), PCOTimerItem(id: "b", title: "B")]
+        let writes = Box()
+        let saver = makeSaver(engine, writes: writes, indexThrottle: 1.5)
+        saver.reseed()
+        engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
+        await settle()
+        XCTAssertEqual(writes.count, 1)
+        engine.planItems[0].isRunning = true
+        engine.activeItemIndex = 1
+        await settle()
+        XCTAssertEqual(writes.count, 1)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        XCTAssertEqual(writes.count, 2)
+    }
+
+    private func revertSaver(_ engine: CueEngine) -> DocumentAutosaver {
+        DocumentAutosaver(engine: engine, debounce: 0.05, write: { _, _ in }, onFailure: { _, _ in })
     }
 
     func testBaselineMovesOnManualSaveNotAutosave() async {
@@ -131,11 +197,7 @@ final class DocumentAutosaverTests: XCTestCase {
         engine.waypoints = []
         engine.currentDocumentURL = url
         let writes = Box()
-        let store = tempStore()
-        let saver = DocumentAutosaver(
-            engine: engine, debounce: 0.05, store: store,
-            write: { _, _ in writes.count += 1 }, onFailure: { _, _ in }
-        )
+        let saver = makeSaver(engine, writes: writes)
         saver.markOpened()
         XCTAssertFalse(saver.canRevert)
         engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
@@ -153,27 +215,78 @@ final class DocumentAutosaverTests: XCTestCase {
 
     func testCanRevertRequiresURL() {
         let engine = CueEngine()
-        let saver = revertSaver(engine, store: tempStore())
+        let saver = revertSaver(engine)
         engine.waypoints = [Waypoint(id: "w", name: "One-\(UUID().uuidString)")]
         saver.refreshRevert()
         XCTAssertFalse(saver.canRevert)
     }
 
-    func testSidecarSurvivesRelaunchAndRevertRestoresContent() {
-        let store = tempStore()
+    func testRevertBaselineIsSessionScoped() {
         let engine = CueEngine()
         engine.waypoints = []
         engine.currentDocumentURL = url
-        let first = revertSaver(engine, store: store)
+        let first = revertSaver(engine)
         first.markOpened()
         engine.waypoints = [Waypoint(id: "w", name: "Autosaved-\(UUID().uuidString)")]
-        let second = revertSaver(engine, store: store)
+        let second = revertSaver(engine)
         second.markOpened()
-        XCTAssertTrue(second.canRevert)
-        guard let baseline = second.revertDocument() else { return XCTFail() }
-        engine.apply(baseline)
-        XCTAssertEqual(engine.waypoints, [])
-        second.refreshRevert()
         XCTAssertFalse(second.canRevert)
+        XCTAssertNil(second.revertDocument())
+    }
+}
+
+@MainActor
+final class DocumentSafetyTests: XCTestCase {
+    func testDecodeErrorsAreFriendly() {
+        XCTAssertThrowsError(try ProducerDocument.decoded(from: Data("not json".utf8))) { error in
+            XCTAssertEqual(error.localizedDescription, ProducerDocument.LoadError.unreadable.errorDescription)
+        }
+        XCTAssertThrowsError(try ProducerDocument.decoded(from: Data("{\"version\":\"x\"}".utf8))) { error in
+            XCTAssertTrue(error is ProducerDocument.LoadError)
+        }
+    }
+
+    func testMissingOptionalFieldsDecodeWithDefaults() throws {
+        let document = try ProducerDocument.decoded(from: Data("{\"version\":1}".utf8))
+        XCTAssertEqual(document.planItems, [])
+        XCTAssertEqual(document.activeItemIndex, 0)
+        XCTAssertEqual(document.settings.plotipharRelayHost, "")
+    }
+
+    func testNewerVersionIsRejected() {
+        XCTAssertThrowsError(try ProducerDocument.decoded(from: Data("{\"version\":99}".utf8))) { error in
+            guard case ProducerDocument.LoadError.newerVersion(99) = error else { return XCTFail() }
+        }
+    }
+
+    func testFileNotFoundClassification() {
+        XCTAssertTrue(RecentDocuments.isFileNotFound(CocoaError(.fileReadNoSuchFile)))
+        XCTAssertTrue(RecentDocuments.isFileNotFound(CocoaError(.fileNoSuchFile)))
+        XCTAssertFalse(RecentDocuments.isFileNotFound(CocoaError(.fileReadNoPermission)))
+        XCTAssertFalse(RecentDocuments.isFileNotFound(ProducerDocument.LoadError.newerVersion(2)))
+    }
+
+    func testAvailabilityDistinguishesMissingFromOffline() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let present = directory.appendingPathComponent("a.13years")
+        try Data().write(to: present)
+        XCTAssertEqual(RecentDocuments.availability(of: present), .present)
+        XCTAssertEqual(RecentDocuments.availability(of: directory.appendingPathComponent("gone.13years")), .missing)
+        XCTAssertEqual(RecentDocuments.availability(of: URL(fileURLWithPath: "/Volumes/NoSuchVolume-\(UUID().uuidString)/x.13years")), .unavailable)
+        try Data().write(to: directory.appendingPathComponent(".cloud.13years.icloud"))
+        XCTAssertEqual(RecentDocuments.availability(of: directory.appendingPathComponent("cloud.13years")), .unavailable)
+    }
+
+    func testSplashDuration() {
+        XCTAssertEqual(SplashCoordinator.displayDuration(isFirstLaunch: true, reduceMotion: false), 2.0)
+        XCTAssertEqual(SplashCoordinator.displayDuration(isFirstLaunch: false, reduceMotion: false), 0.6)
+        XCTAssertEqual(SplashCoordinator.displayDuration(isFirstLaunch: true, reduceMotion: true), 0.6)
+    }
+
+    func testSaveStatusText() {
+        XCTAssertEqual(DocumentSaveStatus.untitled.text, "Untitled — not saved")
+        XCTAssertEqual(DocumentSaveStatus.failed.text, "Not saved — click to Save As…")
     }
 }

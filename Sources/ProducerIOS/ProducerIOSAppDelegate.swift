@@ -11,10 +11,18 @@ extension Notification.Name {
 
 @MainActor
 enum DocumentMenuBridge {
-    static var recentURLs: [URL] = [] {
+    static var recentTitles: [String] = [] {
         didSet {
-            guard recentURLs != oldValue else { return }
+            guard recentTitles != oldValue else { return }
             UIMenuSystem.main.setNeedsRebuild()
+        }
+    }
+
+    static var isEnabled = false {
+        didSet {
+            guard isEnabled != oldValue else { return }
+            UIMenuSystem.main.setNeedsRebuild()
+            UIMenuSystem.main.setNeedsRevalidate()
         }
     }
 }
@@ -24,20 +32,21 @@ final class ProducerIOSAppDelegate: UIResponder, UIApplicationDelegate {
         super.buildMenu(with: builder)
         guard builder.system == .main else { return }
 
-        let recents = MainActor.assumeIsolated { DocumentMenuBridge.recentURLs }
+        let (recents, enabled) = MainActor.assumeIsolated { (DocumentMenuBridge.recentTitles, DocumentMenuBridge.isEnabled) }
 
         builder.replaceChildren(ofMenu: .openRecent) { _ in
-            let items: [UIMenuElement] = recents.map { url in
+            let items: [UIMenuElement] = recents.enumerated().map { index, title in
                 UICommand(
-                    title: url.deletingPathExtension().lastPathComponent,
+                    title: title,
                     action: #selector(ProducerIOSAppDelegate.openRecentDocument(_:)),
-                    propertyList: url.absoluteString
+                    propertyList: index,
+                    attributes: enabled ? [] : .disabled
                 )
             }
             let clear = UICommand(
                 title: "Clear Menu",
                 action: #selector(ProducerIOSAppDelegate.clearRecentDocuments(_:)),
-                attributes: recents.isEmpty ? .disabled : []
+                attributes: (recents.isEmpty || !enabled) ? .disabled : []
             )
             return items + [UIMenu(options: .displayInline, children: [clear])]
         }
@@ -59,9 +68,8 @@ final class ProducerIOSAppDelegate: UIResponder, UIApplicationDelegate {
 
     @objc func openRecentDocument(_ sender: Any?) {
         guard let command = sender as? UICommand,
-              let string = command.propertyList as? String,
-              let url = URL(string: string) else { return }
-        NotificationCenter.default.post(name: .producerOpenRecent, object: url)
+              let index = command.propertyList as? Int else { return }
+        NotificationCenter.default.post(name: .producerOpenRecent, object: index)
     }
 
     @objc func clearRecentDocuments(_ sender: Any?) {

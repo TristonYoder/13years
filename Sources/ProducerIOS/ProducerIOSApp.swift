@@ -22,6 +22,7 @@ struct ProducerIOSApp: App {
             ProducerRootView()
                 .environmentObject(cueEngine)
                 .environmentObject(launchPreferences)
+                .environment(\.documentSaveIndicator, documents.saveIndicator)
                 .disabled(documents.isLauncherPresented)
                 .overlay {
                     if documents.isLauncherPresented {
@@ -31,8 +32,9 @@ struct ProducerIOSApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.beginImport(template: true) },
                                 open: { documents.beginImport(template: false) },
-                                openRecent: { documents.open($0, in: cueEngine) },
-                                connect: { remoteHub.isConnectPresented = true }
+                                openRecent: { documents.openRecent($0, in: cueEngine) },
+                                connect: { remoteHub.isConnectPresented = true },
+                                refreshRecents: { documents.pruneRecents() }
                             )
                         )
                         .transition(.opacity)
@@ -46,20 +48,23 @@ struct ProducerIOSApp: App {
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase != .active { documents.flushIfNeeded() }
+                    if phase != .active { documents.flushForBackground() }
                     if phase == .active {
                         cueEngine.deviceDidBecomeActive()
                         remoteHub.session?.resync()
                     }
                 }
-                .onOpenURL { documents.open($0, in: cueEngine) }
+                .onChange(of: remoteHub.isRemoteActive) { _, active in
+                    documents.isRemoteActive = active
+                }
+                .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
                     guard !remoteHub.isRemoteActive else { return }
                     documents.beginImport(template: false)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenRecent)) { note in
                     guard !remoteHub.isRemoteActive else { return }
-                    if let url = note.object as? URL { documents.open(url, in: cueEngine) }
+                    if let index = note.object as? Int { documents.openRecent(at: index, in: cueEngine) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .producerClearRecents)) { _ in
                     guard !remoteHub.isRemoteActive else { return }
@@ -68,6 +73,7 @@ struct ProducerIOSApp: App {
                 .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.promotePending() }) {
                     ConnectToView(
                         onConnected: { session in
+                            documents.flushForBackground()
                             remoteHub.pending = session
                             remoteHub.isConnectPresented = false
                         },
@@ -89,13 +95,13 @@ struct ProducerIOSApp: App {
                     isPresented: $documents.isExporting,
                     document: documents.exportFile,
                     contentType: documents.exportType,
-                    defaultFilename: documents.exportFile.isTemplate ? "Untitled Template" : "Untitled"
+                    defaultFilename: documents.exportFilename
                 ) { documents.handleExport($0, engine: cueEngine) }
                 .alert("Revert to Last Save?", isPresented: $documents.isConfirmingRevert) {
                     Button("Revert", role: .destructive) { documents.revert(cueEngine) }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Changes since the last save will be lost.")
+                    Text("This restores the version from when the document was opened or last saved by hand in this session. Changes since then will be lost.")
                 }
                 .alert("Document Error", isPresented: documents.hasError) {
                     Button("OK", role: .cancel) {}

@@ -3,67 +3,93 @@
 
 import Combine
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
+
+@MainActor
+private final class BackgroundTaskBox {
+    var identifier = UIBackgroundTaskIdentifier.invalid
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+    }
+}
 
 @MainActor
 final class IOSDocumentController: ObservableObject {
     @Published var isImporting = false
     @Published var importsTemplate = false
     @Published var isExporting = false
-    @Published var exportFile = ProducerDocumentFile(ProducerDocument(
-        roles: [], waypoints: [], serviceSchedules: [], planItems: [], activeItemIndex: 0,
-        settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
-    ))
+    @Published var exportFile = IOSDocumentController.blankFile
     @Published var errorMessage: String?
-    @Published var isLauncherPresented = true
+    @Published var isLauncherPresented = true {
+        didSet { publishMenuState() }
+    }
+    @Published var isRemoteActive = false {
+        didSet { publishMenuState() }
+    }
     @Published private(set) var canRevert = false
     @Published var isConfirmingRevert = false
-    private var revertObserver: AnyCancellable?
     @Published private(set) var recents: [RecentEntry] = [] {
-        didSet { DocumentMenuBridge.recentURLs = recents.map(\.url) }
+        didSet { DocumentMenuBridge.recentTitles = recents.map { RecentDocuments.title(for: $0.url) } }
     }
+    let saveIndicator = DocumentSaveIndicator()
+    private var observers: [AnyCancellable] = []
 
-    struct RecentEntry: Equatable {
-        let url: URL
-        let bookmark: Data
-        static func == (lhs: RecentEntry, rhs: RecentEntry) -> Bool { lhs.url == rhs.url }
-    }
-
-    private static let recentsDefaultsKey = "recentDocumentBookmarks"
     private let defaults: UserDefaults
 
     var recentURLs: [URL] { recents.map(\.url) }
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        let bookmarks = defaults.array(forKey: Self.recentsDefaultsKey) as? [Data] ?? []
-        recents = bookmarks.compactMap { data in
-            var stale = false
-            guard let url = try? URL(resolvingBookmarkData: data, options: DocumentBookmark.resolve, relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            let fresh = stale ? (try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil)) : nil
-            return RecentEntry(url: url, bookmark: fresh ?? data)
-        }
-        DocumentMenuBridge.recentURLs = recents.map(\.url)
+    var isDocumentActionsEnabled: Bool { !isLauncherPresented && !isRemoteActive }
+
+    private static var blankFile: ProducerDocumentFile {
+        ProducerDocumentFile(ProducerDocument(
+            roles: [], waypoints: [], serviceSchedules: [], planItems: [], activeItemIndex: 0,
+            settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
+        ))
     }
 
-    private enum ExportPurpose { case copy, saveAs, newDocument }
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let loaded = RecentDocuments.load(defaults: defaults)
+        recents = loaded.entries
+        if loaded.changed { RecentDocuments.persist(recents, defaults: defaults) }
+        DocumentMenuBridge.recentTitles = recents.map { RecentDocuments.title(for: $0.url) }
+        publishMenuState()
+    }
+
+    private func publishMenuState() {
+        DocumentMenuBridge.isEnabled = isDocumentActionsEnabled
+    }
+
+    private enum ExportPurpose { case copy, saveAs, newDocument, newFromTemplate }
     private var exportPurpose = ExportPurpose.copy
+    private var pendingTemplate: ProducerDocument?
     private var autosaver: DocumentAutosaver?
+    private weak var engine: CueEngine?
+    private var hasScheduledLaunchBehavior = false
+    private var openedByURL = false
+    private(set) var exportFilename = "Untitled"
 
     func attach(_ engine: CueEngine) {
         guard autosaver == nil else { return }
+        self.engine = engine
+        DocumentAutosaver.purgeLegacyBaselines()
         let saver = DocumentAutosaver(
             engine: engine,
-            write: { document, url in try Self.coordinatedWrite(document, to: url) },
-            onFailure: { [weak self] error, url in
-                self?.errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
-            }
+            write: { document, url in try IOSDocumentController.coordinatedWrite(document, to: url) }
         )
         autosaver = saver
-        revertObserver = saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 }
+        observers = [
+            saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 },
+            saver.$status.removeDuplicates().sink { [weak self] in self?.saveIndicator.status = $0 }
+        ]
+        saveIndicator.onActivate = { [weak self, weak engine] in
+            guard let self, let engine else { return }
+            self.saveAs(engine)
+        }
     }
 
     func revert(_ engine: CueEngine) {
@@ -79,8 +105,22 @@ final class IOSDocumentController: ObservableObject {
         autosaver?.markManualSave()
     }
 
-    func flushIfNeeded() {
-        autosaver?.flush()
+    func flushForBackground() {
+        guard let saver = autosaver, saver.isDirty else { return }
+        let box = BackgroundTaskBox()
+        box.identifier = UIApplication.shared.beginBackgroundTask(withName: "DocumentSave") {
+            MainActor.assumeIsolated { box.end() }
+        }
+        saver.writeInBackground(force: true) { box.end() }
+    }
+
+    private func settle() -> Bool {
+        guard let saver = autosaver, let url = engine?.currentDocumentURL else { return true }
+        if let error = saver.flush(force: true) {
+            errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription) Use Save As… to keep a copy before switching documents."
+            return false
+        }
+        return true
     }
 
     nonisolated private static func coordinatedWrite(_ document: ProducerDocument, to url: URL) throws {
@@ -95,10 +135,9 @@ final class IOSDocumentController: ObservableObject {
     }
 
     func newDocument(_ engine: CueEngine) {
-        exportFile = ProducerDocumentFile(ProducerDocument(
-            roles: [], waypoints: [], serviceSchedules: [], planItems: [], activeItemIndex: 0,
-            settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
-        ))
+        guard settle() else { return }
+        exportFile = Self.blankFile
+        exportFilename = "Untitled"
         exportPurpose = .newDocument
         isExporting = true
     }
@@ -117,46 +156,65 @@ final class IOSDocumentController: ObservableObject {
         }
     }
 
+    func handleOpenURL(_ url: URL, in engine: CueEngine) {
+        openedByURL = true
+        open(url, in: engine)
+    }
+
     func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
-        switch preferences.behavior {
-        case .showLauncher:
-            return
-        case .reopenLast:
-            guard let url = recentURLs.first else { return }
-            open(url, in: engine)
-        case .openFile:
-            guard let url = preferences.fileURL else { return }
-            open(url, in: engine)
+        guard !hasScheduledLaunchBehavior else { return }
+        hasScheduledLaunchBehavior = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !self.openedByURL, self.isLauncherPresented else { return }
+            switch preferences.behavior {
+            case .showLauncher:
+                return
+            case .reopenLast:
+                guard let url = self.recentURLs.first else { return }
+                self.openRecent(url, in: engine)
+            case .openFile:
+                guard let url = preferences.fileURL else { return }
+                self.open(url, in: engine)
+            }
         }
     }
 
     func clearRecents() {
         recents = []
-        persistRecents()
+        RecentDocuments.persist(recents, defaults: defaults)
+    }
+
+    func pruneRecents() {
+        let kept = RecentDocuments.pruned(recents)
+        guard kept.count != recents.count else { return }
+        recents = kept
+        RecentDocuments.persist(recents, defaults: defaults)
     }
 
     private func noteRecent(_ url: URL) {
-        guard let data = try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
-        recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: data))
-        persistRecents()
+        do {
+            let data = try DocumentBookmark.make(for: url)
+            recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: data))
+            RecentDocuments.persist(recents, defaults: defaults)
+        } catch {
+            errorMessage = "Couldn’t add “\(url.lastPathComponent)” to Open Recent. \(error.localizedDescription)"
+        }
     }
 
     private func forget(_ url: URL) {
         recents.removeAll { $0.url == url }
-        persistRecents()
-    }
-
-    private func persistRecents() {
-        defaults.set(recents.map(\.bookmark), forKey: Self.recentsDefaultsKey)
+        RecentDocuments.persist(recents, defaults: defaults)
     }
 
     var importTypes: [UTType] {
         let base: UTType = importsTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument
         let ext = importsTemplate ? ProducerDocument.templateExtension : ProducerDocument.fileExtension
-        return [base, UTType(filenameExtension: ext), .json].compactMap { $0 }
+        return [base, UTType(filenameExtension: ext)].compactMap { $0 }
     }
 
     func beginImport(template: Bool) {
+        guard settle() else { return }
         importsTemplate = template
         isImporting = true
     }
@@ -169,12 +227,14 @@ final class IOSDocumentController: ObservableObject {
 
     func saveAs(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument())
+        exportFilename = engine.currentDocumentURL.map { RecentDocuments.title(for: $0) } ?? "Untitled"
         exportPurpose = .saveAs
         isExporting = true
     }
 
     func saveAsTemplate(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument(), isTemplate: true)
+        exportFilename = "Untitled Template"
         exportPurpose = .copy
         isExporting = true
     }
@@ -193,6 +253,7 @@ final class IOSDocumentController: ObservableObject {
         exportPurpose = .copy
         switch result {
         case .failure(let error):
+            pendingTemplate = nil
             if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
         case .success(let url):
             switch purpose {
@@ -204,36 +265,95 @@ final class IOSDocumentController: ObservableObject {
                 autosaver?.reseed()
                 autosaver?.markManualSave()
             case .newDocument:
-                engine.resetToNewDocument()
-                do {
-                    try Self.coordinatedWrite(engine.makeDocument(), to: url)
-                } catch {
-                    errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
-                    return
-                }
-                engine.currentDocumentURL = url
-                noteRecent(url)
-                autosaver?.reseed()
-                autosaver?.markManualSave()
-                isLauncherPresented = false
+                guard settle() else { return }
+                create(engine, content: nil, at: url)
+            case .newFromTemplate:
+                let content = pendingTemplate
+                pendingTemplate = nil
+                guard settle() else { return }
+                create(engine, content: content, at: url)
             }
         }
     }
 
-    func open(_ url: URL, in engine: CueEngine) {
+    private func create(_ engine: CueEngine, content: ProducerDocument?, at url: URL) {
+        let previous = engine.makeDocument()
+        let previousURL = engine.currentDocumentURL
+        if let content {
+            engine.apply(content)
+        } else {
+            engine.resetToNewDocument()
+        }
+        engine.currentDocumentURL = nil
+        do {
+            try Self.coordinatedWrite(engine.makeDocument(), to: url)
+        } catch {
+            engine.apply(previous)
+            engine.currentDocumentURL = previousURL
+            errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
+            return
+        }
+        engine.currentDocumentURL = url
+        noteRecent(url)
+        autosaver?.reseed()
+        autosaver?.markManualSave()
+        isLauncherPresented = false
+    }
+
+    func openRecent(_ url: URL, in engine: CueEngine) {
+        guard let index = recents.firstIndex(where: { $0.url == url }) else {
+            open(url, in: engine)
+            return
+        }
+        openRecent(at: index, in: engine)
+    }
+
+    func openRecent(at index: Int, in engine: CueEngine) {
+        guard recents.indices.contains(index) else { return }
+        let entry = recents[index]
+        do {
+            let resolved = try DocumentBookmark.resolved(entry.bookmark)
+            open(resolved.url, in: engine)
+        } catch {
+            if RecentDocuments.isFileNotFound(error) { forget(entry.url) }
+            errorMessage = "Couldn’t open “\(entry.url.lastPathComponent)”. \(error.localizedDescription)"
+        }
+    }
+
+    private func openTemplate(_ url: URL) {
+        guard settle() else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
             let document = try ProducerDocument.read(from: url)
-            let isTemplate = url.pathExtension.lowercased() == ProducerDocument.templateExtension
+            pendingTemplate = document
+            exportFile = ProducerDocumentFile(document)
+            exportFilename = RecentDocuments.title(for: url)
+            exportPurpose = .newFromTemplate
+            isExporting = true
+        } catch {
+            errorMessage = "Couldn’t open “\(url.lastPathComponent)”. \(error.localizedDescription)"
+        }
+    }
+
+    func open(_ url: URL, in engine: CueEngine) {
+        if url.pathExtension.lowercased() == ProducerDocument.templateExtension {
+            openTemplate(url)
+            return
+        }
+        guard settle() else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let document = try ProducerDocument.read(from: url)
             engine.apply(document)
-            engine.currentDocumentURL = isTemplate ? nil : url
+            engine.currentDocumentURL = url
             autosaver?.reseed()
             autosaver?.markOpened()
             isLauncherPresented = false
-            if !isTemplate { noteRecent(url) }
+            noteRecent(url)
         } catch {
-            forget(url)
+            if RecentDocuments.isFileNotFound(error) { forget(url) }
             errorMessage = "Couldn’t open “\(url.lastPathComponent)”. \(error.localizedDescription)"
         }
     }
@@ -258,14 +378,14 @@ struct DocumentCommands: Commands {
         CommandGroup(replacing: .saveItem) {
             Button("Save") { documents.save(engine) }
                 .keyboardShortcut("s")
-                .disabled(remote.isRemoteActive)
+                .disabled(!documents.isDocumentActionsEnabled)
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                .disabled(remote.isRemoteActive)
+                .disabled(!documents.isDocumentActionsEnabled)
             Button("Revert to Last Save") { documents.isConfirmingRevert = true }
-                .disabled(!documents.canRevert || remote.isRemoteActive)
+                .disabled(!documents.canRevert || !documents.isDocumentActionsEnabled)
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
-                .disabled(remote.isRemoteActive)
+                .disabled(!documents.isDocumentActionsEnabled)
         }
     }
 }

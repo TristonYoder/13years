@@ -92,15 +92,40 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         return copy
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, settings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        savedAt = try container.decodeIfPresent(Date.self, forKey: .savedAt) ?? Date()
+        roles = try container.decodeIfPresent([RoleCue].self, forKey: .roles) ?? []
+        selectedRoleIds = try container.decodeIfPresent([String].self, forKey: .selectedRoleIds)
+        waypoints = try container.decodeIfPresent([Waypoint].self, forKey: .waypoints) ?? []
+        serviceSchedules = try container.decodeIfPresent([ServiceSchedule].self, forKey: .serviceSchedules) ?? []
+        planItems = try container.decodeIfPresent([PCOTimerItem].self, forKey: .planItems) ?? []
+        activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
+        settings = try container.decodeIfPresent(Settings.self, forKey: .settings)
+            ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
+    }
+
     public enum LoadError: LocalizedError {
         case newerVersion(Int)
+        case unreadable
 
         public var errorDescription: String? {
             switch self {
             case .newerVersion(let version):
-                return "This file was saved by a newer version of 13 Years Producer (format \(version))."
+                return "This document was saved by a newer version of 13 Years Producer (format \(version)). Update the app to open it."
+            case .unreadable:
+                return "This isn’t a valid 13 Years document, or it’s damaged."
             }
         }
+    }
+
+    public func migrated() -> ProducerDocument {
+        self
     }
 
     public func encoded() throws -> Data {
@@ -113,9 +138,14 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public static func decoded(from data: Data) throws -> ProducerDocument {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let document = try decoder.decode(ProducerDocument.self, from: data)
+        let document: ProducerDocument
+        do {
+            document = try decoder.decode(ProducerDocument.self, from: data)
+        } catch is DecodingError {
+            throw LoadError.unreadable
+        }
         guard document.version <= currentVersion else { throw LoadError.newerVersion(document.version) }
-        return document
+        return document.migrated()
     }
 
     public func write(to url: URL) throws {
