@@ -47,6 +47,7 @@ struct SyncV2State {
     var lastMessageCatchUpMono: Double?
     var lastBurstMono: Double?
     var relayLinked = false
+    var lastNextItem: CueNextItem?
 }
 
 extension CueEngine {
@@ -143,6 +144,8 @@ extension CueEngine {
     func publishTimerAnchorToV2() {
         guard isMasterServer, !isRemoteMirror else { return }
         var packet = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
+        packet.nextItem = syncV2.anchor == nil ? nil : nextItemForBroadcast
+        syncV2.lastNextItem = packet.nextItem
         packet.rev = nextRev()
         packet.epoch = syncV2.epoch
         packet.anchor = syncV2.anchor
@@ -252,6 +255,7 @@ extension CueEngine {
     func makeV2CatchUpPong(to requester: String?) -> CuePacket {
         var messages = Array(SyncHash.sortedNewestFirst(recentMessages).prefix(Self.catchUpMessageLimit))
         var pong = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: messages)
+        pong.nextItem = nextItemForBroadcast
         pong.proto = CuePacket.protocolVersion
         pong.rev = syncV2.rev
         pong.epoch = syncV2.epoch
@@ -259,6 +263,11 @@ extension CueEngine {
         while !messages.isEmpty, (pong.encode()?.count ?? 0) > Self.maxCatchUpPongBytes {
             messages.removeLast()
             pong.messages = messages
+        }
+        while var next = pong.nextItem, (pong.encode()?.count ?? 0) > Self.maxCatchUpPongBytes,
+              let longest = next.notes.max(by: { $0.value.utf8.count < $1.value.utf8.count })?.key {
+            next.notes.removeValue(forKey: longest)
+            pong.nextItem = next
         }
         return pong
     }
@@ -268,6 +277,7 @@ extension CueEngine {
         if syncV2.lastBroadcastRoles == nil { syncV2.lastBroadcastRoles = roles }
         let pong = makeV2CatchUpPong(to: requester)
         var anchorPacket = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
+        anchorPacket.nextItem = syncV2.anchor == nil ? nil : nextItemForBroadcast
         anchorPacket.rev = syncV2.rev
         anchorPacket.epoch = syncV2.epoch
         anchorPacket.to = requester
@@ -375,14 +385,21 @@ extension CueEngine {
             syncV2.held = nil
             cancelDisplayTick()
             if activeTimerItem != nil { activeTimerItem = nil }
+            applyReceivedNextItem(nil)
             return
         }
+        applyReceivedNextItem(packet.nextItem)
         let stamp = packet.timestamp * 1000
         let sinceAnchor = stamp - Double(anchor.anchorMs)
         let fallback = stamp.isFinite && sinceAnchor >= 0 && sinceAnchor <= Double(TimerAnchor.maxElapsedMs) ? stamp : Double(anchor.anchorMs)
         syncV2.held = HeldAnchor(anchor: anchor, item: item, receivedMonoMs: monotonicMs, fallbackProducerMs: fallback)
         refreshHeldTimer()
         armDisplayTick()
+    }
+
+    func applyReceivedNextItem(_ next: CueNextItem?) {
+        let item = next?.timerItem
+        if nextItem != item { nextItem = item }
     }
 
     func applyCueDeltas(_ deltas: [CueDelta]) {

@@ -46,6 +46,7 @@ extension CueEngine {
         guard isRemoteMirror else { return }
         if let timer {
             var item = timer.item
+            if nextItem != timer.nextItem { nextItem = timer.nextItem }
             item.isRunning = timer.isRunning
             assign(\.isActiveTimerActualOverride, timer.isDurationActualForDisplay)
             if actualOverrideItemId != item.id { actualOverrideItemId = item.id }
@@ -66,6 +67,7 @@ extension CueEngine {
             syncV2.held = nil
             cancelDisplayTick()
             assign(\.activeTimerItem, nil)
+            if nextItem != nil { nextItem = nil }
             actualOverrideItemId = nil
         }
     }

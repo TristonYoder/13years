@@ -890,7 +890,8 @@ public final class ControlAPIRouter {
             isOvertime: item.isOvertime,
             formattedRemaining: TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold),
             isDurationActualForDisplay: engine.activeTimerActualForDisplay,
-            anchor: anchor
+            anchor: anchor,
+            nextItem: engine.derivedNextPlanItem
         )
     }
 

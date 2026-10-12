@@ -24,7 +24,8 @@ public struct HostPagerView: View {
             isProducerLive: engine.isProducerLive,
             isLANConnected: engine.isLANConnected,
             connectedMasterName: engine.connectedMasterName,
-            hourFormatThreshold: engine.hourFormatThreshold
+            hourFormatThreshold: engine.hourFormatThreshold,
+            receivedNextItem: engine.nextItem
         )
     }
 
@@ -122,10 +123,13 @@ public struct HostPagerView: View {
                 Spacer()
 
                 VStack(spacing: 12) {
-                    Text(currentState.displayName.uppercased())
+                    let cueWord = PagerPresentationState.cueWordText(for: currentState)
+                    Text(cueWord.isEmpty ? "OFF" : cueWord)
                         .font(.inter(size: 72, weight: .black))
                         .foregroundColor(currentState.textColor)
                         .minimumScaleFactor(0.5)
+                        .opacity(cueWord.isEmpty ? 0 : 1)
+                        .accessibilityHidden(cueWord.isEmpty)
 
                     if let person = activeRole?.personName {
                         Text("FOR: \(person.uppercased())")
@@ -162,15 +166,37 @@ public struct HostPagerView: View {
                     .cornerRadius(16)
                 }
 
-                if !currentNotes.isEmpty || !nextNotes.isEmpty {
+                if !currentNotes.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(currentNotes, id: \.category) { note in
                             notePanel(label: currentNotes.count > 1 ? "CURRENT — \(note.category.uppercased())" : "CURRENT", text: note.text, emphasized: true)
                         }
+                    }
+                    .padding(.horizontal, 20)
+                }
+
+                if let next = nextItem {
+                    VStack(spacing: 10) {
+                        VStack(spacing: 4) {
+                            Text("NEXT")
+                                .font(.inter(size: 11, weight: .heavy))
+                                .tracking(1.5)
+                                .foregroundColor(currentState.textColor.opacity(0.7))
+                            Text(next.title.uppercased())
+                                .font(.inter(size: 16, weight: .bold))
+                                .foregroundColor(currentState.textColor)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
                         ForEach(nextNotes, id: \.category) { note in
-                            notePanel(label: nextNotes.count > 1 ? "NEXT — \(note.category.uppercased())" : "NEXT", text: note.text, emphasized: false)
+                            notePanel(label: nextNotes.count > 1 ? note.category.uppercased() : "NOTES", text: note.text, emphasized: false)
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
+                    .background(Color.black.opacity(0.25))
+                    .cornerRadius(16)
                     .padding(.horizontal, 20)
                 }
 

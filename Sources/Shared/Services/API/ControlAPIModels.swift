@@ -56,6 +56,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var formattedRemaining: String
         public var isDurationActualForDisplay: Bool
         public var anchor: TimerAnchor?
+        public var nextItem: PCOTimerItem? = nil
     }
 
     public struct PlanStatus: Codable, Sendable {

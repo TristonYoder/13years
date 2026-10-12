@@ -96,7 +96,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     "remainingSeconds": 45,
     "isOvertime": false,
     "formattedRemaining": "00:45",
-    "isDurationActualForDisplay": false
+    "isDurationActualForDisplay": false,
+    "nextItem": null
   },
   "plan": {
     "title": "Sunday Morning Service",
@@ -203,6 +204,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 - **`appMode`** is one of the app's internal display modes (`producerControl`, `pagerLive`, etc.), expressed as the wire value. These are stable identifiers, not UI labels — `producerControl` is the section the Producer now shows as "Pagers".
 - **`notificationsClearedAt`** is the line between "already dealt with" and "somebody should be looking at this". A message newer than it is still notifying; everything at or before it has been acknowledged. `null` means nothing has ever been cleared. This is how a producer takes a message off a lower third without deleting the thread — a separate act from `DELETE /v1/messages`, and the reason both exist.
 - **`timer.anchor`** (additive) is the Sync Protocol v2 anchor, always present when `timer` is not `null`: `{"itemId", "lengthInSeconds", "elapsedMs", "anchorMs", "isRunning", "isDurationActual"}`. `elapsedMs` was true at `anchorMs` (producer epoch milliseconds); while `isRunning`, a client computes `elapsedMs + (producerNow - anchorMs)`, floors to seconds, and the digits flip at `anchorMs + k * 1000` on the producer clock. See [Clock sync and the anchor](#clock-sync-and-the-anchor-protocol-v2).
+- **`timer.nextItem`** (additive) is the first non-header plan item after the active one, as a full `PCOTimerItem` with all of its notes, or `null` when the active item is the last. It appears in the snapshot, in `GET /v1/timer` and in the `timer` event, so a client that does not hold the plan can show what is coming next. See "Next item (v2.2)" in [Server/PROTOCOL-V2.md](Server/PROTOCOL-V2.md).
 - **`timer`** is `null` when no plan is loaded or when the loaded plan is nothing but headers — there's genuinely no active item then, and inventing a placeholder would make "is something running?" unanswerable.
 - **`roles`**, **`plan.items`**, **`messages`** use the app's own `Codable` models verbatim (`RoleCue`, `PCOTimerItem`, `InterTeamMessage`). An integrator reading this API and someone reading `Server/PROTOCOL.md` see one vocabulary.
 - **`formattedRemaining`** is the time string the producer's own screen shows, run through `TimeFormatting.string` so a Stream Deck button and the UI can't disagree about when a countdown reads `1:35:00` versus `95:00`.

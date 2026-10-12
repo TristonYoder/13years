@@ -15,6 +15,36 @@ public struct CueDelta: Codable, Equatable, Sendable {
     }
 }
 
+public struct CueNextItem: Codable, Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var itemType: String
+    public var lengthInSeconds: Int
+    public var notes: [String: String]
+
+    public init(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]) {
+        self.id = id
+        self.title = title
+        self.itemType = itemType
+        self.lengthInSeconds = lengthInSeconds
+        self.notes = notes
+    }
+
+    public init(item: PCOTimerItem, noteCategories: Set<String>) {
+        self.init(
+            id: item.id,
+            title: item.title,
+            itemType: item.itemType,
+            lengthInSeconds: item.lengthInSeconds,
+            notes: item.notes.filter { noteCategories.contains($0.key) }
+        )
+    }
+
+    public var timerItem: PCOTimerItem {
+        PCOTimerItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes)
+    }
+}
+
 public struct CuePacket: Codable, Sendable {
     public enum PacketType: String, Codable, Sendable {
         case cueUpdate = "CUE_UPDATE"
@@ -37,6 +67,7 @@ public struct CuePacket: Codable, Sendable {
     public var senderId: String
     public var roleCues: [RoleCue]?
     public var timerItem: PCOTimerItem?
+    public var nextItem: CueNextItem?
     public var message: InterTeamMessage?
     public var messages: [InterTeamMessage]?
     public var proto: Int?
@@ -54,7 +85,7 @@ public struct CuePacket: Codable, Sendable {
     public private(set) var anchorRejected = false
 
     private enum CodingKeys: String, CodingKey {
-        case type, timestamp, senderId, roleCues, timerItem, message, messages
+        case type, timestamp, senderId, roleCues, timerItem, nextItem, message, messages
         case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to
     }
 
@@ -83,6 +114,7 @@ public struct CuePacket: Codable, Sendable {
         senderId = try container.decode(String.self, forKey: .senderId)
         roleCues = try container.decodeIfPresent([RoleCue].self, forKey: .roleCues)
         timerItem = try container.decodeIfPresent(PCOTimerItem.self, forKey: .timerItem)
+        nextItem = try? container.decodeIfPresent(CueNextItem.self, forKey: .nextItem)
         message = try container.decodeIfPresent(InterTeamMessage.self, forKey: .message)
         messages = try container.decodeIfPresent([InterTeamMessage].self, forKey: .messages)
         proto = try container.decodeIfPresent(Int.self, forKey: .proto)
@@ -111,6 +143,7 @@ public struct CuePacket: Codable, Sendable {
         try container.encode(senderId, forKey: .senderId)
         try container.encodeIfPresent(roleCues, forKey: .roleCues)
         try container.encodeIfPresent(timerItem, forKey: .timerItem)
+        try container.encodeIfPresent(nextItem, forKey: .nextItem)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(messages, forKey: .messages)
         try container.encodeIfPresent(proto, forKey: .proto)

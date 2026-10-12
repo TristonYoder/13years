@@ -210,7 +210,8 @@ extension PagerPresentationState {
             isProducerLive: apiState.network.isProducerLive,
             isLANConnected: apiState.network.isLANConnected,
             connectedMasterName: apiState.network.connectedMasterName,
-            hourFormatThreshold: HourFormatThreshold(rawValue: apiState.settings.hourFormatThreshold) ?? .over90Minutes
+            hourFormatThreshold: HourFormatThreshold(rawValue: apiState.settings.hourFormatThreshold) ?? .over90Minutes,
+            receivedNextItem: apiState.timer?.nextItem
         )
     }
 }

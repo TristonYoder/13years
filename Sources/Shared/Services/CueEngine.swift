@@ -16,7 +16,10 @@ public final class CueEngine: ObservableObject {
     @Published public var selectedMessageThreadId: String = "all"
     @Published private var messageReadAt: [String: Date] = [:]
     @Published public var roles: [RoleCue] = RoleCue.defaultRoles {
-        didSet { persistRoles() }
+        didSet {
+            persistRoles()
+            rebroadcastIfNextItemChanged()
+        }
     }
     @Published public var selectedRoleIds: Set<String> = ["default"]
     @Published public var waypoints: [Waypoint] = [] {
@@ -27,12 +30,16 @@ public final class CueEngine: ObservableObject {
     }
 
     @Published public var planItems: [PCOTimerItem] = [] {
-        didSet { persistCurrentFlow() }
+        didSet {
+            persistCurrentFlow()
+            rebroadcastIfNextItemChanged()
+        }
     }
     @Published public var activeItemIndex: Int = 0 {
         didSet { persistCurrentFlow() }
     }
     @Published public var activeTimerItem: PCOTimerItem?
+    @Published public var nextItem: PCOTimerItem?
     @Published var isActiveTimerActualOverride: Bool = false
     var actualOverrideItemId: String?
     @Published public var isPCOConnected: Bool = false
@@ -1377,6 +1384,24 @@ public final class CueEngine: ObservableObject {
         mirrorToPCOLive(direction: .previous, count: steps, targetItemId: item.id)
     }
 
+    var derivedNextPlanItem: PCOTimerItem? {
+        guard activeTimerItem != nil, planItems.indices.contains(activeItemIndex),
+              let index = nextSelectableIndex(after: activeItemIndex) else { return nil }
+        return planItems[index]
+    }
+
+    var nextItemForBroadcast: CueNextItem? {
+        guard let item = derivedNextPlanItem else { return nil }
+        return CueNextItem(item: item, noteCategories: Set(roles.flatMap(\.assignedNoteCategories)))
+    }
+
+    private func rebroadcastIfNextItemChanged() {
+        guard isMasterServer, !isRemoteMirror, let active = activeTimerItem,
+              planItems.indices.contains(activeItemIndex), planItems[activeItemIndex].id == active.id,
+              nextItemForBroadcast != syncV2.lastNextItem else { return }
+        broadcastTimerUpdate()
+    }
+
     private func nextSelectableIndex(after index: Int) -> Int? {
         var candidate = index + 1
         while candidate < planItems.count {
@@ -1949,7 +1974,8 @@ public final class CueEngine: ObservableObject {
         }
 
         if isMasterServer, activeTimerItem?.isRunning == true, heartbeatTickCount % 5 == 0 {
-            let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
+            var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
+            packet.nextItem = nextItemForBroadcast
             emit(packet, .lan(.legacy))
             emit(packet, .relay)
         }
@@ -1984,7 +2010,8 @@ public final class CueEngine: ObservableObject {
     }
 
     private func broadcastLegacyState() {
-        let packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast)
+        var packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast)
+        packet.nextItem = nextItemForBroadcast
         AppLog.cue.debug("broadcastState() — isMasterServer=\(self.isMasterServer, privacy: .public)")
 
         if isMasterServer {
@@ -1995,7 +2022,8 @@ public final class CueEngine: ObservableObject {
     }
 
     func broadcastCatchUp() {
-        let packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
+        var packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
+        packet.nextItem = nextItemForBroadcast
         AppLog.cue.debug("broadcastCatchUp() — isMasterServer=\(self.isMasterServer, privacy: .public) messages=\(self.recentMessages.count, privacy: .public)")
 
         if isMasterServer {
@@ -2009,7 +2037,8 @@ public final class CueEngine: ObservableObject {
         refreshTimerAnchor()
         publishTimerAnchorToV2()
         guard let item = activeTimerItemForBroadcast else { return }
-        let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
+        var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
+        packet.nextItem = nextItemForBroadcast
         AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .private)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
             emit(packet, .lan(.legacy))
@@ -2102,6 +2131,7 @@ public final class CueEngine: ObservableObject {
             }
             if let timer = packet.timerItem, !isV2Timer {
                 self.activeTimerItem = timer
+                applyReceivedNextItem(packet.nextItem)
             }
             if let messages = packet.messages {
                 addMessages(messages)
@@ -2109,6 +2139,7 @@ public final class CueEngine: ObservableObject {
         case .timerUpdate:
             if let timer = packet.timerItem, !isV2Timer {
                 self.activeTimerItem = timer
+                applyReceivedNextItem(packet.nextItem)
             }
         case .messageBroadcast:
             if let msg = packet.message {
@@ -2133,6 +2164,7 @@ public final class CueEngine: ObservableObject {
             }
             if let timer = packet.timerItem, !(isV2Timer && !isV2Pong) {
                 self.activeTimerItem = timer
+                applyReceivedNextItem(packet.nextItem)
             }
             if let messages = packet.messages {
                 if isV2Pong {
