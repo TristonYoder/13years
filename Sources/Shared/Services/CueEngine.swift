@@ -86,7 +86,7 @@ public final class CueEngine: ObservableObject {
     @Published public var isLANConnected: Bool = true
     @Published public var isProducerLive: Bool = false
     @Published public var hasSyncedWithProducer: Bool = false
-    private var lastProducerPacketAt: Date?
+    var lastProducerPacketAt: Date?
     private static let producerStalenessInterval: TimeInterval = 12
     @Published public var isProxyEnabled: Bool = false {
         didSet {
@@ -132,7 +132,7 @@ public final class CueEngine: ObservableObject {
     @Published public var plotipharRoles: [PlotipharClient.PlotipharRole] = []
 
     private static let deviceIdDefaultsKey = "cueEngineDeviceId"
-    private let deviceId: String
+    let deviceId: String
 
     private static func persistentDeviceId() -> String {
         if let existing = UserDefaults.standard.string(forKey: CueEngine.deviceIdDefaultsKey) {
@@ -148,8 +148,8 @@ public final class CueEngine: ObservableObject {
     @Published public var remoteProducerName: String?
     @Published public var remoteControllerCount: Int = 0
 
-    private let server = LocalCueServer()
-    private let client = LocalCueClient()
+    let server = LocalCueServer()
+    let client = LocalCueClient()
     private let relayClient = PlotipharRelayClient()
     private let directPeerChannel = DirectPeerChannel()
     private var controlAPIServer: ControlAPIServer?
@@ -160,6 +160,9 @@ public final class CueEngine: ObservableObject {
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
     private var timerSubscription: AnyCancellable?
+    private var fastTimerSubscription: AnyCancellable?
+    var syncV2 = SyncV2State()
+    var outboundObserver: ((CuePacket, OutboundTarget) -> Void)?
 
     public init(mirroring commands: RemoteProducerCommanding?) {
         self.isMasterServer = true
@@ -171,7 +174,7 @@ public final class CueEngine: ObservableObject {
         self.selectedRoleIds = []
     }
 
-    public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false) {
+    public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false, startsNetworking: Bool = true) {
         self.isMasterServer = isMasterServer
         self.hostsControlAPI = hostsControlAPI
         self.isRemoteMirror = false
@@ -204,16 +207,16 @@ public final class CueEngine: ObservableObject {
         restoreNotificationsClearedAt()
         restorePersistedFlow()
         setupDefaultPlan()
-        startNetworking()
+        if startsNetworking { startNetworking() }
         relayClient.onPacketReceived = { [weak self] packet in
-            self?.handlePacket(packet)
+            self?.handlePacket(packet, origin: .relay)
         }
         relayClient.onTextMessageReceived = { [weak self] data in
             guard let peerHello = PeerHello.decode(from: data) else { return }
             self?.directPeerChannel.connect(to: peerHello)
         }
         directPeerChannel.onPacketReceived = { [weak self] packet in
-            self?.handlePacket(packet)
+            self?.handlePacket(packet, origin: .relay)
         }
 
         refreshPCOTokensIfNeeded()
@@ -251,6 +254,10 @@ public final class CueEngine: ObservableObject {
         AppLog.cue.info("startNetworking() — isMasterServer=\(self.isMasterServer, privacy: .public)")
         isProducerLive = false
         hasSyncedWithProducer = false
+        resetClientSyncState()
+        syncV2.anchor = nil
+        syncV2.lastBroadcastRoles = nil
+        syncV2.relayHasV2Peer = false
         lastProducerPacketAt = nil
         connectedProducerHost = nil
         connectedProducerAPIPort = nil
@@ -258,8 +265,8 @@ public final class CueEngine: ObservableObject {
             client.stop()
             server.start()
             server.advertisedControlAPIPort = controlAPIPort
-            server.onPacketReceived = { [weak self] packet in
-                self?.handlePacket(packet)
+            server.onPacketReceived = { [weak self] packet, connection in
+                self?.handlePacket(packet, origin: .lanServer(connection))
             }
             server.onStatusChanged = { [weak self] isJoined in
                 self?.isLANConnected = isJoined
@@ -268,11 +275,12 @@ public final class CueEngine: ObservableObject {
             server.stop()
             client.start()
             client.onPacketReceived = { [weak self] packet in
-                self?.handlePacket(packet)
+                self?.handlePacket(packet, origin: .lanClient)
             }
             client.onStatusChanged = { [weak self] isJoined in
                 self?.isLANConnected = isJoined
                 if !isJoined {
+                    self?.resetClientSyncState()
                     self?.isProducerLive = false
                     self?.connectedProducerHost = nil
                     self?.connectedProducerAPIPort = nil
@@ -281,6 +289,7 @@ public final class CueEngine: ObservableObject {
             client.onMasterDiscovered = { [weak self] name in
                 self?.connectedMasterName = name
                 self?.requestCatchUp()
+                self?.startSyncBurst()
             }
             client.onConnectedHost = { [weak self] host in
                 self?.connectedProducerHost = host
@@ -1282,6 +1291,8 @@ public final class CueEngine: ObservableObject {
         }
         if activeTimerItem?.id == id {
             activeTimerItem?.isDurationActual = isActual
+            refreshTimerAnchor()
+            publishTimerAnchorToV2()
         }
     }
 
@@ -1294,6 +1305,8 @@ public final class CueEngine: ObservableObject {
         isActiveTimerActualOverride = isActual
         actualOverrideItemId = isActual ? item.id : nil
         broadcastState()
+        refreshTimerAnchor()
+        publishTimerAnchorToV2()
     }
 
     public var activeTimerActualForDisplay: Bool {
@@ -1302,7 +1315,7 @@ public final class CueEngine: ObservableObject {
         return item.isDurationActual
     }
 
-    private var activeTimerItemForBroadcast: PCOTimerItem? {
+    var activeTimerItemForBroadcast: PCOTimerItem? {
         guard var item = activeTimerItem else { return nil }
         item.isDurationActual = activeTimerActualForDisplay
         return item
@@ -1629,12 +1642,9 @@ public final class CueEngine: ObservableObject {
         addMessages([msg])
 
         let packet = CuePacket(type: .messageBroadcast, senderId: deviceId, message: msg)
-        if isMasterServer {
-            server.broadcast(packet: packet)
-        } else {
-            client.broadcast(packet: packet)
-        }
-        broadcastToRelay(packet)
+        emit(packet, .lan(.all))
+        emit(packet, .relay)
+        if isMasterServer { _ = nextRev() }
     }
 
     public func hasUnreadMessage(forRoleId roleId: String) -> Bool {
@@ -1678,12 +1688,9 @@ public final class CueEngine: ObservableObject {
         recentMessages = []
         notificationsClearedAt = nil
         let packet = CuePacket(type: .clearMessages, senderId: deviceId)
-        if isMasterServer {
-            server.broadcast(packet: packet)
-        } else {
-            client.broadcast(packet: packet)
-        }
-        broadcastToRelay(packet)
+        emit(packet, .lan(.all))
+        emit(packet, .relay)
+        if isMasterServer { _ = nextRev() }
     }
 
     @discardableResult
@@ -1725,9 +1732,12 @@ public final class CueEngine: ObservableObject {
         client.forgetAssignedHost()
     }
 
-    private func requestCatchUp() {
+    func requestCatchUp() {
         guard !isMasterServer else { return }
-        client.broadcast(packet: CuePacket(type: .ping, senderId: deviceId))
+        var ping = CuePacket(type: .ping, senderId: deviceId)
+        ping.proto = CuePacket.protocolVersion
+        emit(ping, .lan(.all))
+        emit(ping, .relay)
     }
 
     private static let rolesDefaultsKey = "persistedRoles"
@@ -1846,19 +1856,25 @@ public final class CueEngine: ObservableObject {
             .sink { [weak self] _ in
                 self?.tickTimer()
             }
+        fastTimerSubscription = Timer.publish(every: 0.1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isMasterServer, !self.isRemoteMirror else { return }
+                self.evaluateMasterTimer()
+            }
     }
 
     private var pcoLiveSyncTickCount = 0
-    private var heartbeatTickCount = 0
+    var heartbeatTickCount = 0
 
-    private struct TimerAnchor {
+    private struct LegacyTimerAnchor {
         let itemId: String
         let startedAt: Date
         let elapsedAtStart: Int
         var lastWritten: Int
     }
 
-    private var timerAnchor: TimerAnchor?
+    private var legacyTimerAnchor: LegacyTimerAnchor?
     var timerClock: () -> Date = { Date() }
 
     func tickTimer() {
@@ -1876,7 +1892,7 @@ public final class CueEngine: ObservableObject {
         }
 
         if isMasterServer && heartbeatTickCount % 5 == 0 {
-            broadcastState()
+            broadcastLegacyState()
         }
 
         if isMasterServer && heartbeatTickCount % 5 == 0 {
@@ -1885,25 +1901,42 @@ public final class CueEngine: ObservableObject {
 
         if !isMasterServer {
             if let lastProducerPacketAt {
-                isProducerLive = Date().timeIntervalSince(lastProducerPacketAt) < Self.producerStalenessInterval
+                let limit = syncV2.producerIsV2 ? Self.v2StalenessInterval : Self.producerStalenessInterval
+                isProducerLive = Date().timeIntervalSince(lastProducerPacketAt) < limit
             } else {
                 isProducerLive = false
             }
         }
 
+        v2HeartbeatTick()
+
+        if isMasterServer {
+            evaluateMasterTimer()
+        } else if !(syncV2.producerIsV2 && syncV2.held != nil) {
+            accrueLegacyTimer()
+        }
+
+        if isMasterServer, activeTimerItem?.isRunning == true, heartbeatTickCount % 5 == 0 {
+            let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
+            emit(packet, .lan(.legacy))
+            emit(packet, .relay)
+        }
+    }
+
+    private func accrueLegacyTimer() {
         guard var item = activeTimerItem, item.isRunning else {
-            timerAnchor = nil
+            legacyTimerAnchor = nil
             return
         }
 
         let now = timerClock()
-        if var anchor = timerAnchor, anchor.itemId == item.id, anchor.lastWritten == item.elapsedSeconds {
+        if var anchor = legacyTimerAnchor, anchor.itemId == item.id, anchor.lastWritten == item.elapsedSeconds {
             let elapsed = anchor.elapsedAtStart + max(0, Int(now.timeIntervalSince(anchor.startedAt)))
             anchor.lastWritten = elapsed
-            timerAnchor = anchor
+            legacyTimerAnchor = anchor
             item.elapsedSeconds = elapsed
         } else {
-            timerAnchor = TimerAnchor(
+            legacyTimerAnchor = LegacyTimerAnchor(
                 itemId: item.id,
                 startedAt: now,
                 elapsedAtStart: item.elapsedSeconds,
@@ -1911,47 +1944,48 @@ public final class CueEngine: ObservableObject {
             )
         }
         self.activeTimerItem = item
-
-        if isMasterServer && heartbeatTickCount % 5 == 0 {
-            let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
-            server.broadcast(packet: packet)
-            broadcastToRelay(packet)
-        }
     }
 
     private func broadcastState() {
+        broadcastLegacyState()
+        emitV2Roles()
+    }
+
+    private func broadcastLegacyState() {
         let packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast)
         AppLog.cue.debug("broadcastState() — isMasterServer=\(self.isMasterServer, privacy: .public)")
 
         if isMasterServer {
-            server.broadcast(packet: packet)
+            emit(packet, .lan(.legacy))
         }
 
-        broadcastToRelay(packet)
+        emit(packet, .relay)
     }
 
-    private func broadcastCatchUp() {
+    func broadcastCatchUp() {
         let packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
         AppLog.cue.debug("broadcastCatchUp() — isMasterServer=\(self.isMasterServer, privacy: .public) messages=\(self.recentMessages.count, privacy: .public)")
 
         if isMasterServer {
-            server.broadcast(packet: packet)
+            emit(packet, .lan(.legacy))
         }
 
-        broadcastToRelay(packet)
+        emit(packet, .relay)
     }
 
     private func broadcastTimerUpdate() {
+        refreshTimerAnchor()
+        publishTimerAnchorToV2()
         guard let item = activeTimerItemForBroadcast else { return }
         let packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
         AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .public)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
-            server.broadcast(packet: packet)
+            emit(packet, .lan(.legacy))
         }
-        broadcastToRelay(packet)
+        emit(packet, .relay)
     }
 
-    private func broadcastToRelay(_ packet: CuePacket) {
+    func broadcastToRelay(_ packet: CuePacket) {
         guard isProxyEnabled, !proxyToken.isEmpty else { return }
         relayClient.broadcast(packet: packet)
         directPeerChannel.send(packet: packet)
@@ -1990,56 +2024,88 @@ public final class CueEngine: ObservableObject {
         return server
     }
 
-    private func handlePacket(_ packet: CuePacket) {
+    func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }
         AppLog.cue.debug("handlePacket() type=\(packet.type.rawValue, privacy: .public) from=\(packet.senderId, privacy: .public) roleCues=\(packet.roleCues?.count ?? 0, privacy: .public) timerItem=\(packet.timerItem?.title ?? "nil", privacy: .public)")
+
+        noteProducerCapabilities(packet)
+        guard passesRevisionGate(packet) else { return }
 
         switch packet.type {
         case .cueUpdate, .timerUpdate, .pong:
             lastProducerPacketAt = Date()
             hasSyncedWithProducer = true
             isProducerLive = true
+        case .timerAnchor, .cueDelta, .digest, .syncReply:
+            if !isMasterServer {
+                lastProducerPacketAt = Date()
+                hasSyncedWithProducer = true
+                isProducerLive = true
+            }
         default:
             break
         }
+
+        let isV2Timer = !isMasterServer && syncV2.producerIsV2 && syncV2.held != nil
 
         switch packet.type {
         case .cueUpdate:
             if let updatedRoles = packet.roleCues {
                 self.roles = updatedRoles
             }
-            if let timer = packet.timerItem {
+            if let timer = packet.timerItem, !isV2Timer {
                 self.activeTimerItem = timer
             }
             if let messages = packet.messages {
                 addMessages(messages)
             }
         case .timerUpdate:
-            if let timer = packet.timerItem {
+            if let timer = packet.timerItem, !isV2Timer {
                 self.activeTimerItem = timer
             }
         case .messageBroadcast:
             if let msg = packet.message {
                 addMessages([msg])
+                if isMasterServer { _ = nextRev() }
             }
         case .clearMessages:
             recentMessages = []
         case .ping:
             if isMasterServer {
-                broadcastCatchUp()
+                if packet.proto == CuePacket.protocolVersion {
+                    answerV2CatchUp(origin: origin)
+                } else {
+                    broadcastCatchUp()
+                }
             }
         case .pong:
+            let isV2Pong = syncV2.producerIsV2 && packet.rev != nil
+            syncV2.catchUpInFlight = false
             if let updatedRoles = packet.roleCues {
                 self.roles = updatedRoles
             }
-            if let timer = packet.timerItem {
+            if let timer = packet.timerItem, !(isV2Timer && !isV2Pong) {
                 self.activeTimerItem = timer
             }
             if let messages = packet.messages {
-                addMessages(messages)
+                if isV2Pong {
+                    applyV2CatchUpMessages(messages)
+                } else {
+                    addMessages(messages)
+                }
             }
-        default:
-            break
+        case .sync:
+            answerSync(packet, origin: origin)
+        case .syncReply:
+            handleSyncReply(packet)
+        case .timerAnchor:
+            if !isMasterServer { applyTimerAnchorPacket(packet) }
+        case .cueDelta:
+            if !isMasterServer, let deltas = packet.cueDeltas {
+                applyCueDeltas(deltas)
+            }
+        case .digest:
+            if !isMasterServer { verifyDigest(packet) }
         }
     }
 }

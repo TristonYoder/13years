@@ -36,6 +36,17 @@ enum LocalNetworkAddress {
     }
 }
 
+public struct LANConnectionID: Hashable, Sendable {
+    let raw: ObjectIdentifier
+}
+
+public enum LANAudience: Sendable {
+    case all
+    case legacy
+    case v2
+    case connection(LANConnectionID)
+}
+
 public final class LANUnicastServer: @unchecked Sendable {
     public static let port: UInt16 = 13380
     public static let assignPort: UInt16 = 13381
@@ -43,7 +54,7 @@ public final class LANUnicastServer: @unchecked Sendable {
     private static let quickRetryAttempts = 5
     private static let slowRetryInterval: TimeInterval = 10
 
-    public var onPacketReceived: ((CuePacket) -> Void)?
+    public var onPacketReceived: ((CuePacket, LANConnectionID) -> Void)?
     public var onStatusChanged: ((Bool) -> Void)?
 
     private var listener: NWListener?
@@ -51,6 +62,7 @@ public final class LANUnicastServer: @unchecked Sendable {
     private var isRunning = false
     private var bindAttempt = 0
     private var connections: [ObjectIdentifier: NWConnection] = [:]
+    private var v2Connections: Set<ObjectIdentifier> = []
 
     public init() {}
 
@@ -74,6 +86,14 @@ public final class LANUnicastServer: @unchecked Sendable {
                 connection.cancel()
             }
             connections.removeAll()
+            v2Connections.removeAll()
+        }
+    }
+
+    public func markProtocolV2(_ id: LANConnectionID) {
+        queue.async { [self] in
+            guard connections[id.raw] != nil else { return }
+            v2Connections.insert(id.raw)
         }
     }
 
@@ -86,10 +106,21 @@ public final class LANUnicastServer: @unchecked Sendable {
         }
     }
 
-    public func send(_ packet: CuePacket) {
+    public func send(_ packet: CuePacket, to audience: LANAudience = .all) {
         queue.async { [self] in
-            guard let data = packet.encode(), let framed = LANFraming.frame(data) else { return }
-            for (_, connection) in connections {
+            let targets: [NWConnection]
+            switch audience {
+            case .all:
+                targets = Array(connections.values)
+            case .legacy:
+                targets = connections.filter { !v2Connections.contains($0.key) }.map(\.value)
+            case .v2:
+                targets = connections.filter { v2Connections.contains($0.key) }.map(\.value)
+            case .connection(let id):
+                targets = connections[id.raw].map { [$0] } ?? []
+            }
+            guard !targets.isEmpty, let data = packet.encode(), let framed = LANFraming.frame(data) else { return }
+            for connection in targets {
                 connection.send(content: framed, completion: .contentProcessed { error in
                     if let error {
                         AppLog.networking.error("LANUnicastServer send error: \(String(describing: error), privacy: .public)")
@@ -156,7 +187,10 @@ public final class LANUnicastServer: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.queue.async { self?.connections.removeValue(forKey: key) }
+                self?.queue.async {
+                    self?.connections.removeValue(forKey: key)
+                    self?.v2Connections.remove(key)
+                }
             default:
                 break
             }
@@ -170,11 +204,13 @@ public final class LANUnicastServer: @unchecked Sendable {
             guard let self else { return }
             guard let data else {
                 self.connections.removeValue(forKey: key)
+                self.v2Connections.remove(key)
                 connection.cancel()
                 return
             }
             if let packet = CuePacket.decode(from: data) {
-                DispatchQueue.main.async { self.onPacketReceived?(packet) }
+                let id = LANConnectionID(raw: key)
+                DispatchQueue.main.async { self.onPacketReceived?(packet, id) }
             }
             self.receiveLoop(on: connection, key: key)
         }

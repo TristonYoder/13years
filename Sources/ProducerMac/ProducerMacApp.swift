@@ -54,6 +54,14 @@ struct ProducerMacApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     documents.saveOnClose(cueEngine)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    cueEngine.deviceDidBecomeActive()
+                    remoteHub.session?.resync()
+                }
+                .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+                    cueEngine.deviceDidBecomeActive()
+                    remoteHub.session?.resync()
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .commands {

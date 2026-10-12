@@ -47,6 +47,10 @@ struct ProducerIOSApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { documents.flushIfNeeded() }
+                    if phase == .active {
+                        cueEngine.deviceDidBecomeActive()
+                        remoteHub.session?.resync()
+                    }
                 }
                 .onOpenURL { documents.open($0, in: cueEngine) }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
