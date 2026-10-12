@@ -758,7 +758,7 @@ const char *cueDisplayName() {
 static const int kMaxRolePickerRows = 8;
 static lv_obj_t *rolePickerScreen = nullptr;
 static String rolePickerIds[kMaxRolePickerRows];
-static lv_obj_t *pickerStatusLabel = nullptr;
+static lv_obj_t *pickerStatusLabel = nullptr, *pickerStatusDot = nullptr;
 static String pickerStatusShown;
 
 static void onRoleRowClicked(lv_event_t *e) {
@@ -788,7 +788,7 @@ static void onRolePickerCancelClicked(lv_event_t *e) {
 
 static void addRoleRow(lv_obj_t *parent, const char *roleId, const char *displayName) {
   lv_obj_t *row = lv_obj_create(parent);
-  lv_obj_set_size(row, 210, 36);
+  lv_obj_set_size(row, 210, 30);
   lv_obj_set_style_bg_color(row, lv_color_hex(0x2A3244), 0);
   lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(row, 6, 0);
@@ -806,15 +806,19 @@ static void addRoleRow(lv_obj_t *parent, const char *roleId, const char *display
 
 static void updatePickerStatus(cue::Engine &engine, bool wifiConnected, bool lanConnected, pagersync::LinkPhase phase) {
   if (!pickerStatusLabel) return;
+  bool live = wifiConnected && lanConnected && phase == pagersync::LinkPhase::Live;
   String text = pagersync::linkStatusText(wifiConnected, lanConnected, phase);
   String host = lan::producerLabel();
-  if (host.length() > 0) text += "\n" + host;
+  if (host.length() > 0) text += " - " + host;
   if (engine.hasClockOffset()) {
-    char buf[40];
-    snprintf(buf, sizeof(buf), "\nClock offset %+ld ms", (long)lround(engine.clockOffsetMs()));
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\nClock %+ld ms", (long)lround(engine.clockOffsetMs()));
     text += buf;
   } else {
     text += "\nClock not synced";
+  }
+  if (pickerStatusDot) {
+    lv_obj_set_style_bg_color(pickerStatusDot, lv_color_hex(live ? 0x34C759 : 0xFF3B30), 0);
   }
   if (!pickerStatusShown.equals(text.c_str())) {
     pickerStatusShown = text;
@@ -832,16 +836,9 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_style_bg_opa(rolePickerScreen, LV_OPA_COVER, 0);
   lv_obj_set_flex_flow(rolePickerScreen, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(rolePickerScreen, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_row(rolePickerScreen, 6, 0);
-  lv_obj_set_style_pad_all(rolePickerScreen, 8, 0);
-
-  pickerStatusLabel = lv_label_create(rolePickerScreen);
-  lv_label_set_long_mode(pickerStatusLabel, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(pickerStatusLabel, 210);
-  lv_obj_set_style_text_align(pickerStatusLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(pickerStatusLabel, lv_color_hex(0xB0B0B0), 0);
-  lv_obj_set_style_text_font(pickerStatusLabel, &inter_regular_14, 0);
-  pickerStatusShown = "";
+  lv_obj_set_style_pad_row(rolePickerScreen, 4, 0);
+  lv_obj_set_style_pad_all(rolePickerScreen, 4, 0);
+  lv_obj_set_style_pad_bottom(rolePickerScreen, 32, 0);
 
   lv_obj_t *title = lv_label_create(rolePickerScreen);
   lv_label_set_text(title, "Select this pager's role");
@@ -864,8 +861,13 @@ static void buildRolePickerScreen(cue::Engine &engine) {
     }
   }
 
+  lv_obj_t *bgTitle = lv_label_create(rolePickerScreen);
+  lv_label_set_text(bgTitle, "Background");
+  lv_obj_set_style_text_color(bgTitle, lv_color_white(), 0);
+  lv_obj_set_style_text_font(bgTitle, &inter_regular_18, 0);
+
   lv_obj_t *cueRow = lv_obj_create(rolePickerScreen);
-  lv_obj_set_size(cueRow, 210, 32);
+  lv_obj_set_size(cueRow, 210, 30);
   lv_obj_set_style_bg_color(cueRow, lv_color_hex(0x2A3244), 0);
   lv_obj_set_style_bg_opa(cueRow, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(cueRow, 6, 0);
@@ -879,7 +881,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   updateCueToggleLabel();
 
   lv_obj_t *cancelRow = lv_obj_create(rolePickerScreen);
-  lv_obj_set_size(cancelRow, 210, 32);
+  lv_obj_set_size(cancelRow, 210, 30);
   lv_obj_set_style_bg_opa(cancelRow, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(cancelRow, 1, 0);
   lv_obj_set_style_border_color(cancelRow, lv_color_white(), 0);
@@ -891,6 +893,30 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_style_text_color(cancelLabel, lv_color_white(), 0);
   lv_label_set_text(cancelLabel, "Cancel");
   lv_obj_center(cancelLabel);
+
+  lv_obj_t *statusRow = lv_obj_create(rolePickerScreen);
+  lv_obj_remove_style_all(statusRow);
+  lv_obj_add_flag(statusRow, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_clear_flag(statusRow, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(statusRow, 224, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(statusRow, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(statusRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(statusRow, 5, 0);
+  lv_obj_align(statusRow, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+  pickerStatusDot = lv_obj_create(statusRow);
+  lv_obj_remove_style_all(pickerStatusDot);
+  lv_obj_set_size(pickerStatusDot, 7, 7);
+  lv_obj_set_style_radius(pickerStatusDot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_opa(pickerStatusDot, LV_OPA_COVER, 0);
+  lv_obj_clear_flag(pickerStatusDot, LV_OBJ_FLAG_CLICKABLE);
+
+  pickerStatusLabel = lv_label_create(statusRow);
+  lv_label_set_long_mode(pickerStatusLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(pickerStatusLabel, 200);
+  lv_obj_set_style_text_color(pickerStatusLabel, lv_color_hex(0x8A8A90), 0);
+  lv_obj_set_style_text_font(pickerStatusLabel, &inter_regular_14, 0);
+  pickerStatusShown = "";
 }
 
 void setDisplayFlipped(bool flipped) {

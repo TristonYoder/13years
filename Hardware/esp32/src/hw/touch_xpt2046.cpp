@@ -26,7 +26,7 @@ static const uint32_t kTouchSpiHz = 2500000;
 static const uint16_t kPressureThreshold = 400;
 
 #define TOUCH_SWAP_XY 0
-#define TOUCH_INVERT_X 0
+#define TOUCH_INVERT_X 1
 #define TOUCH_INVERT_Y 0
 static const uint16_t kRawXMin = 300, kRawXMax = 3800;
 static const uint16_t kRawYMin = 300, kRawYMax = 3800;
