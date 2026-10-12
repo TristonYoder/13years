@@ -100,6 +100,7 @@ public struct LiveTimerHeaderView: View {
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .producerButtonShape()
                                 .tint(item.isRunning ? .blue : .green)
                                 .help(item.isRunning ? "Pause the timer" : "Start the timer")
 
@@ -115,6 +116,7 @@ public struct LiveTimerHeaderView: View {
                                     Label("Next Service", systemImage: "calendar.badge.clock")
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .producerButtonShape()
                                 .help("Load the next scheduled service from Planning Center")
                             } else {
                                 Button(action: { engine.nextPlanItem() }) {
@@ -148,6 +150,7 @@ public struct LiveTimerHeaderView: View {
                     .frame(maxHeight: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .producerButtonShape()
             .tint(.yellow)
             .foregroundStyle(.black)
             .help("Set STANDBY for the \(count) selected role(s)")
@@ -160,6 +163,7 @@ public struct LiveTimerHeaderView: View {
                     .frame(maxHeight: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .producerButtonShape()
             .tint(.green)
             .help("Set GO for the \(count) selected role(s)")
 
