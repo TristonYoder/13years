@@ -54,6 +54,19 @@ public struct ControlAPISettingsSection: View {
                         .foregroundStyle(engine.controlAPIClientCount > 0 ? .green : .secondary)
                 }
             }
+
+            #if !os(tvOS)
+            if let release = Self.companionReleaseURL {
+                Link(destination: release) {
+                    Label("Companion Module \(Self.appVersion)", systemImage: "puzzlepiece.extension")
+                }
+            }
+            if let repository = URL(string: "https://github.com/TristonYoder/companion-module-13YearsProducer") {
+                Link(destination: repository) {
+                    Label("Companion Module Source", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+            }
+            #endif
         }
         .onAppear { portText = String(engine.controlAPIPort) }
         .onChange(of: engine.controlAPIPort) { _, newValue in
@@ -103,6 +116,14 @@ public struct ControlAPISettingsSection: View {
         #else
         plainAddress(address)
         #endif
+    }
+
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+
+    private static var companionReleaseURL: URL? {
+        URL(string: "https://github.com/TristonYoder/companion-module-13YearsProducer/releases/tag/v\(appVersion)")
     }
 
     private func plainAddress(_ address: String) -> some View {
