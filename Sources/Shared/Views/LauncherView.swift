@@ -51,9 +51,12 @@ struct LauncherView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { cards }
+                    .fixedSize(horizontal: false, vertical: true)
                 VStack(spacing: 12) {
                     HStack(spacing: 12) { newCards }
+                        .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 12) { openCards }
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(spacing: 12) { cards }
             }
@@ -132,9 +135,10 @@ struct LauncherView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.vertical, 16)
             .padding(.horizontal, 10)
-            .frame(minWidth: 120, idealWidth: 120, maxWidth: .infinity, minHeight: 44)
+            .frame(minWidth: 120, idealWidth: 120, maxWidth: .infinity, minHeight: 132, maxHeight: .infinity)
             .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
