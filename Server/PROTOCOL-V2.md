@@ -137,3 +137,15 @@ nextItem: {
 
 - A role whose cue is `OFF` shows no cue word; the layout keeps its place. `STANDBY` and `GO` show as before.
 - The next-item card sits below the current-item card: the title in uppercase, then the notes for the pager's role categories; no card when there is no next item. Compact layouts (lower third, the ESP32 panel) may omit or shrink it.
+
+## Landscape layout ("timer first")
+
+Used by the Swift pager (iPad, Apple TV, any window wider than tall) and the web pager (`layout=auto` when the viewport is wider than tall and its aspect ratio is under 3:1; `?layout=landscape` forces it; wider than 3:1 is still the lower third). All sizes are fractions of the shorter side `s` of the pager window so it scales from an iPad to a TV.
+
+- Ground: near-black (`#111114`). The whole screen is framed by a border in the cue colour (STANDBY yellow, GO green) of thickness `max(14 px, 0.022 s)`. With no cue (`OFF`) the frame stays at the same thickness in a barely visible neutral so the layout never shifts.
+- Cue badge, top left, inside the frame: a filled rounded rectangle in the cue colour with dark text, holding the cue word (`GO!`, `STANDBY`) at about `0.11 s` high, heavy weight. No badge and no text when `OFF`.
+- Local time, top centre: the device's local time of day (`h:mm` with the locale's 12 or 24 hour style), about `0.045 s`, dimmed. It updates every second.
+- Role, top right: the role name, with `FOR: PERSON` beneath when a person is assigned, and the connection state (dot and short text).
+- Centre: the current item title in uppercase (about `0.05 s`, up to two lines), the countdown (about `0.32 s`, heaviest weight; negative values keep the `+` prefix), then `PROJECTED` or `ACTUAL` (about `0.02 s`, dimmed).
+- Bottom left: the current item's notes for the role's categories as a translucent card; hidden when there are none. The yellow message banner overlays the bottom edge when a message is standing.
+- Bottom right: the next-item card (uppercase title and the role's notes), at most 40% of the width; hidden when there is no next item.
