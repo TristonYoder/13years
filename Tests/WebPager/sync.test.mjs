@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -944,4 +944,31 @@ test("bottomRowMode picks message, both, one card, or none", () => {
   assert.equal(core.bottomRowMode(false, true, false), "left");
   assert.equal(core.bottomRowMode(false, false, true), "right");
   assert.equal(core.bottomRowMode(false, false, false), "none");
+});
+
+test("parseCueDisplay accepts outline, full and fullscreen", () => {
+  assert.equal(core.parseCueDisplay("outline"), "outline");
+  assert.equal(core.parseCueDisplay("Full"), "full");
+  assert.equal(core.parseCueDisplay("fullscreen"), "full");
+  assert.equal(core.parseCueDisplay("full-screen"), "full");
+  assert.equal(core.parseCueDisplay("bogus"), null);
+  assert.equal(core.parseCueDisplay(""), null);
+  assert.equal(core.parseCueDisplay(null), null);
+  assert.equal(core.parseCueDisplay(undefined), null);
+});
+
+test("cueDisplayFor prefers the query, then storage, then outline", () => {
+  assert.equal(core.cueDisplayFor("full", "outline"), "full");
+  assert.equal(core.cueDisplayFor("outline", "full"), "outline");
+  assert.equal(core.cueDisplayFor(null, "full"), "full");
+  assert.equal(core.cueDisplayFor("bogus", "fullscreen"), "full");
+  assert.equal(core.cueDisplayFor("bogus", "bogus"), "outline");
+  assert.equal(core.cueDisplayFor(null, null), "outline");
+  assert.equal(core.cueDisplayFor(undefined, undefined), "outline");
+});
+
+test("layoutFor maps portrait to the framed standard layout", () => {
+  assert.equal(core.layoutFor(1920, 1080, "portrait"), "standard");
+  assert.equal(core.layoutFor(390, 844, "auto"), "standard");
+  assert.equal(core.layoutFor(844, 390, "auto"), "landscape");
 });

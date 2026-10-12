@@ -26,15 +26,21 @@
 
     --bg: var(--cue-off-bg);
     --fg: var(--cue-off-fg);
+    --ink: #f5f5f7;
+    --cuefull: #111114;
   }
 
   [data-cue="STANDBY"], [data-cue="FLASH_STANDBY"] {
     --bg: var(--cue-standby-bg);
     --fg: var(--cue-standby-fg);
+    --ink: #1a1a1a;
+    --cuefull: var(--cue-standby-bg);
   }
   [data-cue="GO"], [data-cue="FLASH_GO"] {
     --bg: var(--cue-go-bg);
     --fg: var(--cue-go-fg);
+    --ink: #ffffff;
+    --cuefull: var(--cue-go-bg);
   }
 
   @font-face {
@@ -94,24 +100,6 @@
 
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "zero" 1; }
 
-  #standard {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: calc(2 * var(--s));
-    padding: calc(2 * var(--s)) calc(2.5 * var(--s));
-    min-height: 0;
-    width: min(100%, calc(80 * var(--s)));
-    margin: 0 auto;
-  }
-
-  .rolebar {
-    display: flex;
-    align-items: center;
-    gap: calc(1.5 * var(--s));
-    flex: 0 0 auto;
-  }
-
   .rolepick {
     position: relative;
     display: inline-flex;
@@ -169,145 +157,8 @@
   }
   .link[data-live="1"] .dot { background: #30d158; }
 
-  .stage {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: calc(1.4 * var(--s));
-    min-height: 0;
-  }
-
-  #cueWord {
-    font-size: min(calc(9 * var(--s)), 17vw);
-    font-weight: 900;
-    line-height: 0.95;
-    letter-spacing: -0.02em;
-    text-align: center;
-    min-height: 0.95em;
-  }
-
-  #person {
-    font-size: calc(2 * var(--s));
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    opacity: 0.85;
-  }
-
-  #itemCard {
-    flex: 0 0 auto;
-    align-self: center;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: calc(2 * var(--s));
-    padding: calc(2 * var(--s)) calc(3 * var(--s));
-    max-width: 100%;
-  }
-
-  #itemTitle {
-    font-size: calc(2 * var(--s));
-    font-weight: 700;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  #itemCard[data-header="1"] #itemTitle { font-size: calc(2.8 * var(--s)); }
-
-  #countdown {
-    font-size: calc(6.8 * var(--s));
-    font-weight: 900;
-    line-height: 1.05;
-    margin-top: calc(0.6 * var(--s));
-  }
-
-  #duration {
-    font-size: max(12px, calc(1.35 * var(--s)));
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    opacity: 0.85;
-  }
-
   [data-stage="amber"] { color: #ff9f0a; color: color-mix(in srgb, var(--fg) 70%, #ff9f0a); }
   [data-stage="red"] { color: #ff453a; color: color-mix(in srgb, var(--fg) 60%, #ff3b30); }
-
-  #notes {
-    flex: 0 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: calc(1.2 * var(--s));
-    overflow: hidden;
-  }
-
-  .note {
-    background: rgba(0, 0, 0, 0.18);
-    border-radius: calc(1.5 * var(--s));
-    padding: calc(1.2 * var(--s)) calc(2 * var(--s));
-  }
-  .note[data-current="1"] { background: rgba(0, 0, 0, 0.3); }
-
-  .note {
-    font-size: calc(1.85 * var(--s));
-    font-weight: 500;
-    overflow-wrap: anywhere;
-  }
-  .note strong { font-weight: 900; }
-  .note[data-current="1"] { font-size: calc(2.2 * var(--s)); font-weight: 700; }
-
-  #nextCard {
-    flex: 0 0 auto;
-    align-self: center;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: calc(2 * var(--s));
-    padding: calc(1.6 * var(--s)) calc(3 * var(--s));
-    max-width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: calc(1.2 * var(--s));
-  }
-  #nextTitle {
-    font-size: calc(1.6 * var(--s));
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    opacity: 0.9;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  #nextNotes {
-    display: flex;
-    flex-direction: column;
-    gap: calc(1.2 * var(--s));
-    overflow: hidden;
-  }
-  #nextNotes:empty { display: none; }
-
-  #banner {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    width: 100%;
-    min-height: 44px;
-    border: 0;
-    font-family: inherit;
-    text-align: left;
-    -webkit-appearance: none;
-    appearance: none;
-    gap: calc(1.2 * var(--s));
-    background: #ffd60a;
-    color: #000;
-    border-radius: calc(1.5 * var(--s));
-    padding: calc(1.4 * var(--s)) calc(2 * var(--s));
-    font-size: calc(2.2 * var(--s));
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 calc(0.3 * var(--s)) calc(1 * var(--s)) rgba(0, 0, 0, 0.35);
-  }
-  #banner::before { content: "💬"; font-size: calc(2 * var(--s)); }
-
   #notifyBar {
     flex: 0 0 auto;
     display: flex;
@@ -315,6 +166,7 @@
     justify-content: flex-end;
     gap: calc(1 * var(--s));
   }
+  #notifyBar #composeStatus { margin-right: auto; }
 
   #notifyBar button, #chatHead button, #compose button {
     font: inherit;
@@ -557,18 +409,27 @@
   [data-layout="lowerthird"] #ltClock {
     z-index: 101;
   }
-  html[data-layout="landscape"], html[data-layout="landscape"] body {
+  html[data-layout="landscape"], html[data-layout="landscape"] body,
+  html[data-layout="standard"], html[data-layout="standard"] body {
     background: #111114;
     color: #f5f5f7;
   }
+  html[data-cuedisplay="full"][data-layout="landscape"], html[data-cuedisplay="full"][data-layout="landscape"] body,
+  html[data-cuedisplay="full"][data-layout="standard"], html[data-cuedisplay="full"][data-layout="standard"] body {
+    background: var(--cuefull);
+  }
   html[data-offline="1"] #landscape { opacity: 0.5; }
 
-  #landscape {
+  .fr {
     --u: min(100vw, 100vh);
     --s: calc(var(--u) * 0.012);
     --fg: #f5f5f7;
     --cue: rgba(255, 255, 255, 0.1);
+    --ground: #111114;
+    --card: rgba(255, 255, 255, 0.08);
+    --chip: rgba(255, 255, 255, 0.12);
     --frame: max(14px, calc(var(--u) * 0.022));
+    --radius: max(18px, calc(var(--u) * 0.04));
     --pad: calc(var(--u) * 0.025);
     --badge: calc(var(--u) * 0.11);
     --clock: calc(var(--u) * 0.075);
@@ -584,13 +445,19 @@
     overflow: hidden;
     isolation: isolate;
   }
-  #landscape::before {
+  .fr::before {
     content: "";
     position: absolute;
     inset: var(--frame);
-    border-radius: max(18px, calc(var(--u) * 0.04));
-    background: #111114;
+    border-radius: var(--radius);
+    background: var(--ground);
     z-index: -1;
+  }
+  #standard.fr {
+    --frame: max(10px, calc(var(--u) * 0.022));
+    --radius: max(14px, calc(var(--u) * 0.04));
+    --badge: calc(var(--u) * 0.085);
+    --clock: calc(var(--u) * 0.06);
   }
   @media (max-aspect-ratio: 8/5) {
     #landscape {
@@ -598,13 +465,21 @@
       --clock: calc(var(--u) * 0.055);
     }
   }
-  html[data-cue="STANDBY"] #landscape, html[data-cue="FLASH_STANDBY"] #landscape { --cue: var(--cue-standby-bg); }
-  html[data-cue="GO"] #landscape, html[data-cue="FLASH_GO"] #landscape { --cue: var(--cue-go-bg); }
+  html[data-cue="STANDBY"] .fr, html[data-cue="FLASH_STANDBY"] .fr { --cue: var(--cue-standby-bg); }
+  html[data-cue="GO"] .fr, html[data-cue="FLASH_GO"] .fr { --cue: var(--cue-go-bg); }
+  html[data-cuedisplay="full"] .fr {
+    --fg: var(--ink);
+    --ground: var(--cuefull);
+    --card: rgba(0, 0, 0, 0.28);
+    --chip: rgba(0, 0, 0, 0.2);
+    background: var(--cuefull);
+  }
+  html[data-cuedisplay="full"] .fr::before { inset: 0; border-radius: 0; }
   @media (prefers-reduced-motion: no-preference) {
-    #landscape { transition: background-color 0.2s linear; }
+    .fr { transition: background-color 0.2s linear; }
   }
 
-  #lsTop {
+  .fr-top {
     position: relative;
     flex: 0 0 auto;
     display: flex;
@@ -614,14 +489,14 @@
     min-height: calc(var(--badge) * 1.16);
   }
 
-  #lsSlot {
+  .fr-slot {
     flex: 0 0 auto;
     display: grid;
     justify-items: start;
     align-items: start;
   }
-  #lsSlot > * { grid-row: 1; grid-column: 1; }
-  #lsBadge {
+  .fr-slot > * { grid-row: 1; grid-column: 1; }
+  .fr-badge {
     font-size: var(--badge);
     font-weight: 900;
     line-height: 1;
@@ -634,7 +509,7 @@
     color: #0b0b0d;
     visibility: hidden;
   }
-  #lsSlot::before {
+  .fr-slot::before {
     content: "STANDBY";
     grid-row: 1;
     grid-column: 1;
@@ -647,8 +522,10 @@
     overflow: hidden;
     visibility: hidden;
   }
-  #lsSlot.cue #lsBadge { visibility: visible; }
-  #lsTime {
+  html[data-cuedisplay="full"] .fr-badge, html[data-cuedisplay="full"] .fr-slot::before { padding: 0; }
+  html[data-cuedisplay="full"] .fr-badge { background: transparent; }
+  .fr-slot.cue .fr-badge { visibility: visible; }
+  .fr-time {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -656,18 +533,18 @@
     font-weight: 900;
     line-height: 1;
     white-space: nowrap;
-    color: #f5f5f7;
+    color: var(--fg);
   }
-  #lsSlot.cue #lsTime { visibility: hidden; }
-  #lsTimeLabel {
-    font-size: calc(var(--u) * 0.018);
+  .fr-slot.cue .fr-time { visibility: hidden; }
+  .fr-timelabel {
+    font-size: max(10px, calc(var(--u) * 0.018));
     font-weight: 700;
     letter-spacing: 0.15em;
     opacity: 0.6;
     margin-top: calc(var(--u) * 0.008);
   }
 
-  #lsSide {
+  .fr-side {
     flex: 0 1 auto;
     min-width: 0;
     max-width: 38%;
@@ -675,19 +552,176 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: calc(var(--u) * 0.008);
     text-align: right;
   }
-  #landscape .rolepick { font-size: calc(var(--u) * 0.03); max-width: 100%; }
-  #landscape #role { background: rgba(255, 255, 255, 0.12); color: var(--fg); }
-  #lsPerson {
-    font-size: calc(var(--u) * 0.022);
+  .fr-roleslot { display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * 0.008); max-width: 100%; }
+  .fr .rolepick { font-size: calc(var(--u) * 0.03); max-width: 100%; }
+  #standard .rolepick { font-size: max(14px, calc(var(--u) * 0.036)); }
+  .fr #role { background: var(--chip); color: var(--fg); }
+  .fr .link { margin-left: 0; font-size: calc(var(--u) * 0.02); color: var(--fg); }
+  #standard .link { font-size: max(11px, calc(var(--u) * 0.028)); }
+
+  .fr-card {
+    --k: 1;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--u) * 0.012 * var(--k));
+    border-radius: calc(var(--u) * 0.02);
+    background: var(--card);
+    color: #f5f5f7;
+    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
+  }
+  #landscape .fr-card, #ptNext { max-height: calc(var(--u) * 0.28); }
+  .fr-next-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: calc(var(--u) * 0.02);
+  }
+  .fr-next-title {
+    min-width: 0;
+    font-size: calc(var(--u) * 0.035 * var(--k));
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  .fr-next-length {
+    flex: 0 0 auto;
+    font-size: calc(var(--u) * 0.035 * var(--k));
+    font-weight: 800;
+    opacity: 0.85;
+    white-space: nowrap;
+  }
+  #standard .fr-next-title, #standard .fr-next-length { font-size: calc(var(--u) * 0.04 * var(--k)); }
+  .fr-next-notes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01 * var(--k)); overflow: hidden; }
+  .fr-next-notes:empty { display: none; }
+  .fr .note {
+    font-size: calc(var(--u) * 0.026 * var(--k, 1));
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  #standard .note { font-size: calc(var(--u) * 0.032 * var(--k, 1)); }
+  .fr .note strong { font-weight: 900; }
+
+  .fr-msg {
+    --k: 1;
+    position: relative;
+    z-index: 5;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--u) * 0.01);
+    width: 100%;
+    overflow: hidden;
+    border: 0;
+    font-family: inherit;
+    text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    background: #ffd60a;
+    color: #0b0b0d;
+    border-radius: calc(var(--u) * 0.02);
+    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
+  }
+  html[data-cuedisplay="full"] .fr-msg { box-shadow: 0 0 0 calc(var(--u) * 0.004) rgba(0, 0, 0, 0.45); }
+  #landscape .fr-msg { margin-top: auto; max-height: calc(var(--u) * 0.23); }
+  #standard .fr-msg { max-height: calc(var(--u) * 0.34); }
+  .fr-msg-text {
+    font-size: calc(var(--u) * 0.07 * var(--k));
+    font-weight: 800;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  #standard .fr-msg-text { font-size: calc(var(--u) * 0.055 * var(--k)); }
+  .fr-msg-from {
+    font-size: calc(var(--u) * 0.02);
     font-weight: 700;
     letter-spacing: 0.12em;
-    opacity: 0.85;
+    text-transform: uppercase;
+    opacity: 0.7;
   }
-  #lsRoleSlot { display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * 0.008); max-width: 100%; }
-  #landscape .link { margin-left: 0; font-size: calc(var(--u) * 0.02); }
+  #standard .fr-msg-from { font-size: max(11px, calc(var(--u) * 0.026)); }
+
+  .fr #notifyBar button, .fr button#openSettings {
+    background: var(--chip);
+    color: var(--fg);
+  }
+  .fr button#openSettings {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0.75;
+  }
+  #openSettings svg { width: 22px; height: 22px; fill: currentColor; display: block; }
+  #lsTop > #openSettings {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+  }
+
+  #ptMid {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #ptCard {
+    --kh: 1;
+    flex: 0 0 auto;
+    width: 100%;
+    overflow: visible;
+    align-items: center;
+    text-align: center;
+    gap: calc(var(--u) * 0.012 * var(--kh));
+    padding: calc(var(--u) * 0.03);
+  }
+  #ptTitle {
+    max-width: 100%;
+    font-size: calc(var(--u) * 0.05 * var(--kh));
+    font-weight: 800;
+    line-height: 1.1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  #ptCountdown {
+    --em: 3.2;
+    font-size: calc(min(var(--u) * 0.2, 0.82 * var(--u) / var(--em)) * var(--kh));
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  #ptTag {
+    font-size: max(10px, calc(var(--u) * 0.026 * var(--kh)));
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    opacity: 0.6;
+  }
+  #ptNotes {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--u) * 0.01 * var(--k));
+    text-align: left;
+    margin-top: calc(var(--u) * 0.008);
+    padding-top: calc(var(--u) * 0.018 * var(--k));
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  #ptNotes:empty { display: none; }
+  #ptStack {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--pad);
+  }
 
   #lsCenter {
     position: absolute;
@@ -724,7 +758,7 @@
     white-space: nowrap;
   }
   #lsTag {
-    font-size: calc(var(--u) * 0.02);
+    font-size: calc(var(--u) * 0.035);
     font-weight: 700;
     letter-spacing: 0.15em;
     opacity: 0.6;
@@ -741,113 +775,97 @@
     gap: var(--pad);
   }
   #lsBottom[data-mode="left"], #lsBottom[data-mode="right"] { grid-template-columns: 1fr; }
-  #lsNotes, #lsNext {
-    --k: 1;
-    min-width: 0;
-    max-height: calc(var(--u) * 0.28);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--u) * 0.012 * var(--k));
-    border-radius: calc(var(--u) * 0.02);
-    background: rgba(255, 255, 255, 0.08);
-    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
-  }
-  #lsNextHead {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: calc(var(--u) * 0.02);
-  }
-  #lsNextTitle {
-    min-width: 0;
-    font-size: calc(var(--u) * 0.035 * var(--k));
-    font-weight: 800;
-    letter-spacing: 0.03em;
-  }
-  #lsNextLength {
-    flex: 0 0 auto;
-    font-size: calc(var(--u) * 0.035 * var(--k));
-    font-weight: 800;
-    opacity: 0.85;
-    white-space: nowrap;
-  }
-  #lsNextNotes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01 * var(--k)); overflow: hidden; }
-  #lsNextNotes:empty { display: none; }
-  #landscape .note, #landscape .note[data-current="1"] { background: transparent; padding: 0; border-radius: 0; font-size: calc(var(--u) * 0.026 * var(--k, 1)); font-weight: 600; }
 
-  #lsMessage {
-    --k: 1;
-    margin-top: auto;
-    position: relative;
-    z-index: 5;
-    flex: 0 0 auto;
+  #settings {
+    position: fixed;
+    inset: 0;
+    z-index: 11;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: calc(2 * var(--s) + env(safe-area-inset-top)) calc(2 * var(--s) + env(safe-area-inset-right)) calc(2 * var(--s) + env(safe-area-inset-bottom)) calc(2 * var(--s) + env(safe-area-inset-left));
+    background: rgba(0, 0, 0, 0.45);
+  }
+  #settingsCard {
+    width: min(100%, calc(50 * var(--s)));
     display: flex;
     flex-direction: column;
-    gap: calc(var(--u) * 0.01);
-    width: 100%;
-    max-height: calc(var(--u) * 0.25);
-    overflow: hidden;
-    border: 0;
-    font-family: inherit;
-    text-align: left;
-    -webkit-appearance: none;
-    appearance: none;
-    cursor: pointer;
-    background: #ffd60a;
-    color: #0b0b0d;
-    border-radius: calc(var(--u) * 0.02);
-    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
+    gap: calc(1.6 * var(--s));
+    padding: calc(2 * var(--s));
+    background: #1b1b20;
+    color: #f5f5f7;
+    border-radius: calc(2 * var(--s));
+    box-shadow: 0 calc(1 * var(--s)) calc(3 * var(--s)) rgba(0, 0, 0, 0.45);
   }
-  #lsMessageText {
-    font-size: calc(var(--u) * 0.07 * var(--k));
-    font-weight: 800;
-    line-height: 1.15;
-    overflow-wrap: anywhere;
-  }
-  #lsMessageFrom {
-    font-size: calc(var(--u) * 0.02);
+  #settingsHead { display: flex; align-items: center; gap: calc(1 * var(--s)); }
+  #settingsTitle { flex: 1 1 auto; font-size: calc(2.2 * var(--s)); font-weight: 900; }
+  .setting-label {
+    font-size: max(12px, calc(1.35 * var(--s)));
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     opacity: 0.7;
+    margin-bottom: calc(0.8 * var(--s));
   }
+  .seg { display: flex; gap: calc(0.6 * var(--s)); }
+  #settings button {
+    font: inherit;
+    font-size: max(15px, calc(1.7 * var(--s)));
+    font-weight: 700;
+    color: #f5f5f7;
+    background: rgba(255, 255, 255, 0.1);
+    border: 0;
+    border-radius: calc(1.2 * var(--s));
+    min-height: 44px;
+    min-width: 44px;
+    padding: calc(0.9 * var(--s)) calc(1.8 * var(--s));
+    cursor: pointer;
+  }
+  .seg button { flex: 1 1 0; }
+  #settings .seg button[aria-pressed="true"] { background: #f5f5f7; color: #111114; }
 </style>
 </head>
 <body>
   <div id="app">
-    <div id="standard">
-      <div class="rolebar">
-        <span class="rolepick" id="rolepick">
-          <select id="role" aria-label="Role"></select>
-        </span>
-        <span class="link" id="link"><span class="dot"></span><span id="linkLabel">Connecting…</span></span>
+    <div id="standard" class="fr">
+      <div class="fr-top">
+        <div id="ptSlot" class="fr-slot">
+          <div class="fr-time"><span id="ptTimeValue" class="tnum"></span><span class="fr-timelabel">LOCAL TIME</span></div>
+          <div id="ptBadge" class="fr-badge">STANDBY</div>
+        </div>
+        <div class="fr-side">
+          <div id="ptRoleSlot" class="fr-roleslot"></div>
+        </div>
       </div>
 
-      <div class="stage">
-        <div id="cueWord" role="status" aria-live="polite"></div>
-        <div id="person" class="hidden"></div>
+      <div id="ptMid">
+        <div id="ptCard" class="fr-card">
+          <div id="ptTitle"></div>
+          <div id="ptCountdown" class="tnum"></div>
+          <div id="ptTag"></div>
+          <div id="ptNotes"></div>
+        </div>
       </div>
 
-      <div id="itemCard" class="hidden">
-        <div id="itemTitle"></div>
-        <div id="countdown" class="tnum"></div>
-        <div id="duration"></div>
+      <div id="ptStack">
+        <div id="ptNext" class="fr-card hidden">
+          <div class="fr-next-head">
+            <div id="ptNextTitle" class="fr-next-title"></div>
+            <div id="ptNextLength" class="fr-next-length tnum"></div>
+          </div>
+          <div id="ptNextNotes" class="fr-next-notes"></div>
+        </div>
+        <button id="ptMessage" type="button" class="fr-msg hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
+          <div id="ptMessageText" class="fr-msg-text"></div>
+          <div id="ptMessageFrom" class="fr-msg-from"></div>
+        </button>
       </div>
-
-      <div id="notes"></div>
-
-      <div id="nextCard" class="hidden">
-        <div id="nextTitle"></div>
-        <div id="nextNotes"></div>
-      </div>
-
-      <button id="banner" type="button" class="hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)"></button>
 
       <div id="notifyBar">
+        <div id="composeStatus" class="hidden"></div>
         <button id="openChat" type="button">Messages</button>
+        <button id="openSettings" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
       </div>
-      <div id="composeStatus" class="hidden"></div>
     </div>
 
     <div id="chat" class="hidden" role="dialog" aria-label="Messages">
@@ -865,6 +883,22 @@
       </div>
     </div>
 
+    <div id="settings" class="hidden" role="dialog" aria-label="Settings">
+      <div id="settingsCard">
+        <div id="settingsHead">
+          <span id="settingsTitle">Settings</span>
+          <button id="closeSettings" type="button">Done</button>
+        </div>
+        <div>
+          <div class="setting-label">Cue display</div>
+          <div class="seg" role="group" aria-label="Cue display">
+            <button type="button" data-cue-display="outline" aria-pressed="true">Outline</button>
+            <button type="button" data-cue-display="full" aria-pressed="false">Full screen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="lowerthird" class="hidden">
       <span id="ltClock" class="tnum">
         <span id="ltClockValue"></span>
@@ -878,15 +912,14 @@
       </span>
     </div>
 
-    <div id="landscape" class="hidden">
-      <div id="lsTop">
-        <div id="lsSlot">
-          <div id="lsTime"><span id="lsTimeValue" class="tnum"></span><span id="lsTimeLabel">LOCAL TIME</span></div>
-          <div id="lsBadge">STANDBY</div>
+    <div id="landscape" class="fr hidden">
+      <div id="lsTop" class="fr-top">
+        <div id="lsSlot" class="fr-slot">
+          <div class="fr-time"><span id="lsTimeValue" class="tnum"></span><span class="fr-timelabel">LOCAL TIME</span></div>
+          <div id="lsBadge" class="fr-badge">STANDBY</div>
         </div>
-        <div id="lsSide">
-          <div id="lsRoleSlot"></div>
-          <div id="lsPerson" class="hidden"></div>
+        <div class="fr-side">
+          <div id="lsRoleSlot" class="fr-roleslot"></div>
         </div>
       </div>
       <div id="lsCenter">
@@ -895,18 +928,18 @@
         <div id="lsTag"></div>
       </div>
       <div id="lsBottom" data-mode="none">
-        <div id="lsNotes" class="hidden"></div>
-        <div id="lsNext" class="hidden">
-          <div id="lsNextHead">
-            <div id="lsNextTitle"></div>
-            <div id="lsNextLength" class="tnum"></div>
+        <div id="lsNotes" class="fr-card hidden"></div>
+        <div id="lsNext" class="fr-card hidden">
+          <div class="fr-next-head">
+            <div id="lsNextTitle" class="fr-next-title"></div>
+            <div id="lsNextLength" class="fr-next-length tnum"></div>
           </div>
-          <div id="lsNextNotes"></div>
+          <div id="lsNextNotes" class="fr-next-notes"></div>
         </div>
       </div>
-      <button id="lsMessage" type="button" class="hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
-        <div id="lsMessageText"></div>
-        <div id="lsMessageFrom"></div>
+      <button id="lsMessage" type="button" class="fr-msg hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
+        <div id="lsMessageText" class="fr-msg-text"></div>
+        <div id="lsMessageFrom" class="fr-msg-from"></div>
       </button>
     </div>
 
@@ -1306,11 +1339,22 @@ function lowerThirdForViewport(width, height) {
   return height > 0 && width / height >= LOWER_THIRD_ASPECT;
 }
 
+function parseCueDisplay(value) {
+  const text = String(value === undefined || value === null ? "" : value).toLowerCase().replace(/[^a-z]/g, "");
+  if (text === "outline") return "outline";
+  if (text === "full" || text === "fullscreen") return "full";
+  return null;
+}
+
+function cueDisplayFor(param, stored) {
+  return parseCueDisplay(param) || parseCueDisplay(stored) || "outline";
+}
+
 function layoutFor(width, height, param) {
   const value = String(param || "auto").toLowerCase().replace(/[^a-z]/g, "");
   if (value === "lowerthird" || value === "third") return "lowerthird";
   if (value === "landscape") return "landscape";
-  if (value === "standard" || value === "full") return "standard";
+  if (value === "standard" || value === "full" || value === "portrait") return "standard";
   if (lowerThirdForViewport(width, height)) return "lowerthird";
   return height > 0 && width > height ? "landscape" : "standard";
 }
@@ -1753,6 +1797,10 @@ const LAYOUT_PARAM = (params.get("layout") || "auto").toLowerCase().replace(/[^a
 
 const ROLE_STORAGE_KEY = "13years.webpager.role";
 
+const CUE_DISPLAY_KEY = "pagerCueDisplay";
+
+const CUE_PARAM = params.get("cue");
+
 let snapshot = null;
 let lastLtKey = "";
 let lastMessageMode = null;
@@ -1762,6 +1810,7 @@ let snapshotAt = 0;
 let producerName = "";
 const roleSel = createRoleSelection(ROLE_PARAM, readStoredRole());
 let dismissedMessageId = null;
+let cueDisplay = "outline";
 
 const root = document.documentElement;
 
@@ -1769,13 +1818,13 @@ const el = {
   standard: document.getElementById("standard"),
   lowerthird: document.getElementById("lowerthird"),
   landscape: document.getElementById("landscape"),
+  lsTop: document.getElementById("lsTop"),
   lsRoleSlot: document.getElementById("lsRoleSlot"),
   lsSlot: document.getElementById("lsSlot"),
   lsBadge: document.getElementById("lsBadge"),
   lsNextLength: document.getElementById("lsNextLength"),
   ltCue: document.getElementById("ltCue"),
   lsTimeValue: document.getElementById("lsTimeValue"),
-  lsPerson: document.getElementById("lsPerson"),
   lsTitle: document.getElementById("lsTitle"),
   lsCountdown: document.getElementById("lsCountdown"),
   lsTag: document.getElementById("lsTag"),
@@ -1787,23 +1836,32 @@ const el = {
   lsMessage: document.getElementById("lsMessage"),
   lsMessageText: document.getElementById("lsMessageText"),
   lsMessageFrom: document.getElementById("lsMessageFrom"),
+  ptRoleSlot: document.getElementById("ptRoleSlot"),
+  ptSlot: document.getElementById("ptSlot"),
+  ptBadge: document.getElementById("ptBadge"),
+  ptTimeValue: document.getElementById("ptTimeValue"),
+  ptMid: document.getElementById("ptMid"),
+  ptCard: document.getElementById("ptCard"),
+  ptTitle: document.getElementById("ptTitle"),
+  ptCountdown: document.getElementById("ptCountdown"),
+  ptTag: document.getElementById("ptTag"),
+  ptNotes: document.getElementById("ptNotes"),
+  ptNext: document.getElementById("ptNext"),
+  ptNextTitle: document.getElementById("ptNextTitle"),
+  ptNextLength: document.getElementById("ptNextLength"),
+  ptNextNotes: document.getElementById("ptNextNotes"),
+  ptMessage: document.getElementById("ptMessage"),
+  ptMessageText: document.getElementById("ptMessageText"),
+  ptMessageFrom: document.getElementById("ptMessageFrom"),
   role: document.getElementById("role"),
   rolepick: document.getElementById("rolepick"),
   link: document.getElementById("link"),
   linkLabel: document.getElementById("linkLabel"),
-  cueWord: document.getElementById("cueWord"),
-  person: document.getElementById("person"),
-  itemCard: document.getElementById("itemCard"),
-  itemTitle: document.getElementById("itemTitle"),
-  countdown: document.getElementById("countdown"),
-  duration: document.getElementById("duration"),
-  notes: document.getElementById("notes"),
-  nextCard: document.getElementById("nextCard"),
-  nextTitle: document.getElementById("nextTitle"),
-  nextNotes: document.getElementById("nextNotes"),
-  banner: document.getElementById("banner"),
   notifyBar: document.getElementById("notifyBar"),
   openChat: document.getElementById("openChat"),
+  openSettings: document.getElementById("openSettings"),
+  settings: document.getElementById("settings"),
+  closeSettings: document.getElementById("closeSettings"),
   chat: document.getElementById("chat"),
   chatLog: document.getElementById("chatLog"),
   closeChat: document.getElementById("closeChat"),
@@ -1832,17 +1890,35 @@ function storeRole(id) {
   try { localStorage.setItem(ROLE_STORAGE_KEY, id); } catch (_) {  }
 }
 
+function readStoredCueDisplay() {
+  try { return localStorage.getItem(CUE_DISPLAY_KEY); } catch (_) { return null; }
+}
+
+function storeCueDisplay(value) {
+  try { localStorage.setItem(CUE_DISPLAY_KEY, value); } catch (_) {  }
+}
+
+function renderCueButtons() {
+  for (const button of document.querySelectorAll("[data-cue-display]")) {
+    button.setAttribute("aria-pressed", button.dataset.cueDisplay === cueDisplay ? "true" : "false");
+  }
+}
+
+function setCueDisplay(value, remember) {
+  cueDisplay = value;
+  root.dataset.cuedisplay = value;
+  if (remember) storeCueDisplay(value);
+  renderCueButtons();
+  lastFitKey = "";
+  lastPortraitKey = "";
+}
+
 function placeShared(layout) {
   const landscape = layout === "landscape";
-  const rolebar = document.querySelector(".rolebar");
-  const home = landscape ? el.lsRoleSlot : rolebar;
-  if (el.rolepick.parentNode !== home) {
-    if (landscape) home.append(el.link, el.rolepick);
-    else home.append(el.rolepick, el.link);
-  }
-  if (el.banner.parentNode !== el.standard) {
-    el.standard.insertBefore(el.banner, el.notifyBar);
-  }
+  const home = landscape ? el.lsRoleSlot : el.ptRoleSlot;
+  if (el.rolepick.parentNode !== home) home.append(el.link, el.rolepick);
+  const gearHome = landscape ? el.lsTop : el.notifyBar;
+  if (el.openSettings.parentNode !== gearHome) gearHome.append(el.openSettings);
 }
 
 function applyLayout() {
@@ -1862,10 +1938,17 @@ let localTimer = null;
 function tickLocalTime() {
   clearTimeout(localTimer);
   localTimer = null;
-  if (root.dataset.layout !== "landscape") return;
-  setText(el.lsTimeValue, formatClock(new Date()));
+  const layout = root.dataset.layout;
+  if (layout !== "landscape" && layout !== "standard") return;
+  setText(layout === "landscape" ? el.lsTimeValue : el.ptTimeValue, formatClock(new Date()));
   localTimer = setTimeout(tickLocalTime, msUntilNextSecond(Date.now()) + 5);
 }
+
+let lastFitKey = "";
+let lastPortraitKey = "";
+
+const parsedCueParam = parseCueDisplay(CUE_PARAM);
+setCueDisplay(cueDisplayFor(CUE_PARAM, readStoredCueDisplay()), Boolean(parsedCueParam));
 
 window.addEventListener("resize", applyLayout);
 applyLayout();
@@ -1988,76 +2071,21 @@ function renderRoles() {
   el.rolepick.classList.toggle("single", list.length < 2);
 }
 
-function renderStandard() {
-  const role = activeRole();
-  const item = activeItem();
-
-  setText(el.cueWord, cueWord(currentCue()));
-
-  const person = role && role.personName;
-  setText(el.person, person ? "FOR: " + person.toUpperCase() : "");
-  setHidden(el.person, !person);
-
-  setHidden(el.itemCard, !item);
-  if (item) {
-    const isHeader = (item.itemType || "").toLowerCase() === "header";
-    const header = isHeader ? "1" : "0";
-    if (el.itemCard.dataset.header !== header) el.itemCard.dataset.header = header;
-    setText(el.itemTitle, (item.title || "").toUpperCase());
-    setHidden(el.countdown, isHeader);
-    setHidden(el.duration, isHeader);
-    if (!isHeader) {
-      const remaining = remainingSeconds();
-      setText(el.countdown, formatDuration(remaining || 0));
-      setStage(el.countdown, remaining === null ? null : remaining);
-      setText(el.duration, snapshot.timer.isDurationActualForDisplay ? "ACTUAL" : "PROJECTED");
-    }
-  }
-
-  const current = notesFor(item);
-  const notesSignature = current.map((n) => n.category + n.text).join("|");
-  if (el.notes.dataset.signature !== notesSignature) {
-    el.notes.dataset.signature = notesSignature;
-    el.notes.innerHTML = "";
-    for (const n of current) {
-      el.notes.appendChild(buildNote(n.category, n.text, true));
-    }
-  }
-
-  const upcoming = nextItem();
-  setHidden(el.nextCard, !upcoming);
-  if (upcoming) {
-    setText(el.nextTitle, "NEXT: " + (upcoming.title || "").toUpperCase());
-    const nextNotes = notesFor(upcoming);
-    const nextSignature = upcoming.id + "|" + nextNotes.map((n) => n.category + n.text).join("|");
-    if (el.nextNotes.dataset.signature !== nextSignature) {
-      el.nextNotes.dataset.signature = nextSignature;
-      el.nextNotes.innerHTML = "";
-      for (const n of nextNotes) {
-        el.nextNotes.appendChild(buildNote(n.category, n.text, false));
-      }
-    }
-  }
-
-  const notification = activeNotification();
-  setHidden(el.banner, !notification);
-  if (notification) setText(el.banner, notification.text);
-}
-
-function renderLandscapeCountdown() {
+function renderCountdown(view, hideEmpty) {
   const item = activeItem();
   const isHeader = Boolean(item) && (item.itemType || "").toLowerCase() === "header";
   const remaining = remainingSeconds();
   const hasCountdown = Boolean(item) && !isHeader && remaining !== null;
   const text = hasCountdown ? formatDuration(remaining) : "";
-  setText(el.lsCountdown, text);
-  if (el.lsCountdown.__em !== text.length) {
-    el.lsCountdown.__em = text.length;
-    el.lsCountdown.style.setProperty("--em", String(countdownEmWidth(text) * 1.04));
+  setText(view.countdown, text);
+  if (view.countdown.__em !== text.length) {
+    view.countdown.__em = text.length;
+    view.countdown.style.setProperty("--em", String(countdownEmWidth(text) * 1.04));
   }
-  setStage(el.lsCountdown, hasCountdown ? remaining : null);
-  setText(el.lsTag, hasCountdown ? (snapshot.timer.isDurationActualForDisplay ? "ACTUAL" : "PROJECTED") : "");
-  setHidden(el.lsTag, !hasCountdown);
+  setStage(view.countdown, hasCountdown ? remaining : null);
+  setText(view.tag, hasCountdown ? (snapshot.timer.isDurationActualForDisplay ? "ACTUAL" : "PROJECTED") : "");
+  setHidden(view.tag, !hasCountdown);
+  if (hideEmpty) setHidden(view.countdown, !hasCountdown);
 }
 
 function fillNotes(container, signature, notes) {
@@ -2067,21 +2095,23 @@ function fillNotes(container, signature, notes) {
   notes.forEach((n, index) => container.appendChild(buildNote(n.category, n.text, index === 0)));
 }
 
+const landscapeView = { countdown: el.lsCountdown, tag: el.lsTag };
+const portraitView = { countdown: el.ptCountdown, tag: el.ptTag };
+
+function renderSlot(badge, slot) {
+  const word = cueWord(currentCue());
+  setText(badge, word || "STANDBY");
+  slot.classList.toggle("cue", clockSlotFor(currentCue()).mode === "cue");
+}
+
 function renderLandscape() {
-  const role = activeRole();
   const item = activeItem();
 
-  const word = cueWord(currentCue());
-  setText(el.lsBadge, word || "STANDBY");
-  el.lsSlot.classList.toggle("cue", clockSlotFor(currentCue()).mode === "cue");
-
-  const person = role && role.personName;
-  setText(el.lsPerson, person ? "FOR: " + person.toUpperCase() : "");
-  setHidden(el.lsPerson, !person);
+  renderSlot(el.lsBadge, el.lsSlot);
 
   const title = item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "";
   setText(el.lsTitle, (title || "").toUpperCase());
-  renderLandscapeCountdown();
+  renderCountdown(landscapeView, false);
 
   const current = notesFor(item);
   const upcoming = nextItem();
@@ -2112,7 +2142,91 @@ function renderLandscape() {
   fitLandscapeBottom(mode);
 }
 
-let lastFitKey = "";
+function renderPortrait() {
+  const item = activeItem();
+
+  renderSlot(el.ptBadge, el.ptSlot);
+
+  const isHeader = isHeaderItem(item);
+  const title = item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "";
+  setText(el.ptTitle, (title || "").toUpperCase());
+  renderCountdown(portraitView, true);
+
+  const current = isHeader ? [] : notesFor(item);
+  fillNotes(el.ptNotes, current.map((n) => n.category + n.text).join("|"), current);
+  setHidden(el.ptCard, !title && el.ptCountdown.classList.contains("hidden") && current.length === 0);
+
+  const upcoming = nextItem();
+  setHidden(el.ptNext, !upcoming);
+  if (upcoming) {
+    setText(el.ptNextTitle, (upcoming.title || "").toUpperCase());
+    const length = upcoming.lengthInSeconds;
+    setText(el.ptNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
+    const nextNotes = notesFor(upcoming);
+    fillNotes(
+      el.ptNextNotes,
+      upcoming.id + "|" + nextNotes.map((n) => n.category + n.text).join("|"),
+      nextNotes
+    );
+  }
+
+  const message = activeNotification();
+  setHidden(el.ptMessage, !message);
+  if (message) {
+    setText(el.ptMessageText, message.text);
+    setText(el.ptMessageFrom, "From " + (message.sender || "Producer"));
+  }
+  fitPortrait(Boolean(message));
+}
+
+function fitPortrait(hasMessage) {
+  const u = Math.min(window.innerWidth, window.innerHeight);
+  const key = [
+    u, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
+    el.ptNotes.dataset.signature, el.ptNext.classList.contains("hidden") ? 0 : 1,
+    el.ptNextNotes.dataset.signature, el.ptNextTitle.textContent, el.ptNextLength.textContent,
+    el.ptMessageText.textContent, el.ptMessageFrom.textContent,
+    el.ptCard.classList.contains("hidden") ? 0 : 1, el.ptTag.textContent,
+  ].join("\u0001");
+  if (key === lastPortraitKey) return;
+  lastPortraitKey = key;
+  if (hasMessage) {
+    const panel = el.ptMessage;
+    const text = el.ptMessageText;
+    const measure = (k) => {
+      panel.style.setProperty("--k", String(k));
+      const lineHeight = u * 0.055 * k * 1.15;
+      const lines = Math.round(text.scrollHeight / lineHeight);
+      return lines > 4 ? Infinity : panel.scrollHeight;
+    };
+    panel.style.setProperty("--k", String(fitScale(measure, u * 0.34, 0.25)));
+  }
+  if (!el.ptNext.classList.contains("hidden")) {
+    const card = el.ptNext;
+    const k = fitScale((value) => {
+      card.style.setProperty("--k", String(value));
+      return card.scrollHeight;
+    }, u * 0.28, 0.3);
+    card.style.setProperty("--k", String(k));
+  }
+  if (!el.ptCard.classList.contains("hidden")) {
+    const card = el.ptCard;
+    const room = el.ptMid.clientHeight;
+    card.style.setProperty("--kh", "1");
+    const k = fitScale((value) => {
+      card.style.setProperty("--k", String(value));
+      return card.offsetHeight;
+    }, room, 0.5);
+    card.style.setProperty("--k", String(k));
+    if (card.offsetHeight > room) {
+      const kh = fitScale((value) => {
+        card.style.setProperty("--kh", String(value));
+        return card.offsetHeight;
+      }, room, 0.4);
+      card.style.setProperty("--kh", String(kh));
+    }
+  }
+}
 
 function fitLandscapeBottom(mode) {
   const u = Math.min(window.innerWidth, window.innerHeight);
@@ -2128,7 +2242,7 @@ function fitLandscapeBottom(mode) {
       const lines = Math.round(text.scrollHeight / lineHeight);
       return lines > 3 ? Infinity : panel.scrollHeight;
     };
-    panel.style.setProperty("--k", String(fitScale(measure, u * 0.25, 0.25)));
+    panel.style.setProperty("--k", String(fitScale(measure, u * 0.23, 0.25)));
     return;
   }
   for (const card of [el.lsNotes, el.lsNext]) {
@@ -2277,7 +2391,7 @@ function render() {
   } else if (root.dataset.layout === "landscape") {
     renderLandscape();
   } else {
-    renderStandard();
+    renderPortrait();
   }
 }
 
@@ -2391,11 +2505,9 @@ function paintCountdown() {
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
   } else if (root.dataset.layout === "landscape") {
-    renderLandscapeCountdown();
-  } else if (!el.countdown.classList.contains("hidden")) {
-    const remaining = remainingSeconds();
-    setText(el.countdown, formatDuration(remaining || 0));
-    setStage(el.countdown, remaining === null ? null : remaining);
+    renderCountdown(landscapeView, false);
+  } else {
+    renderCountdown(portraitView, true);
   }
 }
 
@@ -2521,6 +2633,8 @@ if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
     lastLtKey = "";
     lastFit = "";
+    lastFitKey = "";
+    lastPortraitKey = "";
     if (snapshot) render();
   });
 }
@@ -2628,12 +2742,33 @@ el.openChat.addEventListener("click", () => {
 
 el.closeChat.addEventListener("click", () => el.chat.classList.add("hidden"));
 
+el.openSettings.addEventListener("click", () => {
+  renderCueButtons();
+  el.settings.classList.remove("hidden");
+});
+
+el.closeSettings.addEventListener("click", () => el.settings.classList.add("hidden"));
+
+el.settings.addEventListener("click", (event) => {
+  if (event.target === el.settings) el.settings.classList.add("hidden");
+});
+
+for (const button of document.querySelectorAll("[data-cue-display]")) {
+  button.addEventListener("click", () => {
+    setCueDisplay(parseCueDisplay(button.dataset.cueDisplay) || "outline", true);
+    if (snapshot) render();
+  });
+}
+
 el.chat.addEventListener("click", (event) => {
   if (event.target === el.chat) el.chat.classList.add("hidden");
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") el.chat.classList.add("hidden");
+  if (event.key === "Escape") {
+    el.chat.classList.add("hidden");
+    el.settings.classList.add("hidden");
+  }
 });
 
 async function dismissStanding() {
@@ -2651,7 +2786,7 @@ async function dismissStanding() {
   }
 }
 
-el.banner.addEventListener("click", dismissStanding);
+el.ptMessage.addEventListener("click", dismissStanding);
 el.lsMessage.addEventListener("click", dismissStanding);
 
 wakeLock.acquire();
