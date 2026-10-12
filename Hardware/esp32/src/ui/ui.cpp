@@ -838,7 +838,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_flex_align(rolePickerScreen, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(rolePickerScreen, 4, 0);
   lv_obj_set_style_pad_all(rolePickerScreen, 4, 0);
-  lv_obj_set_style_pad_bottom(rolePickerScreen, 32, 0);
+  lv_obj_set_style_pad_bottom(rolePickerScreen, 26, 0);
 
   lv_obj_t *title = lv_label_create(rolePickerScreen);
   lv_label_set_text(title, "Select this pager's role");
@@ -880,19 +880,18 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_style_text_color(cueToggleLabel, lv_color_white(), 0);
   updateCueToggleLabel();
 
-  lv_obj_t *cancelRow = lv_obj_create(rolePickerScreen);
-  lv_obj_set_size(cancelRow, 210, 30);
-  lv_obj_set_style_bg_opa(cancelRow, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(cancelRow, 1, 0);
-  lv_obj_set_style_border_color(cancelRow, lv_color_white(), 0);
-  lv_obj_set_style_radius(cancelRow, 6, 0);
-  lv_obj_clear_flag(cancelRow, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_add_flag(cancelRow, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(cancelRow, onRolePickerCancelClicked, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *cancelLabel = lv_label_create(cancelRow);
-  lv_obj_set_style_text_color(cancelLabel, lv_color_white(), 0);
-  lv_label_set_text(cancelLabel, "Cancel");
-  lv_obj_center(cancelLabel);
+  lv_obj_t *closeBtn = lv_obj_create(rolePickerScreen);
+  lv_obj_remove_style_all(closeBtn);
+  lv_obj_add_flag(closeBtn, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(closeBtn, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(closeBtn, 40, 40);
+  lv_obj_align(closeBtn, LV_ALIGN_TOP_RIGHT, 0, -2);
+  lv_obj_add_event_cb(closeBtn, onRolePickerCancelClicked, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *closeLabel = lv_label_create(closeBtn);
+  lv_obj_set_style_text_font(closeLabel, &inter_bold_18, 0);
+  lv_obj_set_style_text_color(closeLabel, lv_color_white(), 0);
+  lv_label_set_text(closeLabel, "X");
+  lv_obj_center(closeLabel);
 
   lv_obj_t *statusRow = lv_obj_create(rolePickerScreen);
   lv_obj_remove_style_all(statusRow);
@@ -902,7 +901,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_flex_flow(statusRow, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(statusRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(statusRow, 5, 0);
-  lv_obj_align(statusRow, LV_ALIGN_BOTTOM_MID, 0, -2);
+  lv_obj_align(statusRow, LV_ALIGN_BOTTOM_MID, 0, 26 - 3);
 
   pickerStatusDot = lv_obj_create(statusRow);
   lv_obj_remove_style_all(pickerStatusDot);
