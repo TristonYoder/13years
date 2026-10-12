@@ -14,7 +14,9 @@ public struct ProducerRootView: View {
     public var body: some View {
         VStack(spacing: 0) {
             #if !os(tvOS)
-            UpdateBannerView()
+            if !engine.isRemoteMirror {
+                UpdateBannerView()
+            }
             #endif
 
             LiveTimerHeaderView()
@@ -36,6 +38,7 @@ public struct ProducerRootView: View {
         .ignoresSafeArea(.container, edges: .top)
         #endif
         .task {
+            guard !engine.isRemoteMirror else { return }
             UpdateChecker.shared.startPeriodicChecks()
         }
     }

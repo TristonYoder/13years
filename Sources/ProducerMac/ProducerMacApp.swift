@@ -48,7 +48,7 @@ struct ProducerMacApp: App {
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet, !RemoteWindowIDs.isAuxiliary(title: window.title) else { return }
+                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet, !RemoteWindowIDs.isAuxiliary(identifier: window.identifier) else { return }
                     documents.saveOnClose(cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
@@ -57,10 +57,12 @@ struct ProducerMacApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     cueEngine.deviceDidBecomeActive()
                     remoteHub.session?.resync()
+                    Task { await remoteHub.session?.checkLiveness() }
                 }
                 .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
                     cueEngine.deviceDidBecomeActive()
                     remoteHub.session?.resync()
+                    Task { await remoteHub.session?.checkLiveness() }
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -79,6 +81,9 @@ struct ProducerMacApp: App {
 
         #if os(macOS)
         MenuBarExtra("13 Years Producer", systemImage: "bell.badge.fill") {
+            if let session = remoteHub.session {
+                RemoteMenuBarItems(session: session)
+            }
             Button("Standby Selected (Yellow)") {
                 cueEngine.setCueForSelectedRoles(.standby)
             }

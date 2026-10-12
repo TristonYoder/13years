@@ -57,6 +57,15 @@ final class ControlAPIRouterTests: XCTestCase {
         XCTAssertNotNil(json["service"])
     }
 
+    func testHealthReportsStableDeviceId() {
+        let first = decodeJSON(send("GET", "/v1/health").body)?["deviceId"] as? String
+        let second = decodeJSON(send("GET", "/v1/health").body)?["deviceId"] as? String
+        XCTAssertNotNil(first)
+        XCTAssertFalse(first?.isEmpty ?? true)
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first, CueEngine.persistentDeviceId())
+    }
+
     func testStateEndpointReturns200WithRequiredKeys() {
         let response = send("GET", "/v1/state")
         XCTAssertEqual(response.status, 200)

@@ -31,6 +31,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case itemDurationActual(itemId: String, isActual: Bool)
     case itemWaypoints(itemId: String, waypointIds: [String])
     case waypointCreate(name: String)
+    case waypointCreateAndAssign(name: String, itemId: String)
     case waypointRename(ref: String, name: String)
     case waypointDelete(ref: String)
     case waypointAssign(ref: String, itemId: String?)
@@ -53,6 +54,16 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoPlanFilter(String)
     case pcoDefaultServiceType(id: String?)
     case pcoLiveSync(Bool)
+
+    public var isIdempotent: Bool {
+        switch self {
+        case .planNext, .planPrevious, .timerAdjust, .message, .roleCreate, .scheduleCreate, .planItemAdd,
+             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .planImport:
+            return false
+        default:
+            return true
+        }
+    }
 
     public struct Request: Equatable, Sendable {
         public var method: String
@@ -106,7 +117,7 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("plan/items/\(Self.segment(itemId))/duration-actual", ["isActual": isActual])
         case .itemWaypoints(let itemId, let waypointIds):
             return Self.post("plan/items/\(Self.segment(itemId))/waypoints", ["waypoints": waypointIds])
-        case .waypointCreate(let name):
+        case .waypointCreate(let name), .waypointCreateAndAssign(let name, _):
             return Self.post("waypoints", ["name": name])
         case .waypointRename(let ref, let name):
             return Request(method: "PATCH", path: "/v1/waypoints/\(Self.segment(ref))", body: Self.json(["name": name]))

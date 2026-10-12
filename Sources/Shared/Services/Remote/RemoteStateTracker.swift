@@ -30,6 +30,14 @@ public struct RemoteStateTracker {
     }
 
     @discardableResult
+    public mutating func refresh(_ snapshot: ControlAPIState) -> Bool {
+        guard snapshot.rev >= lastRev else { return false }
+        state = snapshot
+        lastRev = snapshot.rev
+        return true
+    }
+
+    @discardableResult
     public mutating func merge(timer update: ControlAPITimerState) -> Bool {
         guard var current = state, update.rev > lastRev else { return false }
         current.timer = update.timer

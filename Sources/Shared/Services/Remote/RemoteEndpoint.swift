@@ -90,6 +90,7 @@ public struct RemoteProducerHealth: Decodable, Equatable, Sendable {
     public var version: String
     public var device: String
     public var role: String
+    public var deviceId: String?
 
     public static let serviceName = "13 Years Control API"
 }

@@ -155,15 +155,15 @@ final class RemoteCommandTests: XCTestCase {
         XCTAssertEqual(engine.planItems.map(\.id), ["a", "b"])
         XCTAssertEqual(engine.waypoints.count, 1)
         XCTAssertEqual(engine.serviceSchedules.count, 1)
-        XCTAssertEqual(sink.sent.first, .cueSelected(.go))
+        XCTAssertEqual(sink.sent.first, .cueRole(id: "host", state: .go))
         XCTAssertTrue(sink.sent.contains(.timerPause))
         XCTAssertTrue(sink.sent.contains(.planNext(startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.waypointGo(ref: "w1", startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.planReorder(itemIds: ["b", "a"])))
         XCTAssertTrue(sink.sent.contains(.planImport(text: "A/B | Song | 2:05", title: "T")))
-        XCTAssertTrue(sink.sent.contains(.waypointAssign(ref: "Song 2", itemId: "a")))
+        XCTAssertTrue(sink.sent.contains(.waypointCreateAndAssign(name: "Song 2", itemId: "a")))
         XCTAssertTrue(sink.sent.contains(.pcoSelectServiceType(id: nil)))
-        XCTAssertEqual(sink.sent.count, 32)
+        XCTAssertEqual(sink.sent.count, 31)
     }
 
     func testMirrorRoleSelectionIsOptimisticAndKeepsOneSelected() {

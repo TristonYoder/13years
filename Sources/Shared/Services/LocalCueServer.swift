@@ -20,6 +20,11 @@ public final class LocalCueServer: @unchecked Sendable {
         set { channel.advertisedControlAPIPort = newValue }
     }
 
+    public var advertisedDeviceId: String? {
+        get { channel.advertisedDeviceId }
+        set { channel.advertisedDeviceId = newValue }
+    }
+
     public init() {}
 
     public func start() {

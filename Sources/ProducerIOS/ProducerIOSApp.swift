@@ -50,6 +50,7 @@ struct ProducerIOSApp: App {
                     if phase == .active {
                         cueEngine.deviceDidBecomeActive()
                         remoteHub.session?.resync()
+                        Task { await remoteHub.session?.checkLiveness() }
                     }
                 }
                 .onOpenURL { documents.open($0, in: cueEngine) }

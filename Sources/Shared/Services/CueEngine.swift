@@ -131,10 +131,10 @@ public final class CueEngine: ObservableObject {
     @Published public var plotipharAssignmentSyncStatus: PlotipharAssignmentSyncStatus = .notSynced
     @Published public var plotipharRoles: [PlotipharClient.PlotipharRole] = []
 
-    private static let deviceIdDefaultsKey = "cueEngineDeviceId"
+    nonisolated private static let deviceIdDefaultsKey = "cueEngineDeviceId"
     let deviceId: String
 
-    private static func persistentDeviceId() -> String {
+    nonisolated public static func persistentDeviceId() -> String {
         if let existing = UserDefaults.standard.string(forKey: CueEngine.deviceIdDefaultsKey) {
             return existing
         }
@@ -264,7 +264,8 @@ public final class CueEngine: ObservableObject {
         if isMasterServer {
             client.stop()
             server.start()
-            server.advertisedControlAPIPort = controlAPIPort
+            server.advertisedControlAPIPort = hostsControlAPI && isControlAPIEnabled ? controlAPIPort : nil
+            server.advertisedDeviceId = deviceId
             server.onPacketReceived = { [weak self] packet, connection in
                 self?.handlePacket(packet, origin: .lanServer(connection))
             }
@@ -892,8 +893,7 @@ public final class CueEngine: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if isRemoteMirror {
-            remoteCommands?.send(.waypointCreate(name: trimmed))
-            remoteCommands?.send(.waypointAssign(ref: trimmed, itemId: itemId))
+            remoteCommands?.send(.waypointCreateAndAssign(name: trimmed, itemId: itemId))
             return
         }
         if let waypoint = addWaypoint(name: trimmed) {
@@ -1477,7 +1477,9 @@ public final class CueEngine: ObservableObject {
 
     public func setCueForSelectedRoles(_ state: CueState) {
         if isRemoteMirror {
-            remoteCommands?.send(.cueSelected(state))
+            for id in selectedRoleIds.sorted() {
+                remoteCommands?.send(.cueRole(id: id, state: state))
+            }
             return
         }
         for index in roles.indices {
@@ -1743,6 +1745,7 @@ public final class CueEngine: ObservableObject {
     private static let rolesDefaultsKey = "persistedRoles"
 
     private func persistRoles() {
+        guard !isRemoteMirror else { return }
         guard let data = try? JSONEncoder().encode(roles) else { return }
         write(data, forKey: Self.rolesDefaultsKey)
     }
@@ -1758,6 +1761,7 @@ public final class CueEngine: ObservableObject {
     private static let legacyTagsDefaultsKey = "serviceTags"
 
     private func persistWaypoints() {
+        guard !isRemoteMirror else { return }
         guard let data = try? JSONEncoder().encode(waypoints) else { return }
         write(data, forKey: Self.waypointsDefaultsKey)
     }
@@ -1779,6 +1783,7 @@ public final class CueEngine: ObservableObject {
     private static let serviceSchedulesDefaultsKey = "serviceSchedules"
 
     private func persistServiceSchedules() {
+        guard !isRemoteMirror else { return }
         guard let data = try? JSONEncoder().encode(serviceSchedules) else { return }
         write(data, forKey: Self.serviceSchedulesDefaultsKey)
     }
@@ -1790,6 +1795,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func persistNotificationsClearedAt() {
+        guard !isRemoteMirror else { return }
         if let notificationsClearedAt {
             write(notificationsClearedAt, forKey: Self.notificationsClearedDefaultsKey)
         } else {
@@ -1802,6 +1808,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func persistMessages() {
+        guard !isRemoteMirror else { return }
         guard let data = try? JSONEncoder().encode(recentMessages) else { return }
         write(data, forKey: Self.messagesDefaultsKey)
     }
@@ -1830,6 +1837,7 @@ public final class CueEngine: ObservableObject {
     private static let persistedFlowDefaultsKey = "persistedFlow"
 
     private func persistCurrentFlow() {
+        guard !isRemoteMirror else { return }
         guard !planItems.isEmpty else {
             erase(forKey: Self.persistedFlowDefaultsKey)
             return
@@ -2001,6 +2009,8 @@ public final class CueEngine: ObservableObject {
             apiserver.start(port: UInt16(clamping: controlAPIPort))
             controlAPIEventHub?.start()
         } else {
+            server.advertisedControlAPIPort = nil
+            server.advertisingTXTDidChange()
             controlAPIServer?.stop()
             controlAPIEventHub?.stop()
             isControlAPIRunning = false
