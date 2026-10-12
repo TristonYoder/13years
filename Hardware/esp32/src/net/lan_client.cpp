@@ -30,6 +30,14 @@ static bool haveTarget = false;
 
 static const unsigned long kPingRetryIntervalMs = 5000;
 static unsigned long lastPingAt = 0;
+static unsigned long lastCatchUpAt = 0;
+static const unsigned long kCatchUpMinIntervalMs = 3000;
+
+static const unsigned long kSyncBurstIntervalMs = 100;
+static const unsigned long kSyncIntervalMs = 30000;
+static const int kSyncBurstCount = 5;
+static int syncBurstRemaining = 0;
+static unsigned long lastSyncAt = 0;
 
 static uint8_t rxLenBuf[4];
 static int rxLenFilled = 0;
@@ -61,10 +69,39 @@ static void sendPing() {
   doc["type"] = "PING";
   doc["senderId"] = store::deviceId();
   doc["timestamp"] = (double)millis() / 1000.0;
+  doc["proto"] = 2;
   String out;
   serializeJson(doc, out);
   sendFrame(out);
+  lastCatchUpAt = millis();
   Serial.println("[lan] sent PING — requesting catch-up burst");
+}
+
+static void sendSync() {
+  if (!client.connected()) return;
+  JsonDocument doc;
+  doc["type"] = "SYNC";
+  doc["senderId"] = store::deviceId();
+  doc["t0"] = (int64_t)cue::Engine::localNowMs();
+  String out;
+  serializeJson(doc, out);
+  sendFrame(out);
+}
+
+static void serviceSync() {
+  unsigned long now = millis();
+  if (syncBurstRemaining > 0) {
+    if (now - lastSyncAt >= kSyncBurstIntervalMs) {
+      sendSync();
+      lastSyncAt = now;
+      syncBurstRemaining--;
+    }
+    return;
+  }
+  if (engineRef && engineRef->producerIsV2() && now - lastSyncAt >= kSyncIntervalMs) {
+    sendSync();
+    lastSyncAt = now;
+  }
 }
 
 static bool targetIsStatic = false;
@@ -116,8 +153,11 @@ static void attemptConnect() {
   if (client.connect(targetIp, targetPort)) {
     Serial.println("[lan] connected");
     resetRxState();
+    if (engineRef) engineRef->onConnected();
     sendPing();
     lastPingAt = millis();
+    syncBurstRemaining = kSyncBurstCount;
+    lastSyncAt = millis() - kSyncBurstIntervalMs;
     staticFailureCount = 0;
   } else {
     Serial.println("[lan] connect failed — will rediscover and retry");
@@ -230,6 +270,12 @@ void lan::loop() {
   }
 
   serviceReceive();
+  serviceSync();
+
+  if (engineRef && engineRef->takeCatchUpRequest() && millis() - lastCatchUpAt >= kCatchUpMinIntervalMs) {
+    sendPing();
+    lastPingAt = millis();
+  }
 
   if (engineRef && engineRef->roleCount() == 0 && millis() - lastPingAt >= kPingRetryIntervalMs) {
     sendPing();

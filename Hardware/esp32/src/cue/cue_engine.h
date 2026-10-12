@@ -4,7 +4,9 @@
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <esp_timer.h>
 #include "cue_state.h"
+#include "sync/sync_core.h"
 
 namespace cue {
 
@@ -37,10 +39,14 @@ struct TimerView {
   bool isRunning = false;
   bool isDurationActual = false;
   unsigned long syncedAtMillis = 0;
+  bool anchored = false;
+  pagersync::Anchor anchor;
+  int64_t nowProducerMs = 0;
 
   bool isHeader() const { return itemType.equalsIgnoreCase("header"); }
 
   int currentElapsedSeconds() const {
+    if (anchored) return (int)pagersync::anchorElapsedSeconds(anchor, nowProducerMs);
     if (!isRunning) return elapsedSecondsAtSync;
     unsigned long elapsedMs = millis() - syncedAtMillis;
     return elapsedSecondsAtSync + (int)(elapsedMs / 1000UL);
@@ -70,7 +76,21 @@ public:
   void setSelectedRoleId(const String &roleId);
 
   RoleView activeRole() const;
-  TimerView activeTimer() const { return timer_; }
+  TimerView activeTimer() const {
+    TimerView t = timer_;
+    t.anchored = anchored_ && anchor_.valid && t.found;
+    t.anchor = anchor_;
+    t.nowProducerMs = producerNowMs();
+    return t;
+  }
+
+  static int64_t localNowMs() { return esp_timer_get_time() / 1000; }
+  int64_t producerNowMs() const;
+  bool hasClockOffset() const { return clock_.hasOffset(); }
+  double clockOffsetMs() const { return clock_.offsetMs(); }
+  bool producerIsV2() const { return producerV2_; }
+  void onConnected();
+  bool takeCatchUpRequest();
 
   String currentNote() const;
   MessageView latestRelevantMessage() const;
@@ -80,7 +100,8 @@ public:
 
   bool hasSyncedWithProducer() const { return hasSyncedWithProducer_; }
   bool isProducerLive() const {
-    return hasSyncedWithProducer_ && (millis() - lastProducerPacketAtMillis_ < kProducerStalenessMs);
+    unsigned long limit = producerV2_ ? kProducerStalenessV2Ms : kProducerStalenessMs;
+    return hasSyncedWithProducer_ && (millis() - lastProducerPacketAtMillis_ < limit);
   }
 
   void (*onCueTransition)(CueState newState) = nullptr;
@@ -91,6 +112,8 @@ private:
   static const int kMaxMessages = 16;
   static const int kMaxNoteCategories = 6;
   static const unsigned long kProducerStalenessMs = 12000;
+  static const unsigned long kProducerStalenessV2Ms = 25000;
+  static const int kMaxMessageMismatchStreak = 2;
 
   bool hasSyncedWithProducer_ = false;
   unsigned long lastProducerPacketAtMillis_ = 0;
@@ -110,8 +133,27 @@ private:
   bool hasNotifiedState_ = false;
   String lastSeenMessageId_;
 
+  pagersync::OffsetEstimator clock_;
+  pagersync::RevGuard rev_;
+  pagersync::Anchor anchor_;
+  bool anchored_ = false;
+  bool anchorKnown_ = false;
+  int64_t anchorRecvLocalMs_ = 0;
+  bool producerV2_ = false;
+  bool catchUpWanted_ = false;
+  bool rolesTruncated_ = false;
+  bool messagesOverflowed_ = false;
+  int messageMismatchStreak_ = 0;
+
   void applyRoleCues(JsonArrayConst roles);
-  void applyTimerItem(JsonObjectConst timer);
+  void applyTimerItem(JsonObjectConst timer, bool timing = true);
+  void applyAnchor(JsonVariantConst anchor);
+  void applyCueDeltas(JsonArrayConst deltas);
+  void handleSyncReply(JsonObjectConst doc);
+  void handleDigest(JsonObjectConst doc);
+  std::string rolesHash() const;
+  std::string timerHash() const;
+  std::string messagesHash() const;
   void mergeMessages(JsonArrayConst messages);
   void addOneMessage(JsonObjectConst msg);
   void checkForRelevantNewMessage();

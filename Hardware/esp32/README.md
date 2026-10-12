@@ -46,6 +46,35 @@ replies to another peer's `PING` and never broadcasts `CUE_UPDATE` — it
 sends exactly one `PING` after connecting, requesting the hub's catch-up
 burst (mirrors `CueEngine.swift`'s `requestCatchUp()`).
 
+### Sync Protocol v2
+
+The catch-up `PING` carries `"proto":2`; a legacy producer ignores it and
+everything it sends is handled exactly as before. Against a v2 producer
+([`Server/PROTOCOL-V2.md`](../../Server/PROTOCOL-V2.md)) the pager also:
+
+- sends a burst of 5 `SYNC` packets (100 ms apart) after connecting, then one
+  every 30 s, and keeps the lowest-RTT of the last 8 samples. The local clock is
+  `esp_timer_get_time()/1000`, so no NTP is needed; offsets under 20 ms slew
+  25%, larger ones jump.
+- runs the countdown from `TIMER_ANCHOR` against the producer clock instead of
+  a free-running 1 s timer.
+- applies `CUE_DELTA` per role id, ignores packets with a lower `rev`
+  (reset on every reconnect), and checks each `DIGEST` (FNV-1a 64 over roles,
+  timer and message ids). A mismatch sends one catch-up `PING`.
+- treats the producer as lost after 25 s of silence (12 s for a legacy one).
+
+The pure logic (hash, offset estimator, anchor math, rev guard) lives in
+`src/sync/sync_core.h` with no Arduino dependency. The host test runs on a Mac
+without hardware:
+
+```
+g++ -std=c++17 -Wall -o /tmp/test_sync tools/test_sync.cpp \
+  -I.pio/libdeps/cyd/ArduinoJson/src && /tmp/test_sync
+```
+
+(The ArduinoJson include is optional; it enables the 64-bit JSON checks and
+exists once `pio run` has fetched the libraries.)
+
 Self-filtering (dropping this device's own broadcasts) works the same way
 the Swift apps' does: a `senderId` generated once from the ESP32's MAC
 address, persisted in NVS, compared on every inbound packet.
