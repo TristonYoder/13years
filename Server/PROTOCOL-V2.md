@@ -174,3 +174,11 @@ A setting chooses how the cue is shown, in portrait and landscape:
 - `fullscreen`: no frame; the whole window is filled with the cue colour (STANDBY yellow, GO green) and the cards become dark translucent panels (`rgba(0,0,0,0.28)`). The top-left cue word is plain large text in the dark cue-contrast colour, without the pill. With no cue the ground is the near-black ground.
 
 The Swift pager stores it in app settings (`pagerCueDisplay`: `outline` or `fullscreen`) with a control in its settings screen. The web pager reads `?cue=outline|full`, remembers the last choice in `localStorage` (`pagerCueDisplay`), and exposes a control in its settings sheet (the gear). The ESP32 panel is unchanged.
+
+## Producer time zone (v2.3)
+
+A pager with no wall clock of its own (the ESP32) shows the local time of day as the producer's time (its synced offset applied to its monotonic counter) plus the producer's UTC offset. The producer therefore adds an optional integer `utcOffsetSeconds` (its current offset from UTC including daylight saving, e.g. `-14400`) to `TIMER_ANCHOR` and to every `PONG` (and to the legacy `TIMER_UPDATE`). Pagers that have a clock (iOS, tvOS, web) keep using the device's own local time.
+
+## ESP32 panel
+
+The 240 by 320 panel follows the portrait framed layout and the cue display setting with the same structure (frame or full colour, clock/cue slot top left, connection status above the role chooser top right, current item card with notes centred, Next card then the message panel at the bottom), scaled to the fonts available on the device. The clock is `h:mm:ss` with AM/PM. The cue display setting is stored in the device's non-volatile preferences and can be changed on the device.
