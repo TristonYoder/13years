@@ -16,8 +16,9 @@ public final class ControlAPIEventHub {
     private var cancellable: AnyCancellable?
     private var isFlushScheduled = false
     private var announcedMessageIds: Set<String> = []
-    private var lastStableState: NSDictionary?
+    private var lastFingerprint: Int?
     private var lastAnchor: TimerAnchor?
+    var hasClients: (() -> Bool)?
     var outbound: ((String, ControlAPIServer.BroadcastAudience) -> Void)?
     private var digestTimer: Timer?
 
@@ -40,6 +41,7 @@ public final class ControlAPIEventHub {
     }
 
     func sendDigest() {
+        if let hasClients, !hasClients() { return }
         send(event: "digest", data: router.digest(), to: .v2)
     }
 
@@ -50,7 +52,7 @@ public final class ControlAPIEventHub {
         cancellable = nil
         isFlushScheduled = false
         announcedMessageIds = []
-        lastStableState = nil
+        lastFingerprint = nil
     }
 
     private func scheduleFlush() {
@@ -73,20 +75,26 @@ public final class ControlAPIEventHub {
         }
         announcedMessageIds.formIntersection(engine.recentMessages.map(\.id))
 
-        let state = router.snapshot()
-        let stable = Self.stableRepresentation(of: state)
-        let timerOnly = Self.isTimerOnlyChange(previous: lastStableState, current: stable)
-        lastStableState = stable
-        let anchorChanged = state.timer?.anchor != lastAnchor
-        lastAnchor = state.timer?.anchor
+        if let hasClients, !hasClients() {
+            lastFingerprint = nil
+            lastAnchor = nil
+            return
+        }
+
+        let anchor = engine.currentAnchor
+        let anchorChanged = anchor != lastAnchor
+        lastAnchor = anchor
+        let fingerprint = router.nonTimerFingerprint()
+        let timerOnly = lastFingerprint == fingerprint
+        lastFingerprint = fingerprint
         if timerOnly {
-            let timerState = ControlAPITimerState(rev: state.rev, serverNowMs: state.serverNowMs, timer: state.timer)
+            let timerState = router.timerSnapshot()
             send(event: "timer", data: timerState, to: .legacy)
             if anchorChanged {
                 send(event: "timer", data: timerState, to: .v2)
             }
         } else {
-            send(event: "state", data: state)
+            send(event: "state", data: router.snapshot())
         }
     }
 
@@ -104,6 +112,7 @@ public final class ControlAPIEventHub {
     }
 
     private func send<T: Encodable>(event: String, data: T, to audience: ControlAPIServer.BroadcastAudience = .all) {
+        if let hasClients, !hasClients() { return }
         guard let payload = try? ControlAPIJSON.encoder.encode(ControlAPIEvent(event: event, data: data)),
               let text = String(data: payload, encoding: .utf8) else { return }
         if let outbound { outbound(text, audience) }

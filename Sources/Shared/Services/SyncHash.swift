@@ -76,10 +76,14 @@ public enum SyncHash {
     }
 
     public static func messageIdsNewestFirst(_ messages: [InterTeamMessage]) -> [String] {
+        sortedNewestFirst(messages).map(\.id)
+    }
+
+    public static func sortedNewestFirst(_ messages: [InterTeamMessage]) -> [InterTeamMessage] {
         messages.sorted {
             if $0.timestamp != $1.timestamp { return $0.timestamp > $1.timestamp }
-            return $0.id < $1.id
-        }.map(\.id)
+            return Array($0.id.utf8).lexicographicallyPrecedes(Array($1.id.utf8))
+        }
     }
 
     public static func planCanonical(items: [PCOTimerItem], activeItemIndex: Int) -> String {

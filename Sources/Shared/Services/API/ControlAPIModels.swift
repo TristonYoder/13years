@@ -34,6 +34,7 @@ public struct ControlAPIState: Codable, Sendable {
     public var settings: SettingsStatus
     public var waypoints: [WaypointStatus]
     public var schedules: ScheduleStatus
+    public var epoch: Int? = nil
 
     public struct NetworkStatus: Codable, Sendable {
         public var isMasterServer: Bool
@@ -382,11 +383,13 @@ public struct ControlAPITimerState: Codable, Sendable {
     public var rev: Int
     public var serverNowMs: Int
     public var timer: ControlAPIState.ActiveTimer?
+    public var epoch: Int?
 
-    public init(rev: Int, serverNowMs: Int, timer: ControlAPIState.ActiveTimer?) {
+    public init(rev: Int, serverNowMs: Int, timer: ControlAPIState.ActiveTimer?, epoch: Int? = nil) {
         self.rev = rev
         self.serverNowMs = serverNowMs
         self.timer = timer
+        self.epoch = epoch
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -394,6 +397,7 @@ public struct ControlAPITimerState: Codable, Sendable {
         try container.encode(rev, forKey: .rev)
         try container.encode(serverNowMs, forKey: .serverNowMs)
         try container.encode(timer, forKey: .timer)
+        try container.encodeIfPresent(epoch, forKey: .epoch)
     }
 }
 
@@ -402,11 +406,13 @@ public struct ControlAPIDigest: Codable, Sendable, Equatable {
     public var rev: Int
     public var serverNowMs: Int
     public var hashes: SyncHash.Hashes
+    public var epoch: Int?
 
-    public init(rev: Int, serverNowMs: Int, hashes: SyncHash.Hashes) {
+    public init(rev: Int, serverNowMs: Int, hashes: SyncHash.Hashes, epoch: Int? = nil) {
         self.rev = rev
         self.serverNowMs = serverNowMs
         self.hashes = hashes
+        self.epoch = epoch
     }
 }
 

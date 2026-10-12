@@ -37,7 +37,15 @@ enum LocalNetworkAddress {
 }
 
 public struct LANConnectionID: Hashable, Sendable {
-    let raw: ObjectIdentifier
+    let raw: UInt64
+
+    init(raw: UInt64) {
+        self.raw = raw
+    }
+
+    init(raw: ObjectIdentifier) {
+        self.raw = UInt64(UInt(bitPattern: raw))
+    }
 }
 
 public enum LANAudience: Sendable {
@@ -61,8 +69,9 @@ public final class LANUnicastServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.7co.13years.lanunicast.server", qos: .userInteractive)
     private var isRunning = false
     private var bindAttempt = 0
-    private var connections: [ObjectIdentifier: NWConnection] = [:]
-    private var v2Connections: Set<ObjectIdentifier> = []
+    private var connections: [UInt64: NWConnection] = [:]
+    private var v2Connections: Set<UInt64> = []
+    private var nextConnectionID: UInt64 = 0
 
     public init() {}
 
@@ -182,7 +191,8 @@ public final class LANUnicastServer: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
-        let key = ObjectIdentifier(connection)
+        nextConnectionID += 1
+        let key = nextConnectionID
         connections[key] = connection
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
@@ -199,7 +209,7 @@ public final class LANUnicastServer: @unchecked Sendable {
         receiveLoop(on: connection, key: key)
     }
 
-    private func receiveLoop(on connection: NWConnection, key: ObjectIdentifier) {
+    private func receiveLoop(on connection: NWConnection, key: UInt64) {
         LANFraming.receiveFrame(on: connection, queue: queue) { [weak self] data in
             guard let self else { return }
             guard let data else {
@@ -465,7 +475,11 @@ public final class LANUnicastClient: @unchecked Sendable {
     private func receiveLoop(on connection: NWConnection) {
         LANFraming.receiveFrame(on: connection, queue: queue) { [weak self] data in
             guard let self else { return }
-            guard let data else { return }
+            guard let data else {
+                connection.cancel()
+                self.handleDisconnect(connection)
+                return
+            }
             if let packet = CuePacket.decode(from: data) {
                 DispatchQueue.main.async { self.onPacketReceived?(packet) }
             }

@@ -192,6 +192,7 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
             negotiateProtocol()
         case "digest":
             guard let event = try? decoder.decode(Event<ControlAPIDigest>.self, from: data) else { return }
+            handleEpoch(event.data.epoch)
             verify(digest: event.data)
         case "state":
             guard let event = try? decoder.decode(Event<ControlAPIState>.self, from: data),
@@ -199,13 +200,22 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
             state = tracker.state
             engine.apply(remoteState: event.data)
         case "timer":
-            guard let event = try? decoder.decode(Event<ControlAPITimerState>.self, from: data),
-                  tracker.merge(timer: event.data) else { return }
+            guard let event = try? decoder.decode(Event<ControlAPITimerState>.self, from: data) else { return }
+            handleEpoch(event.data.epoch)
+            guard tracker.merge(timer: event.data) else { return }
             state = tracker.state
             engine.apply(remoteTimer: event.data.timer)
         default:
             break
         }
+    }
+
+    private func handleEpoch(_ epoch: Int?) {
+        guard tracker.noteEpoch(epoch) else { return }
+        estimator.reset()
+        engine.setRemoteClockOffset(nil)
+        if isProtocolV2 { startSync() }
+        Task { [weak self] in await self?.catchUpFromState() }
     }
 
     private func negotiateProtocol() {
@@ -222,8 +232,9 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
         } else if let t0 = pendingSync.removeValue(forKey: id) {
             guard head.status == 200, let reply = try? JSONDecoder().decode(Reply<ControlAPISyncReply>.self, from: data),
                   reply.data.t0 == t0 else { return }
-            let sample = ClockSyncSample(t0: Double(t0), t1: Double(reply.data.t1), t2: Double(reply.data.t2), t3: receivedAtMs)
-            if estimator.add(sample) {
+            let mono = Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000
+            let sample = ClockSyncSample(t0: Double(t0), t1: Double(reply.data.t1), t2: Double(reply.data.t2), t3: receivedAtMs, monotonicMs: mono)
+            if estimator.add(sample, nowMonotonicMs: mono) {
                 engine.setRemoteClockOffset(estimator.offsetMs)
             }
         }

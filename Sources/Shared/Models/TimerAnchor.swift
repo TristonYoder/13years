@@ -27,9 +27,21 @@ public struct TimerAnchor: Codable, Equatable, Sendable {
         self.isDurationActual = isDurationActual
     }
 
+    public static let maxLengthInSeconds = 604_800
+    public static let maxElapsedMs = 604_800_000
+    private static let arithmeticCap = 1 << 50
+
+    public var isWithinBounds: Bool {
+        (0...Self.maxLengthInSeconds).contains(lengthInSeconds)
+            && (0...Self.maxElapsedMs).contains(elapsedMs)
+    }
+
     public func elapsedMs(atProducerMs producerNowMs: Int) -> Int {
-        let advance = isRunning ? producerNowMs - anchorMs : 0
-        return max(0, elapsedMs + advance)
+        let cap = Self.arithmeticCap
+        guard isRunning else { return max(0, min(elapsedMs, cap)) }
+        let (delta, overflow) = producerNowMs.subtractingReportingOverflow(anchorMs)
+        let advance = overflow ? (anchorMs < 0 ? cap : -cap) : max(-cap, min(delta, cap))
+        return max(0, min(elapsedMs, cap) + advance)
     }
 
     public func elapsedSeconds(atProducerMs producerNowMs: Int) -> Int {
@@ -37,7 +49,7 @@ public struct TimerAnchor: Codable, Equatable, Sendable {
     }
 
     public func remainingSeconds(atProducerMs producerNowMs: Int) -> Int {
-        lengthInSeconds - elapsedSeconds(atProducerMs: producerNowMs)
+        lengthInSeconds.saturatingSubtracting(elapsedSeconds(atProducerMs: producerNowMs))
     }
 
     public func msUntilNextSecond(atProducerMs producerNowMs: Int) -> Int? {
@@ -53,5 +65,17 @@ public struct TimerAnchor: Codable, Equatable, Sendable {
         result.isRunning = isRunning
         result.isDurationActual = isDurationActual
         return result
+    }
+}
+
+extension Int {
+    func saturatingSubtracting(_ other: Int) -> Int {
+        let (value, overflow) = subtractingReportingOverflow(other)
+        return overflow ? (other > 0 ? Int.min : Int.max) : value
+    }
+
+    func saturatingAdding(_ other: Int) -> Int {
+        let (value, overflow) = addingReportingOverflow(other)
+        return overflow ? (other > 0 ? Int.max : Int.min) : value
     }
 }

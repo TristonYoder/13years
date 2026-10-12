@@ -260,6 +260,39 @@ final class ControlAPIV2Tests: XCTestCase {
         XCTAssertNotNil(data["rev"] as? Int)
         XCTAssertNotNil(data["serverNowMs"] as? Int)
     }
+
+    func testHubBuildsAndSendsNothingWhileNoSocketIsConnected() {
+        let engine = makeEngine()
+        let (hub, _, log) = makeHub(engine)
+        var connected = false
+        hub.hasClients = { connected }
+        hub.flush()
+        hub.sendDigest()
+        engine.toggleTimerRunning()
+        hub.flush()
+        XCTAssertTrue(log().isEmpty)
+        connected = true
+        hub.flush()
+        XCTAssertEqual(events(log(), "state", .all).count, 1)
+    }
+
+    func testEpochRidesOnHelloTimerAndDigestData() throws {
+        let engine = makeEngine()
+        let (hub, _, log) = makeHub(engine)
+        let router = ControlAPIRouter(engine: engine)
+        XCTAssertEqual(router.snapshot().epoch, engine.syncV2.epoch)
+        XCTAssertEqual(router.digest().epoch, engine.syncV2.epoch)
+        XCTAssertEqual(router.timerSnapshot().epoch, engine.syncV2.epoch)
+        hub.flush()
+        clock.addTimeInterval(1)
+        engine.tickTimer()
+        hub.flush()
+        let timer = try XCTUnwrap(events(log(), "timer", .legacy).last)
+        XCTAssertEqual((timer["data"] as? [String: Any])?["epoch"] as? Int, engine.syncV2.epoch)
+        hub.sendDigest()
+        let digest = try XCTUnwrap(events(log(), "digest", .v2).last)
+        XCTAssertEqual((digest["data"] as? [String: Any])?["epoch"] as? Int, engine.syncV2.epoch)
+    }
 }
 
 private final class HubLog: @unchecked Sendable {

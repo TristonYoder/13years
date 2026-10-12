@@ -6,18 +6,30 @@ import Foundation
 public struct RemoteStateTracker {
     public private(set) var state: ControlAPIState?
     public private(set) var lastRev = -1
+    public private(set) var epoch: Int?
 
     public init() {}
 
     public mutating func reset() {
         state = nil
         lastRev = -1
+        epoch = nil
+    }
+
+    @discardableResult
+    public mutating func noteEpoch(_ value: Int?) -> Bool {
+        guard let value else { return false }
+        defer { epoch = value }
+        guard let epoch, epoch != value else { return false }
+        lastRev = -1
+        return true
     }
 
     @discardableResult
     public mutating func hello(_ snapshot: ControlAPIState) -> Bool {
         state = snapshot
         lastRev = snapshot.rev
+        epoch = snapshot.epoch
         return true
     }
 
