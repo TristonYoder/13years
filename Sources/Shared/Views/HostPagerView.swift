@@ -61,7 +61,133 @@ public struct HostPagerView: View {
         return name.hasSuffix(".local") ? String(name.dropLast(".local".count)) : name
     }
 
+    @ViewBuilder
+    private var messageBanner: some View {
+        if let latestMsg = latestRelevantMessage, latestMsg.id != dismissedMessageId {
+            HStack(spacing: 10) {
+                Image(systemName: "text.bubble.fill")
+                    .font(.inter(size: 18))
+                Text(latestMsg.text)
+                    .font(.inter(size: 18, weight: .bold))
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.inter(size: 14))
+                    .opacity(0.6)
+            }
+            .foregroundColor(.black)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.yellow)
+            .cornerRadius(12)
+            .shadow(radius: 4)
+            .padding(.horizontal, 20)
+            .offset(x: bannerDragOffset)
+            .opacity(bannerOpacity)
+            .contentShape(Rectangle())
+            #if os(iOS) || os(macOS)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        bannerDragOffset = value.translation.width
+                    }
+                    .onEnded { value in
+                        let distance = abs(value.translation.width)
+                        if distance > 80 {
+                            let direction: CGFloat = value.translation.width > 0 ? 1 : -1
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                bannerDragOffset = direction * 500
+                            }
+                            dismissedMessageId = latestMsg.id
+                        } else if distance < 10 {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                bannerDragOffset = 0
+                            }
+                            isShowingChat = true
+                            dismissedMessageId = latestMsg.id
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                bannerDragOffset = 0
+                            }
+                        }
+                    }
+            )
+            #else
+            .onTapGesture {
+                isShowingChat = true
+                dismissedMessageId = latestMsg.id
+            }
+            .focusable(true)
+            #endif
+        }
+    }
+
+    private var connectionText: String {
+        if engine.isMasterServer { return "Connected to \(Self.localHostName)" }
+        if engine.isProducerLive, let master = engine.connectedMasterName { return "Live — \(master)" }
+        return engine.isLANConnected ? "Disconnected — retrying…" : "Not connected — retrying…"
+    }
+
+    private var isConnectedNow: Bool {
+        engine.isMasterServer || (engine.isProducerLive && engine.connectedMasterName != nil)
+    }
+
     private var pagerView: some View {
+        GeometryReader { geo in
+            #if os(tvOS)
+            landscapeView(size: geo.size)
+            #else
+            if LandscapeMetrics.isLandscape(geo.size) {
+                landscapeView(size: geo.size)
+            } else {
+                portraitView
+            }
+            #endif
+        }
+        .onChange(of: currentState) { _, newState in
+            PagerHaptics.shared.playCueTransition(for: newState)
+        }
+        .onChange(of: selectedRoleId) { _, _ in
+            lastSeenMessageId = latestRelevantMessage?.id
+        }
+        .onChange(of: latestRelevantMessage?.id) { _, newId in
+            bannerDragOffset = 0
+            guard let newId, newId != lastSeenMessageId else { return }
+            lastSeenMessageId = newId
+            guard let msg = latestRelevantMessage, msg.senderRoleId != selectedRoleId else { return }
+            PagerHaptics.shared.playMessageReceived(for: currentState)
+        }
+        .onAppear {
+            lastSeenMessageId = latestRelevantMessage?.id
+            PagerHaptics.shared.prepareIfNeeded()
+        }
+        .sheet(isPresented: $isShowingChat) {
+            PagerChatView(roleId: selectedRoleId, roleName: activeRole?.name ?? "Host")
+        }
+    }
+
+    private func landscapeView(size: CGSize) -> some View {
+        LandscapePagerView(
+            size: size,
+            presentation: presentation,
+            connectionText: connectionText,
+            isConnected: isConnectedNow,
+            showMessages: {
+                isShowingChat = true
+                dismissedMessageId = latestRelevantMessage?.id
+            },
+            roleMenu: {
+                ForEach(presentation.roles) { role in
+                    Button(role.name) {
+                        selectedRoleId = role.id
+                    }
+                }
+            },
+            banner: { messageBanner }
+        )
+    }
+
+    private var portraitView: some View {
         ZStack {
             currentState.color.ignoresSafeArea()
 
@@ -202,63 +328,7 @@ public struct HostPagerView: View {
 
                 Spacer()
 
-                if let latestMsg = latestRelevantMessage, latestMsg.id != dismissedMessageId {
-                    HStack(spacing: 10) {
-                        Image(systemName: "text.bubble.fill")
-                            .font(.inter(size: 18))
-                        Text(latestMsg.text)
-                            .font(.inter(size: 18, weight: .bold))
-                            .multilineTextAlignment(.leading)
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrowshape.turn.up.left.fill")
-                            .font(.inter(size: 14))
-                            .opacity(0.6)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.yellow)
-                    .cornerRadius(12)
-                    .shadow(radius: 4)
-                    .padding(.horizontal, 20)
-                    .offset(x: bannerDragOffset)
-                    .opacity(bannerOpacity)
-                    .contentShape(Rectangle())
-                    #if os(iOS) || os(macOS)
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                bannerDragOffset = value.translation.width
-                            }
-                            .onEnded { value in
-                                let distance = abs(value.translation.width)
-                                if distance > 80 {
-                                    let direction: CGFloat = value.translation.width > 0 ? 1 : -1
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        bannerDragOffset = direction * 500
-                                    }
-                                    dismissedMessageId = latestMsg.id
-                                } else if distance < 10 {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        bannerDragOffset = 0
-                                    }
-                                    isShowingChat = true
-                                    dismissedMessageId = latestMsg.id
-                                } else {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        bannerDragOffset = 0
-                                    }
-                                }
-                            }
-                    )
-                    #else
-                    .onTapGesture {
-                        isShowingChat = true
-                        dismissedMessageId = latestMsg.id
-                    }
-                    .focusable(true)
-                    #endif
-                }
+                messageBanner
 
                 Button {
                     isShowingChat = true
@@ -272,26 +342,6 @@ public struct HostPagerView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
-        }
-        .onChange(of: currentState) { _, newState in
-            PagerHaptics.shared.playCueTransition(for: newState)
-        }
-        .onChange(of: selectedRoleId) { _, _ in
-            lastSeenMessageId = latestRelevantMessage?.id
-        }
-        .onChange(of: latestRelevantMessage?.id) { _, newId in
-            bannerDragOffset = 0
-            guard let newId, newId != lastSeenMessageId else { return }
-            lastSeenMessageId = newId
-            guard let msg = latestRelevantMessage, msg.senderRoleId != selectedRoleId else { return }
-            PagerHaptics.shared.playMessageReceived(for: currentState)
-        }
-        .onAppear {
-            lastSeenMessageId = latestRelevantMessage?.id
-            PagerHaptics.shared.prepareIfNeeded()
-        }
-        .sheet(isPresented: $isShowingChat) {
-            PagerChatView(roleId: selectedRoleId, roleName: activeRole?.name ?? "Host")
         }
     }
 
