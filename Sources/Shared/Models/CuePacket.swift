@@ -3,6 +3,18 @@
 
 import Foundation
 
+public struct CueDelta: Codable, Equatable, Sendable {
+    public var id: String
+    public var state: CueState
+    public var lastUpdated: Date
+
+    public init(id: String, state: CueState, lastUpdated: Date) {
+        self.id = id
+        self.state = state
+        self.lastUpdated = lastUpdated
+    }
+}
+
 public struct CuePacket: Codable, Sendable {
     public enum PacketType: String, Codable, Sendable {
         case cueUpdate = "CUE_UPDATE"
@@ -11,7 +23,14 @@ public struct CuePacket: Codable, Sendable {
         case ping = "PING"
         case pong = "PONG"
         case clearMessages = "CLEAR_MESSAGES"
+        case sync = "SYNC"
+        case syncReply = "SYNC_REPLY"
+        case timerAnchor = "TIMER_ANCHOR"
+        case cueDelta = "CUE_DELTA"
+        case digest = "DIGEST"
     }
+
+    public static let protocolVersion = 2
 
     public var type: PacketType
     public var timestamp: Double
@@ -20,6 +39,21 @@ public struct CuePacket: Codable, Sendable {
     public var timerItem: PCOTimerItem?
     public var message: InterTeamMessage?
     public var messages: [InterTeamMessage]?
+    public var proto: Int?
+    public var t0: Int?
+    public var t1: Int?
+    public var t2: Int?
+    public var rev: Int?
+    public var anchor: TimerAnchor?
+    public var cueDeltas: [CueDelta]?
+    public var digestMs: Int?
+    public var hashes: SyncHash.Hashes?
+    public var receivedAtMs: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, timestamp, senderId, roleCues, timerItem, message, messages
+        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes
+    }
 
     public init(
         type: PacketType,
@@ -39,11 +73,68 @@ public struct CuePacket: Codable, Sendable {
         self.timestamp = timestamp
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(PacketType.self, forKey: .type)
+        timestamp = try container.decode(Double.self, forKey: .timestamp)
+        senderId = try container.decode(String.self, forKey: .senderId)
+        roleCues = try container.decodeIfPresent([RoleCue].self, forKey: .roleCues)
+        timerItem = try container.decodeIfPresent(PCOTimerItem.self, forKey: .timerItem)
+        message = try container.decodeIfPresent(InterTeamMessage.self, forKey: .message)
+        messages = try container.decodeIfPresent([InterTeamMessage].self, forKey: .messages)
+        proto = try container.decodeIfPresent(Int.self, forKey: .proto)
+        t0 = try container.decodeIfPresent(Int.self, forKey: .t0)
+        t1 = try container.decodeIfPresent(Int.self, forKey: .t1)
+        t2 = try container.decodeIfPresent(Int.self, forKey: .t2)
+        rev = try container.decodeIfPresent(Int.self, forKey: .rev)
+        anchor = try? container.decodeIfPresent(TimerAnchor.self, forKey: .anchor)
+        cueDeltas = try container.decodeIfPresent([CueDelta].self, forKey: .cueDeltas)
+        digestMs = try container.decodeIfPresent(Int.self, forKey: .digestMs)
+        hashes = try container.decodeIfPresent(SyncHash.Hashes.self, forKey: .hashes)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encodeIfPresent(roleCues, forKey: .roleCues)
+        try container.encodeIfPresent(timerItem, forKey: .timerItem)
+        try container.encodeIfPresent(message, forKey: .message)
+        try container.encodeIfPresent(messages, forKey: .messages)
+        try container.encodeIfPresent(proto, forKey: .proto)
+        try container.encodeIfPresent(t0, forKey: .t0)
+        try container.encodeIfPresent(t1, forKey: .t1)
+        try container.encodeIfPresent(t2, forKey: .t2)
+        try container.encodeIfPresent(rev, forKey: .rev)
+        if type == .timerAnchor {
+            if let anchor { try container.encode(anchor, forKey: .anchor) } else { try container.encodeNil(forKey: .anchor) }
+        } else {
+            try container.encodeIfPresent(anchor, forKey: .anchor)
+        }
+        try container.encodeIfPresent(cueDeltas, forKey: .cueDeltas)
+        try container.encodeIfPresent(digestMs, forKey: .digestMs)
+        try container.encodeIfPresent(hashes, forKey: .hashes)
+    }
+
     public func encode() -> Data? {
-        try? JSONEncoder().encode(self)
+        var packet = self
+        if packet.type == .syncReply, packet.t2 == nil {
+            packet.t2 = Int(SyncClock.nowMs().rounded())
+        }
+        return try? JSONEncoder().encode(packet)
     }
 
     public static func decode(from data: Data) -> CuePacket? {
-        try? JSONDecoder().decode(CuePacket.self, from: data)
+        let receivedAt = SyncClock.nowMs()
+        guard var packet = try? JSONDecoder().decode(CuePacket.self, from: data) else { return nil }
+        packet.receivedAtMs = receivedAt
+        return packet
+    }
+}
+
+public enum SyncClock {
+    public static func nowMs() -> Double {
+        Date().timeIntervalSince1970 * 1000
     }
 }

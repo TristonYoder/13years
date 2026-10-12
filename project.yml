@@ -140,6 +140,8 @@ targets:
       - path: Sources/Shared/Models/InterTeamMessage.swift
       - path: Sources/Shared/Models/PCOTimerItem.swift
       - path: Sources/Shared/Models/RoleCue.swift
+      - path: Sources/Shared/Models/TimerAnchor.swift
+      - path: Sources/Shared/Services/SyncHash.swift
       - path: Sources/Shared/Services/API/ControlAPIModels.swift
       - path: Sources/Shared/Services/AppFonts.swift
       - path: Sources/Shared/Services/AppLog.swift
