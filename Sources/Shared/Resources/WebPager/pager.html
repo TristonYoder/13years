@@ -140,35 +140,31 @@
   #role:disabled { opacity: 1; }
   #role option { color: #111; background: #fff; }
 
-  .link {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: calc(0.6 * var(--s));
-    font-size: max(12px, calc(1.35 * var(--s)));
-    font-weight: 600;
-    opacity: 0.85;
-  }
   .dot {
     width: calc(1 * var(--s));
     height: calc(1 * var(--s));
     border-radius: 50%;
     background: #ff3b30;
   }
-  .link[data-live="1"] .dot { background: #30d158; }
+  .conn-row[data-live="1"] .dot { background: #30d158; }
 
   [data-stage="amber"] { color: #ff9f0a; color: color-mix(in srgb, var(--fg) 70%, #ff9f0a); }
   [data-stage="red"] { color: #ff453a; color: color-mix(in srgb, var(--fg) 60%, #ff3b30); }
-  #notifyBar {
-    flex: 0 0 auto;
+  #footer {
+    position: absolute;
+    left: calc(var(--frame) + var(--pad));
+    right: calc(var(--frame) + var(--pad));
+    bottom: var(--frame);
+    height: var(--foot);
+    z-index: 6;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: calc(1 * var(--s));
+    gap: calc(var(--u) * 0.012);
   }
-  #notifyBar #composeStatus { margin-right: auto; }
+  #footer #composeStatus { margin-right: auto; }
 
-  #notifyBar button, #chatHead button, #compose button {
+  #footer button, #chatHead button, #compose button {
     font: inherit;
     font-size: calc(1.5 * var(--s));
     font-weight: 700;
@@ -183,11 +179,11 @@
     white-space: nowrap;
   }
 
-  #notifyBar button:hover:not(:disabled),
+  #footer button:hover:not(:disabled),
   #chatHead button:hover:not(:disabled),
   #compose button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.42); }
 
-  #notifyBar button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
+  #footer button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
 
   #chat {
     position: fixed;
@@ -433,6 +429,7 @@
     --pad: calc(var(--u) * 0.025);
     --badge: calc(var(--u) * 0.11);
     --clock: calc(var(--u) * 0.075);
+    --foot: max(44px, calc(var(--u) * 0.065));
     flex: 1;
     min-height: 0;
     position: relative;
@@ -440,6 +437,7 @@
     flex-direction: column;
     gap: var(--pad);
     padding: calc(var(--frame) + var(--pad));
+    padding-bottom: calc(var(--frame) + var(--foot));
     background: var(--cue);
     color: var(--fg);
     overflow: hidden;
@@ -558,8 +556,6 @@
   .fr .rolepick { font-size: calc(var(--u) * 0.03); max-width: 100%; }
   #standard .rolepick { font-size: max(14px, calc(var(--u) * 0.036)); }
   .fr #role { background: var(--chip); color: var(--fg); }
-  .fr .link { margin-left: 0; font-size: calc(var(--u) * 0.02); color: var(--fg); }
-  #standard .link { font-size: max(11px, calc(var(--u) * 0.028)); }
 
   .fr-card {
     --k: 1;
@@ -644,24 +640,18 @@
   }
   #standard .fr-msg-from { font-size: max(11px, calc(var(--u) * 0.026)); }
 
-  .fr #notifyBar button, .fr button#openSettings {
+  .fr #footer button {
     background: var(--chip);
     color: var(--fg);
-  }
-  .fr button#openSettings {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
+    width: 44px;
+    height: 44px;
     opacity: 0.75;
   }
-  #openSettings svg { width: 22px; height: 22px; fill: currentColor; display: block; }
-  #lsTop > #openSettings {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    transform: translateX(-50%);
-  }
+  #footer svg { width: 24px; height: 24px; fill: currentColor; display: block; }
 
   #ptMid {
     flex: 1 1 0;
@@ -807,6 +797,15 @@
     opacity: 0.7;
     margin-bottom: calc(0.8 * var(--s));
   }
+  .conn-row {
+    display: flex;
+    align-items: center;
+    gap: calc(0.8 * var(--s));
+    font-size: max(15px, calc(1.7 * var(--s)));
+    font-weight: 600;
+    margin-top: calc(0.4 * var(--s));
+  }
+  .conn-row .conn-key { opacity: 0.7; min-width: calc(11 * var(--s)); }
   .seg { display: flex; gap: calc(0.6 * var(--s)); }
   #settings button {
     font: inherit;
@@ -835,7 +834,6 @@
         </div>
         <div class="fr-side">
           <div id="ptRoleSlot" class="fr-roleslot">
-            <span class="link" id="link"><span class="dot"></span><span id="linkLabel">Connecting…</span></span>
             <span class="rolepick" id="rolepick">
               <select id="role" aria-label="Role"></select>
             </span>
@@ -866,10 +864,10 @@
         </button>
       </div>
 
-      <div id="notifyBar">
-        <div id="composeStatus" class="hidden"></div>
-        <button id="openChat" type="button">Messages</button>
-        <button id="openSettings" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
+      <div id="footer">
+      <div id="composeStatus" class="hidden"></div>
+      <button id="openChat" type="button" aria-label="Messages" title="Messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg></button>
+      <button id="openSettings" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
       </div>
     </div>
 
@@ -900,6 +898,12 @@
             <button type="button" data-cue-display="outline" aria-pressed="true">Outline</button>
             <button type="button" data-cue-display="full" aria-pressed="false">Full screen</button>
           </div>
+        </div>
+        <div>
+          <div class="setting-label">Connection</div>
+          <div class="conn-row" id="connState"><span class="conn-key">Status</span><span class="dot"></span><span id="connStateText">Connecting</span></div>
+          <div class="conn-row" id="connProducerRow"><span class="conn-key">Producer</span><span id="connProducer">—</span></div>
+          <div class="conn-row hidden" id="connSyncRow"><span class="conn-key">Clock sync</span><span id="connSync"></span></div>
         </div>
       </div>
     </div>
@@ -1073,6 +1077,7 @@ const SYNC_BURST = 5;
 const SYNC_BURST_GAP_MS = 100;
 const SYNC_PERIOD_MS = 30000;
 const SLEW_LIMIT_MS = 20;
+const EXTENDED_DISCONNECT_MS = 20000;
 const SLEW_FACTOR = 0.25;
 const SAMPLE_MAX_AGE_MS = 90000;
 const SAMPLE_MAX_RTT_MS = 10000;
@@ -1230,6 +1235,7 @@ function createClockSync(mono) {
     },
     get count() { return samples.length; },
     get offset() { return offset; },
+    get rtt() { return samples.length ? best().rtt : null; },
     get ready() { return ready; },
     producerNow(localNow) { return localNow + offset; },
   };
@@ -1362,6 +1368,26 @@ function layoutFor(width, height, param) {
   if (value === "standard" || value === "full" || value === "portrait") return "standard";
   if (lowerThirdForViewport(width, height)) return "lowerthird";
   return height > 0 && width > height ? "landscape" : "standard";
+}
+
+function disconnectPhase(live, elapsedMs) {
+  if (elapsedMs >= EXTENDED_DISCONNECT_MS) return "extended";
+  return live ? "live" : "stale";
+}
+
+function connectionStateText(phase, hasSnapshot) {
+  if (!hasSnapshot) return "Connecting";
+  if (phase === "live") return "Live";
+  if (phase === "extended") return "Disconnected";
+  return "Connecting";
+}
+
+function syncQualityText(ready, offsetMs, rttMs) {
+  if (!ready || typeof offsetMs !== "number" || !isFinite(offsetMs)) return "";
+  const offset = Math.round(offsetMs);
+  const text = "Offset " + (offset > 0 ? "+" : "") + offset + " ms";
+  if (typeof rttMs !== "number" || !isFinite(rttMs)) return text;
+  return text + ", round trip " + Math.round(rttMs) + " ms";
 }
 
 const localTimeFormats = new Map();
@@ -1781,6 +1807,7 @@ function createLink(env) {
     get mode() { return mode; },
     get clockReady() { return clock.ready; },
     get offset() { return clock.offset; },
+    get rtt() { return clock.rtt; },
     get sampleCount() { return clock.count; },
     get heldRev() { return heldRev; },
     get epoch() { return heldEpoch; },
@@ -1860,9 +1887,12 @@ const el = {
   ptMessageFrom: document.getElementById("ptMessageFrom"),
   role: document.getElementById("role"),
   rolepick: document.getElementById("rolepick"),
-  link: document.getElementById("link"),
-  linkLabel: document.getElementById("linkLabel"),
-  notifyBar: document.getElementById("notifyBar"),
+  footer: document.getElementById("footer"),
+  connState: document.getElementById("connState"),
+  connStateText: document.getElementById("connStateText"),
+  connProducer: document.getElementById("connProducer"),
+  connSyncRow: document.getElementById("connSyncRow"),
+  connSync: document.getElementById("connSync"),
   openChat: document.getElementById("openChat"),
   openSettings: document.getElementById("openSettings"),
   settings: document.getElementById("settings"),
@@ -1921,9 +1951,9 @@ function setCueDisplay(value, remember) {
 function placeShared(layout) {
   const landscape = layout === "landscape";
   const home = landscape ? el.lsRoleSlot : el.ptRoleSlot;
-  if (el.rolepick.parentNode !== home) home.append(el.link, el.rolepick);
-  const gearHome = landscape ? el.lsTop : el.notifyBar;
-  if (el.openSettings.parentNode !== gearHome) gearHome.append(el.openSettings);
+  if (el.rolepick.parentNode !== home) home.append(el.rolepick);
+  const footerHome = landscape ? el.landscape : el.standard;
+  if (el.footer.parentNode !== footerHome) footerHome.append(el.footer);
 }
 
 function applyLayout() {
@@ -2459,19 +2489,25 @@ function offlineText() {
 
 function renderConnection() {
   const live = link.isLive();
-  const liveFlag = live ? "1" : "0";
-  if (el.link.dataset.live !== liveFlag) el.link.dataset.live = liveFlag;
-  setText(el.linkLabel, live
-    ? (producerName ? "Live — " + producerName : "Live")
-    : "Reconnecting…");
-  const fullOverlay = !live && snapshot === null;
-  const offline = !live && snapshot !== null;
+  const hasSnapshot = snapshot !== null;
+  const phase = disconnectPhase(live, Date.now() - link.lastContactAt);
+  const lowerThird = root.dataset.layout === "lowerthird";
+  const extended = hasSnapshot && !live && phase === "extended" && !lowerThird;
+  const fullOverlay = (!live && !hasSnapshot) || extended;
+  const offline = !live && hasSnapshot && !fullOverlay;
   setHidden(el.waiting, !fullOverlay);
   setHidden(el.offline, !offline);
   const offlineFlag = offline ? "1" : "0";
   if (root.dataset.offline !== offlineFlag) root.dataset.offline = offlineFlag;
   if (offline) setText(el.offline, offlineText());
-  if (fullOverlay && root.dataset.layout === "lowerthird") fitWaiting();
+  if (fullOverlay && lowerThird) fitWaiting();
+  const liveFlag = live ? "1" : "0";
+  if (el.connState.dataset.live !== liveFlag) el.connState.dataset.live = liveFlag;
+  setText(el.connStateText, connectionStateText(phase, hasSnapshot));
+  setText(el.connProducer, producerName || "—");
+  const sync = link.mode === "v2" ? syncQualityText(link.clockReady, link.offset, link.rtt) : "";
+  setHidden(el.connSyncRow, sync === "");
+  if (sync !== "") setText(el.connSync, sync);
 }
 
 function fitWaiting() {
@@ -2749,6 +2785,7 @@ el.closeChat.addEventListener("click", () => el.chat.classList.add("hidden"));
 
 el.openSettings.addEventListener("click", () => {
   renderCueButtons();
+  renderConnection();
   el.settings.classList.remove("hidden");
 });
 

@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -978,4 +978,105 @@ test("every element id the page script looks up exists in the markup", () => {
   const present = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   const missing = [...new Set(wanted)].filter((id) => !present.has(id));
   assert.deepEqual(missing, []);
+});
+
+test("disconnectPhase is live, stale, then extended after 20 s", () => {
+  assert.equal(core.EXTENDED_DISCONNECT_MS, 20000);
+  assert.equal(core.disconnectPhase(true, 500), "live");
+  assert.equal(core.disconnectPhase(false, 0), "stale");
+  assert.equal(core.disconnectPhase(false, 19999), "stale");
+  assert.equal(core.disconnectPhase(false, 20000), "extended");
+  assert.equal(core.disconnectPhase(false, 600000), "extended");
+});
+
+test("connectionStateText names the settings state", () => {
+  assert.equal(core.connectionStateText("live", true), "Live");
+  assert.equal(core.connectionStateText("stale", true), "Connecting");
+  assert.equal(core.connectionStateText("extended", true), "Disconnected");
+  assert.equal(core.connectionStateText("extended", false), "Connecting");
+});
+
+test("syncQualityText reports offset and round trip", () => {
+  assert.equal(core.syncQualityText(false, 5, 10), "");
+  assert.equal(core.syncQualityText(true, 3.4, 11.6), "Offset +3 ms, round trip 12 ms");
+  assert.equal(core.syncQualityText(true, -7, null), "Offset -7 ms");
+  assert.equal(core.syncQualityText(true, 0, 4), "Offset 0 ms, round trip 4 ms");
+});
+
+function loadPage(search, width, height) {
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const nodes = new Map();
+  const makeNode = (id) => {
+    const classes = new Set(id && /class="[^"]*\bhidden\b/.test(html.split(`id="${id}"`)[1]?.slice(0, 120) || "") ? ["hidden"] : []);
+    const target = {
+      id, dataset: {}, style: {}, children: [], textContent: "", value: "", innerHTML: "", parentNode: null,
+      clientHeight: 100, clientWidth: 100, offsetHeight: 10, offsetWidth: 10, scrollTop: 0, scrollHeight: 0,
+      classList: {
+        add: (c) => classes.add(c), remove: (c) => classes.delete(c),
+        toggle: (c, on) => { if (on === undefined ? !classes.has(c) : on) classes.add(c); else classes.delete(c); },
+        contains: (c) => classes.has(c),
+      },
+      append(...kids) { for (const k of kids) { k.parentNode = target; target.children.push(k); } },
+      appendChild(k) { target.append(k); return k; },
+      getBoundingClientRect: () => ({ width: 50, height: 10, top: 0, left: 0 }),
+      querySelector: () => null, querySelectorAll: () => [],
+    };
+    return new Proxy(target, { get: (t, p) => (p in t ? t[p] : typeof p === "string" ? () => 0 : undefined), set: (t, p, v) => { t[p] = v; return true; } });
+  };
+  const doc = {
+    documentElement: makeNode("html"), body: makeNode("body"), hidden: false, visibilityState: "visible", fonts: null,
+    getElementById: (id) => {
+      if (!ids.has(id)) return null;
+      if (!nodes.has(id)) nodes.set(id, makeNode(id));
+      return nodes.get(id);
+    },
+    createElement: () => makeNode(""), querySelectorAll: () => [], addEventListener() {},
+  };
+  const context = {
+    document: doc, TextEncoder, JSON, Math, Map, String, Number, Intl, Date, URLSearchParams, Promise, Set, Object, Array,
+    window: { innerWidth: width, innerHeight: height, addEventListener() {} },
+    location: { search, protocol: "http:", host: "localhost:1" },
+    navigator: {}, localStorage: { getItem: () => null, setItem() {} }, performance: { now: () => 0 },
+    WebSocket: class { constructor() { this.readyState = 0; } close() {} send() {} },
+    fetch: () => Promise.reject(new Error("offline")),
+    setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, console,
+    AbortController, AbortSignal, requestAnimationFrame: () => 0, getComputedStyle: () => ({}),
+  };
+  context.globalThis = context;
+  vm.createContext(context);
+  const scripts = [...html.matchAll(/<script(?: id="core")?>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  for (const code of scripts) vm.runInContext(code, context);
+  return { context, nodes };
+}
+
+for (const [name, search, width, height] of [
+  ["portrait", "?layout=portrait", 390, 844],
+  ["landscape", "?layout=landscape", 844, 390],
+  ["lowerthird", "?layout=lowerthird", 1920, 200],
+]) {
+  test(`page script runs without throwing in ${name}`, () => {
+    const { context, nodes } = loadPage(search, width, height);
+    vm.runInContext("renderConnection()", context);
+    assert.equal(context.document.documentElement.dataset.layout, name === "portrait" ? "standard" : name);
+    const footerHome = vm.runInContext("el.footer.parentNode && el.footer.parentNode.id", context);
+    if (name !== "lowerthird") assert.equal(footerHome, name === "portrait" ? "standard" : "landscape");
+    assert.equal(nodes.get("waiting").classList.contains("hidden"), false);
+    assert.equal(nodes.get("connStateText").textContent, "Connecting");
+  });
+
+  test(`extended disconnect in ${name} follows the layout`, () => {
+    const { context, nodes } = loadPage(search, width, height);
+    vm.runInContext(`snapshot = { roles: [], messages: [], timer: {}, plan: null }; renderConnection()`, context);
+    const overlay = !nodes.get("waiting").classList.contains("hidden");
+    assert.equal(overlay, name !== "lowerthird");
+    assert.equal(nodes.get("offline").classList.contains("hidden"), name !== "lowerthird");
+    assert.equal(nodes.get("connStateText").textContent, "Disconnected");
+  });
+}
+
+test("footer holds only the two icon buttons with accessible names", () => {
+  assert.match(html, /<button id="openChat"[^>]*aria-label="Messages"/);
+  assert.match(html, /<button id="openSettings"[^>]*aria-label="Settings"/);
+  assert.doesNotMatch(html, />Messages<\/button>/);
+  assert.doesNotMatch(html, /Live — /);
 });
