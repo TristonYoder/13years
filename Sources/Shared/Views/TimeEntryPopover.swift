@@ -7,13 +7,15 @@ public extension View {
     func timeEntryPopover(
         isPresented: Binding<Bool>,
         previewBaseSeconds: Int,
-        arrowEdge: Edge = .bottom,
+        previewElapsedSeconds: Int = 0,
+        arrowEdge: Edge = TimeEntryPopoverDefaults.arrowEdge,
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
         onCommit: @escaping (TimerInputParser.Action) -> Void
     ) -> some View {
         modifier(TimeEntryPopoverModifier(
             isPresented: isPresented,
             previewBaseSeconds: previewBaseSeconds,
+            previewElapsedSeconds: previewElapsedSeconds,
             arrowEdge: arrowEdge,
             hourFormatThreshold: hourFormatThreshold,
             onCommit: onCommit
@@ -21,9 +23,29 @@ public extension View {
     }
 }
 
+public enum TimeEntryPopoverDefaults {
+    #if os(iOS)
+    public static let arrowEdge: Edge = .top
+    #else
+    public static let arrowEdge: Edge = .bottom
+    #endif
+}
+
+enum TimeEntryPreview {
+    static func resolvedSeconds(for action: TimerInputParser.Action, base: Int, elapsed: Int) -> Int {
+        switch action {
+        case .setAbsolute(let seconds):
+            return max(0, seconds)
+        case .adjustRelative(let delta):
+            return max(-elapsed, base + delta)
+        }
+    }
+}
+
 private struct TimeEntryPopoverModifier: ViewModifier {
     @Binding var isPresented: Bool
     let previewBaseSeconds: Int
+    let previewElapsedSeconds: Int
     let arrowEdge: Edge
     let hourFormatThreshold: HourFormatThreshold
     let onCommit: (TimerInputParser.Action) -> Void
@@ -102,12 +124,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     }
 
     private func resolvedSeconds(for action: TimerInputParser.Action) -> Int {
-        switch action {
-        case .setAbsolute(let seconds):
-            return max(0, seconds)
-        case .adjustRelative(let delta):
-            return max(0, previewBaseSeconds + delta)
-        }
+        TimeEntryPreview.resolvedSeconds(for: action, base: previewBaseSeconds, elapsed: previewElapsedSeconds)
     }
 
     private func setSign(_ sign: Character) {
@@ -246,7 +263,7 @@ private struct TimeEntryKeypad: View {
                 .foregroundStyle(.white)
         } else {
             Button(action: action) { content }
-                .buttonStyle(.bordered)
+                .producerSecondaryButton()
                 .tint(.secondary)
                 .foregroundStyle(tint)
         }

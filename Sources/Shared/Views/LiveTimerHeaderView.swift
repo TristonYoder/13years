@@ -3,8 +3,39 @@
 
 import SwiftUI
 
+private struct DocumentSaveIndicatorKey: EnvironmentKey {
+    static let defaultValue: DocumentSaveIndicator? = nil
+}
+
+public extension EnvironmentValues {
+    var documentSaveIndicator: DocumentSaveIndicator? {
+        get { self[DocumentSaveIndicatorKey.self] }
+        set { self[DocumentSaveIndicatorKey.self] = newValue }
+    }
+}
+
+private struct DocumentSaveStatusLabel: View {
+    @ObservedObject var indicator: DocumentSaveIndicator
+
+    var body: some View {
+        let status = indicator.status
+        let label = Text(status.text)
+            .font(.system(size: 10))
+            .foregroundStyle(status == .failed ? Color.orange : Color.secondary.opacity(0.8))
+            .lineLimit(1)
+        if status.isActionable {
+            Button(action: { indicator.onActivate?() }) { label }
+                .buttonStyle(.plain)
+                .accessibilityLabel(status.text)
+        } else {
+            label.accessibilityLabel("Document \(status.text)")
+        }
+    }
+}
+
 public struct LiveTimerHeaderView: View {
     @EnvironmentObject var engine: CueEngine
+    @Environment(\.documentSaveIndicator) private var saveIndicator
     @State private var isEditingTimer: Bool = false
 
     public init() {}
@@ -28,18 +59,21 @@ public struct LiveTimerHeaderView: View {
             HStack {
                 HStack {
                     #if os(macOS)
-                    Color.clear.frame(width: 64, height: 1)
+                    Color.clear.frame(width: engine.isRemoteMirror ? 1 : 64, height: 1)
                     #endif
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(spacing: 2) {
                     #if os(macOS)
-                    Text(engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+                    Text(engine.isRemoteMirror ? (engine.remoteProducerName ?? "Remote Producer") : (engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     #endif
+                    if !engine.isRemoteMirror, let saveIndicator {
+                        DocumentSaveStatusLabel(indicator: saveIndicator)
+                    }
                     Text(engine.activeTimerItem?.title ?? "No Item Selected")
                         .font(.system(size: 20, weight: .heavy))
                         .textCase(.uppercase)
@@ -56,7 +90,8 @@ public struct LiveTimerHeaderView: View {
                             Button(action: { engine.previousPlanItem() }) {
                                 Image(systemName: "chevron.left").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .buttonStyle(.bordered)
+                            .producerSecondaryButton()
+                            .disabled(engine.isAtStartOfPlan)
                             .help("Previous item")
 
                             if let item = engine.activeTimerItem {
@@ -66,13 +101,14 @@ public struct LiveTimerHeaderView: View {
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .producerButtonShape()
                                 .tint(item.isRunning ? .blue : .green)
                                 .help(item.isRunning ? "Pause the timer" : "Start the timer")
 
                                 Button(action: { engine.resetTimer() }) {
                                     Image(systemName: "arrow.counterclockwise").font(.title2).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .buttonStyle(.bordered)
+                                .producerSecondaryButton()
                                 .help("Reset elapsed time")
                             }
 
@@ -81,12 +117,13 @@ public struct LiveTimerHeaderView: View {
                                     Label("Next Service", systemImage: "calendar.badge.clock")
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .producerButtonShape()
                                 .help("Load the next scheduled service from Planning Center")
                             } else {
                                 Button(action: { engine.nextPlanItem() }) {
                                     Image(systemName: "chevron.right").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .buttonStyle(.bordered)
+                                .producerSecondaryButton()
                                 .disabled(engine.isAtEndOfPlan)
                                 .help("Next item")
                             }
@@ -114,6 +151,7 @@ public struct LiveTimerHeaderView: View {
                     .frame(maxHeight: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .producerButtonShape()
             .tint(.yellow)
             .foregroundStyle(.black)
             .help("Set STANDBY for the \(count) selected role(s)")
@@ -126,6 +164,7 @@ public struct LiveTimerHeaderView: View {
                     .frame(maxHeight: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .producerButtonShape()
             .tint(.green)
             .help("Set GO for the \(count) selected role(s)")
 
@@ -136,7 +175,7 @@ public struct LiveTimerHeaderView: View {
                     .padding(.vertical, 6)
                     .frame(maxHeight: .infinity)
             }
-            .buttonStyle(.bordered)
+            .producerSecondaryButton()
             .help("Clear the cue for the \(count) selected role(s)")
         }
         .frame(maxHeight: .infinity)
@@ -178,6 +217,7 @@ public struct LiveTimerHeaderView: View {
             .timeEntryPopover(
                 isPresented: $isEditingTimer,
                 previewBaseSeconds: item.remainingSeconds,
+                previewElapsedSeconds: item.elapsedSeconds,
                 hourFormatThreshold: engine.hourFormatThreshold
             ) { action in
                 switch action {

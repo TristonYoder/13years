@@ -125,7 +125,7 @@ public struct ServiceScheduleView: View {
                 Button("Go Live Now") {
                     engine.goLiveWithSchedule(id: schedule.id)
                 }
-                .buttonStyle(.bordered)
+                .producerSecondaryButton()
                 .controlSize(.small)
 
                 Spacer()

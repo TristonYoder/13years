@@ -57,6 +57,15 @@ final class ControlAPIRouterTests: XCTestCase {
         XCTAssertNotNil(json["service"])
     }
 
+    func testHealthReportsStableDeviceId() {
+        let first = decodeJSON(send("GET", "/v1/health").body)?["deviceId"] as? String
+        let second = decodeJSON(send("GET", "/v1/health").body)?["deviceId"] as? String
+        XCTAssertNotNil(first)
+        XCTAssertFalse(first?.isEmpty ?? true)
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first, CueEngine.persistentDeviceId())
+    }
+
     func testStateEndpointReturns200WithRequiredKeys() {
         let response = send("GET", "/v1/state")
         XCTAssertEqual(response.status, 200)
@@ -338,6 +347,92 @@ final class ControlAPIRouterTests: XCTestCase {
 
         XCTAssertEqual(response.status, 409)
         XCTAssertEqual(engine.roles.first?.state, .off)
+    }
+
+    private func flowEngine() -> CueEngine {
+        let engine = CueEngine()
+        engine.importFlow(
+            title: "Test",
+            items: [
+                PCOTimerItem(title: "A", itemType: "item", sequence: 1, lengthInSeconds: 300),
+                PCOTimerItem(title: "B", itemType: "item", sequence: 2, lengthInSeconds: 600),
+                PCOTimerItem(title: "C", itemType: "item", sequence: 3, lengthInSeconds: 600),
+            ]
+        )
+        return engine
+    }
+
+    func testRevIncreasesAndServerNowMsIsEpochMilliseconds() {
+        let engine = flowEngine()
+        let first = decodeJSON(sendWithEngine(engine, "GET", "/v1/state").body)
+        let second = decodeJSON(sendWithEngine(engine, "GET", "/v1/state").body)
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        XCTAssertNotNil(first?["rev"] as? Int)
+        XCTAssertNotNil(second?["rev"] as? Int)
+        let router = ControlAPIRouter(engine: engine)
+        let a = router.snapshot()
+        let b = router.snapshot()
+        XCTAssertGreaterThan(b.rev, a.rev)
+        XCTAssertEqual(Double(b.serverNowMs), nowMs, accuracy: 60_000)
+    }
+
+    func testTimerEndpointReturnsRevServerNowAndTimer() {
+        let engine = flowEngine()
+        let json = decodeJSON(sendWithEngine(engine, "GET", "/v1/timer").body)
+        XCTAssertNotNil(json?["rev"] as? Int)
+        XCTAssertNotNil(json?["serverNowMs"] as? Int)
+        XCTAssertNotNil(json?["timer"] as? [String: Any])
+        XCTAssertNil(json?["plan"])
+    }
+
+    func testTimerEndpointEncodesNullTimerWhenNoPlan() {
+        let json = decodeJSON(send("GET", "/v1/timer").body)
+        XCTAssertTrue(json?["timer"] is NSNull)
+    }
+
+    func testPlanNextStartTimerFalseKeepsClockPaused() {
+        let engine = flowEngine()
+        XCTAssertEqual(sendWithEngine(engine, "POST", "/v1/plan/next", #"{"startTimer":false}"#).status, 200)
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, false)
+        XCTAssertEqual(sendWithEngine(engine, "POST", "/v1/plan/next").status, 200)
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, true)
+    }
+
+    func testWaypointsNextReturns409WhenNoneAhead() {
+        let engine = flowEngine()
+        XCTAssertEqual(sendWithEngine(engine, "POST", "/v1/waypoints/next").status, 409)
+    }
+
+    func testWaypointsNextJumpsToNextCarryingItem() {
+        let engine = flowEngine()
+        let target = engine.planItems[2].id
+        let waypoint = engine.addWaypoint(name: "Song 1")
+        engine.assignWaypoint(waypoint!.id, toItemId: target)
+        let response = sendWithEngine(engine, "POST", "/v1/waypoints/next", #"{"startTimer":false}"#)
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(engine.activeTimerItem?.id, target)
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, false)
+        XCTAssertEqual(sendWithEngine(engine, "POST", "/v1/waypoints/next").status, 409)
+    }
+
+    func testTimeEntryPreviewClampsRelativeAtNegativeElapsed() {
+        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .adjustRelative(bySeconds: -500), base: 100, elapsed: 60), -60)
+        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .adjustRelative(bySeconds: -50), base: 100, elapsed: 60), 50)
+        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .adjustRelative(bySeconds: -500), base: 100, elapsed: 0), 0)
+        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .setAbsolute(seconds: -5), base: 100, elapsed: 60), 0)
+    }
+
+    func testHubTreatsOnlyTimerChangesAsTimerOnly() {
+        let engine = flowEngine()
+        let router = ControlAPIRouter(engine: engine)
+        let before = ControlAPIEventHub.stableRepresentation(of: router.snapshot())
+        engine.toggleTimerRunning()
+        let afterTimer = ControlAPIEventHub.stableRepresentation(of: router.snapshot())
+        XCTAssertFalse(ControlAPIEventHub.isTimerOnlyChange(previous: nil, current: before))
+        XCTAssertTrue(ControlAPIEventHub.isTimerOnlyChange(previous: before, current: afterTimer))
+        _ = engine.addWaypoint(name: "Other")
+        let afterWaypoint = ControlAPIEventHub.stableRepresentation(of: router.snapshot())
+        XCTAssertFalse(ControlAPIEventHub.isTimerOnlyChange(previous: afterTimer, current: afterWaypoint))
     }
 
     func testStateIncludesWaypointsAndSchedulesKeysWithEntries() {
@@ -715,5 +810,24 @@ final class ControlAPIRouterTests: XCTestCase {
         let reply = router.handleCommand(command)
         XCTAssertEqual(reply.status, 409)
         XCTAssertNotNil(reply.error)
+    }
+}
+
+@MainActor
+final class ControlAPIServiceTypeClearTests: XCTestCase {
+    func testNullOrEmptyIdClearsServiceTypeSelection() {
+        let engine = CueEngine()
+        engine.pcoSelectedServiceTypeId = "st-1"
+        let router = ControlAPIRouter(engine: engine)
+        let response = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data("{\"id\":null}".utf8)))
+        XCTAssertEqual(response.status, 202)
+        XCTAssertNil(engine.pcoSelectedServiceTypeId)
+
+        engine.pcoSelectedServiceTypeId = "st-2"
+        _ = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data("{\"id\":\"\"}".utf8)))
+        XCTAssertNil(engine.pcoSelectedServiceTypeId)
+
+        let bad = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data()))
+        XCTAssertEqual(bad.status, 400)
     }
 }

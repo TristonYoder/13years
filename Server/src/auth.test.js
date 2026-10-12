@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveOrgIdForToken, clearAuthCache } from './auth.js';
+import { resolveOrgIdForToken, revalidateToken, clearAuthCache } from './auth.js';
 
 function fakeFetch(response) {
   return async () => response;
@@ -52,7 +52,7 @@ test('caches a successful lookup so a second call skips the network', async () =
   assert.equal(calls, 1);
 });
 
-test('does not cache a failed lookup', async () => {
+test('negatively caches a failed lookup briefly', async () => {
   clearAuthCache();
   let calls = 0;
   const fetchImpl = async () => {
@@ -60,8 +60,35 @@ test('does not cache a failed lookup', async () => {
     return { ok: false, status: 401, json: async () => ({}) };
   };
 
-  await resolveOrgIdForToken('fails-token', fetchImpl);
-  await resolveOrgIdForToken('fails-token', fetchImpl);
+  assert.equal(await resolveOrgIdForToken('fails-token', fetchImpl), null);
+  assert.equal(await resolveOrgIdForToken('fails-token', fetchImpl), null);
 
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
+});
+
+test('passes an abort signal and times out a hung lookup', async () => {
+  clearAuthCache();
+  let sawSignal = false;
+  const fetchImpl = (url, init) => {
+    sawSignal = init.signal instanceof AbortSignal;
+    return new Promise((resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    });
+  };
+
+  await assert.rejects(resolveOrgIdForToken('slow-token', fetchImpl, { timeoutMs: 20 }));
+  assert.ok(sawSignal);
+});
+
+test('revalidateToken bypasses the cache and reports revocation', async () => {
+  clearAuthCache();
+  let ok = true;
+  const fetchImpl = async () =>
+    ok ? { ok: true, json: async () => ({ id: 'org_r' }) } : { ok: false, json: async () => ({}) };
+
+  assert.equal(await resolveOrgIdForToken('re-token', fetchImpl), 'org_r');
+  ok = false;
+  assert.equal(await resolveOrgIdForToken('re-token', fetchImpl), 'org_r');
+  assert.equal(await revalidateToken('re-token', fetchImpl), null);
+  assert.equal(await resolveOrgIdForToken('re-token', fetchImpl), null);
 });

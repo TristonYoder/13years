@@ -73,8 +73,8 @@ public struct ServiceFlowView: View {
             Button("Cancel", role: .cancel) { newWaypointTargetItemId = nil; newWaypointName = "" }
             Button("Create") {
                 let trimmed = newWaypointName.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty, let itemId = newWaypointTargetItemId, let waypoint = engine.addWaypoint(name: trimmed) {
-                    engine.assignWaypoint(waypoint.id, toItemId: itemId)
+                if !trimmed.isEmpty, let itemId = newWaypointTargetItemId {
+                    engine.createWaypointAndAssign(name: trimmed, toItemId: itemId)
                 }
                 newWaypointTargetItemId = nil
                 newWaypointName = ""
@@ -184,8 +184,8 @@ public struct ServiceFlowView: View {
                 engine.movePlanItems(fromOffsets: offsets, toOffset: destination)
             }
             .onDelete { offsets in
-                for index in offsets {
-                    engine.removePlanItem(id: engine.planItems[index].id)
+                if let index = offsets.first, engine.planItems.indices.contains(index) {
+                    pendingDeleteItem = engine.planItems[index]
                 }
             }
         } header: {
@@ -273,7 +273,7 @@ public struct ServiceFlowView: View {
                                     .font(.title2.weight(.bold))
                                     .frame(width: 52, height: 52)
                             }
-                            .buttonStyle(.bordered)
+                            .producerSecondaryButton()
                             .buttonBorderShape(.roundedRectangle(radius: 10))
                             .tint(.secondary)
                             .accessibilityLabel("Reset")
@@ -527,7 +527,7 @@ private struct InlineItemEditor: View {
                         .textFieldStyle(.roundedBorder)
                         #endif
                     Button("Set") { commitDuration() }
-                        .buttonStyle(.bordered)
+                        .producerSecondaryButton()
                         .controlSize(.small)
                 }
             }

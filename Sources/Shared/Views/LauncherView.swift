@@ -1,19 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
+#if os(macOS) || os(iOS)
 import SwiftUI
 
+struct LauncherActions {
+    var newDocument: () -> Void
+    var newFromTemplate: () -> Void
+    var open: () -> Void
+    var openRecent: (URL) -> Void
+    var connect: () -> Void
+    var refreshRecents: () -> Void = {}
+}
+
 struct LauncherView: View {
-    @ObservedObject var documents: DocumentController
-    @EnvironmentObject var engine: CueEngine
+    let recentURLs: [URL]
+    let actions: LauncherActions
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
+            launcherGround
                 .overlay(
                     RadialGradient(
-                        colors: [Color.purple.opacity(colorScheme == .dark ? 0.28 : 0.14), .clear],
+                        colors: [Color.accentColor.opacity(colorScheme == .dark ? 0.28 : 0.14), .clear],
                         center: .top,
                         startRadius: 40,
                         endRadius: 620
@@ -21,39 +31,79 @@ struct LauncherView: View {
                 )
                 .ignoresSafeArea()
 
-            VStack(spacing: 28) {
-                header
-
-                HStack(spacing: 12) {
-                    actionCard(title: "New", subtitle: "A blank service", systemImage: "plus") {
-                        documents.newDocument(engine)
-                    }
-                    actionCard(title: "From Template", subtitle: "Start from a saved layout", systemImage: "doc.on.doc") {
-                        documents.newFromTemplate(engine)
-                    }
-                    actionCard(title: "Open…", subtitle: "An existing file", systemImage: "folder") {
-                        documents.open(engine)
-                    }
+            GeometryReader { proxy in
+                ScrollView {
+                    panel
+                        .frame(maxWidth: 640)
+                        .padding(24)
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-
-                recents
-
-                Button("Skip for now") { documents.dismissLauncher() }
-                    .buttonStyle(.plain)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .keyboardShortcut(.cancelAction)
-                    .help("Continue with what you had open last time, without a file")
             }
-            .padding(36)
-            .frame(width: 560)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(.white.opacity(colorScheme == .dark ? 0.08 : 0.4), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.25), radius: 30, y: 14)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .onAppear { actions.refreshRecents() }
+    }
+
+    private var panel: some View {
+        VStack(spacing: 28) {
+            header
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { cards }
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) { newCards }
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) { openCards }
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(spacing: 12) { cards }
+            }
+
+            recents
+        }
+        .padding(36)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(.white.opacity(colorScheme == .dark ? 0.08 : 0.4), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 30, y: 14)
+    }
+
+    @ViewBuilder
+    private var newCards: some View {
+        actionCard(title: "New Document…", subtitle: "A blank service", systemImage: "plus") {
+            actions.newDocument()
+        }
+        actionCard(title: "From Template", subtitle: "Start from a saved layout", systemImage: "doc.on.doc") {
+            actions.newFromTemplate()
+        }
+    }
+
+    @ViewBuilder
+    private var openCards: some View {
+        actionCard(title: "Open…", subtitle: "An existing document", systemImage: "folder") {
+            actions.open()
+        }
+        actionCard(title: "Connect To…", subtitle: "Control another Producer", systemImage: "dot.radiowaves.left.and.right") {
+            actions.connect()
+        }
+    }
+
+    @ViewBuilder
+    private var cards: some View {
+        newCards
+        openCards
+    }
+
+    private var launcherGround: Color {
+        #if os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color(uiColor: .systemBackground)
+        #endif
     }
 
     private var header: some View {
@@ -78,13 +128,17 @@ struct LauncherView: View {
                     .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 VStack(spacing: 2) {
                     Text(title).font(.headline)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.vertical, 16)
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 120, idealWidth: 120, maxWidth: .infinity, minHeight: 132, maxHeight: .infinity)
             .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
@@ -99,20 +153,21 @@ struct LauncherView: View {
                 .tracking(1)
                 .padding(.horizontal, 4)
 
-            if documents.recentURLs.isEmpty {
-                Text("Files you open or save will show up here.")
+            if recentURLs.isEmpty {
+                Text("Documents you open or save will show up here.")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: 72)
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(documents.recentURLs, id: \.self) { url in
-                            RecentRow(url: url) { documents.open(url, in: engine) }
+                        ForEach(recentURLs, id: \.self) { url in
+                            RecentRow(url: url) { actions.openRecent(url) }
                         }
                     }
                 }
-                .frame(height: min(CGFloat(documents.recentURLs.count) * 54, 240))
+                .frame(minHeight: 54, maxHeight: min(CGFloat(recentURLs.count) * 54, 240))
             }
         }
     }
@@ -148,7 +203,7 @@ private struct RecentRow: View {
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(url.deletingPathExtension().lastPathComponent)
+                    Text(RecentDocuments.title(for: url))
                         .font(.body.weight(.medium))
                         .lineLimit(1)
                     Text(folder)
@@ -177,3 +232,4 @@ private struct RecentRow: View {
         .help(url.path)
     }
 }
+#endif

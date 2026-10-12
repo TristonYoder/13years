@@ -68,8 +68,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         title = try container.decode(String.self, forKey: .title)
         itemType = try container.decode(String.self, forKey: .itemType)
         sequence = try container.decode(Int.self, forKey: .sequence)
-        lengthInSeconds = try container.decode(Int.self, forKey: .lengthInSeconds)
-        elapsedSeconds = try container.decode(Int.self, forKey: .elapsedSeconds)
+        lengthInSeconds = TimerLimits.clampLength(try container.decode(Int.self, forKey: .lengthInSeconds))
+        elapsedSeconds = TimerLimits.clampElapsed(try container.decode(Int.self, forKey: .elapsedSeconds))
         isRunning = try container.decode(Bool.self, forKey: .isRunning)
         servicePlanTitle = try container.decodeIfPresent(String.self, forKey: .servicePlanTitle)
         notes = try container.decodeIfPresent([String: String].self, forKey: .notes) ?? [:]
@@ -105,7 +105,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var remainingSeconds: Int {
-        lengthInSeconds - elapsedSeconds
+        TimerLimits.saturatingSubtract(lengthInSeconds, elapsedSeconds)
     }
 
     public var isOvertime: Bool {
@@ -113,7 +113,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var formattedRemainingTime: String {
-        let absSeconds = abs(remainingSeconds)
+        let absSeconds = TimerLimits.safeAbs(remainingSeconds)
         let mins = absSeconds / 60
         let secs = absSeconds % 60
         let timeString = String(format: "%02d:%02d", mins, secs)
@@ -121,10 +121,10 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     public mutating func adjustRemainingTime(bySeconds delta: Int) {
-        lengthInSeconds = max(0, lengthInSeconds + delta)
+        lengthInSeconds = TimerLimits.clampLength(TimerLimits.saturatingAdd(lengthInSeconds, TimerLimits.clampDelta(delta)))
     }
 
     public mutating func setRemainingTime(seconds: Int) {
-        lengthInSeconds = elapsedSeconds + max(0, seconds)
+        lengthInSeconds = TimerLimits.clampLength(TimerLimits.saturatingAdd(elapsedSeconds, TimerLimits.clampLength(seconds)))
     }
 }

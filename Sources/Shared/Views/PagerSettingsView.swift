@@ -7,8 +7,23 @@ public struct PagerSettingsView: View {
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PagerHaptics.strengthDefaultsKey) private var hapticStrength: Double = PagerHaptics.defaultStrength
+    @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
+    @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
+    #if PAGER_MAC
+    @AppStorage("keepOnTop") private var keepOnTop = false
+    #endif
 
     public init() {}
+
+    private var connectionState: PagerConnectionState {
+        PagerConnectionState(isProducerLive: engine.isMasterServer || engine.isProducerLive, isLANConnected: engine.isLANConnected)
+    }
+
+    static func syncText(offsetMs: Double, rttMs: Double?) -> String {
+        let offset = String(format: "%+.0f ms", offsetMs)
+        guard let rttMs else { return offset }
+        return "\(offset), RTT \(String(format: "%.0f", rttMs)) ms"
+    }
 
     public var body: some View {
         NavigationStack {
@@ -38,6 +53,63 @@ public struct PagerSettingsView: View {
                     }
                 }
                 #endif
+
+                Section {
+                    Picker("Cue display", selection: $cueDisplayRaw) {
+                        ForEach(CueDisplayStyle.allCases) { style in
+                            Text(style.title).tag(style.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Cue Display")
+                } footer: {
+                    Text("Outline frames the screen in the cue colour. Full screen fills the whole screen with it.")
+                }
+
+                #if !os(tvOS)
+                Section {
+                    Picker("Layout", selection: $layoutRaw) {
+                        ForEach(PagerLayoutChoice.allCases) { choice in
+                            Text(choice.title).tag(choice.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Layout")
+                } footer: {
+                    Text("Lower third shows the clock, element name and countdown on a single line. Automatic switches to it on very wide windows. Tap the screen to show the role, messages and settings.")
+                }
+                #endif
+
+                #if PAGER_MAC
+                Section {
+                    Toggle("Keep on top", isOn: $keepOnTop)
+                } header: {
+                    Text("Window")
+                } footer: {
+                    Text("Keeps this window above other windows.")
+                }
+                #endif
+
+                Section {
+                    LabeledContent("Status") {
+                        Text(connectionState.title)
+                            .foregroundStyle(connectionState == .live ? Color.green : Color.red)
+                            .fontWeight(.medium)
+                    }
+                    LabeledContent("Producer") {
+                        Text(engine.connectedMasterName ?? "—")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let offset = engine.syncV2.estimator.offsetMs {
+                        LabeledContent("Clock sync") {
+                            Text(Self.syncText(offsetMs: offset, rttMs: engine.syncV2.estimator.best?.effectiveRtt))
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Connection")
+                }
 
                 Section {
                     if let master = engine.connectedMasterName {

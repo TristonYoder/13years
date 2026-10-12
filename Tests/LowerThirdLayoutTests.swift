@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Triston Yoder
+
+import XCTest
+
+final class LowerThirdLayoutTests: XCTestCase {
+    func testAutomaticSwitchesOnlyForVeryWideWindows() {
+        XCTAssertFalse(PagerLayoutChoice.automatic.usesLowerThird(for: CGSize(width: 1024, height: 768)))
+        XCTAssertFalse(PagerLayoutChoice.automatic.usesLowerThird(for: CGSize(width: 1920, height: 1080)))
+        XCTAssertTrue(PagerLayoutChoice.automatic.usesLowerThird(for: CGSize(width: 1920, height: 260)))
+        XCTAssertTrue(PagerLayoutChoice.automatic.usesLowerThird(for: CGSize(width: 900, height: 300)))
+    }
+
+    func testExplicitChoiceAlwaysUsesLowerThird() {
+        XCTAssertTrue(PagerLayoutChoice.lowerThird.usesLowerThird(for: CGSize(width: 390, height: 844)))
+    }
+
+    func testUnknownStoredValueFallsBackToAutomatic() {
+        XCTAssertEqual(PagerLayoutChoice.resolve("nonsense"), .automatic)
+        XCTAssertEqual(PagerLayoutChoice.resolve("lowerThird"), .lowerThird)
+    }
+
+    func testMetricsStayPositiveOnTinyWindows() {
+        let metrics = LowerThirdMetrics(size: CGSize(width: 40, height: 20))
+        XCTAssertGreaterThan(metrics.fontSize, 0)
+        XCTAssertGreaterThan(metrics.contentHeight, 0)
+    }
+}

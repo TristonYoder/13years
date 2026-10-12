@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import Foundation
 
 public enum LaunchBehavior: String, CaseIterable, Identifiable, Sendable {
@@ -15,7 +15,7 @@ public enum LaunchBehavior: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .showLauncher: return "Show the start window"
         case .reopenLast: return "Reopen the last document"
-        case .openFile: return "Open a specific file"
+        case .openFile: return "Open a specific document"
         }
     }
 }
@@ -32,13 +32,14 @@ public final class LaunchPreferences: ObservableObject {
     }
 
     @Published public private(set) var fileURL: URL?
+    @Published public private(set) var bookmarkError: String?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.behavior = defaults.string(forKey: Self.behaviorKey).flatMap(LaunchBehavior.init(rawValue:)) ?? .showLauncher
-        if let data = defaults.data(forKey: Self.fileBookmarkKey) {
-            var stale = false
-            self.fileURL = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)
+        if let data = defaults.data(forKey: Self.fileBookmarkKey), let resolved = try? DocumentBookmark.resolved(data) {
+            self.fileURL = resolved.url
+            if resolved.bookmark != data { defaults.set(resolved.bookmark, forKey: Self.fileBookmarkKey) }
         }
     }
 
@@ -47,16 +48,20 @@ public final class LaunchPreferences: ObservableObject {
     }
 
     public func setFile(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
-        defaults.set(data, forKey: Self.fileBookmarkKey)
-        fileURL = url
+        do {
+            let data = try DocumentBookmark.make(for: url)
+            defaults.set(data, forKey: Self.fileBookmarkKey)
+            fileURL = url
+            bookmarkError = nil
+        } catch {
+            bookmarkError = "Couldn’t remember “\(url.lastPathComponent)” for the next launch. \(error.localizedDescription)"
+        }
     }
 
     public func clearFile() {
         defaults.removeObject(forKey: Self.fileBookmarkKey)
         fileURL = nil
+        bookmarkError = nil
     }
 }
 #endif

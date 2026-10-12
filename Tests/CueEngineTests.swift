@@ -219,10 +219,127 @@ final class CueEngineTests: XCTestCase {
         XCTAssertTrue(engine.isAtEndOfPlan)
     }
 
+    func testIsAtStartOfPlanFollowsTheActiveItem() {
+        let engine = CueEngine(startsNetworking: false)
+        XCTAssertTrue(engine.isAtStartOfPlan)
+        engine.importFlow(title: "Plan", items: [
+            PCOTimerItem(title: "Welcome", itemType: "item", sequence: 1, lengthInSeconds: 60),
+            PCOTimerItem(title: "Song", itemType: "item", sequence: 2, lengthInSeconds: 60),
+        ])
+        XCTAssertTrue(engine.isAtStartOfPlan)
+        engine.nextPlanItem()
+        XCTAssertFalse(engine.isAtStartOfPlan)
+        engine.previousPlanItem()
+        XCTAssertTrue(engine.isAtStartOfPlan)
+    }
+
     func testCanLoadNextServiceRequiresAPCOPlan() {
         let engine = CueEngine()
         engine.importFlow(title: "Manual Flow", items: makeFlow())
         XCTAssertFalse(engine.canLoadNextService)
+    }
+
+    private func makeRunningEngine(elapsed: Int = 0) -> (CueEngine, Box) {
+        let engine = CueEngine()
+        let clock = Box(Date(timeIntervalSince1970: 1_000_000))
+        engine.timerClock = { clock.value }
+        engine.importFlow(title: "Test Plan", items: [
+            PCOTimerItem(title: "Sermon", itemType: "item", sequence: 1, lengthInSeconds: 45 * 60),
+        ])
+        engine.activeTimerItem?.elapsedSeconds = elapsed
+        engine.activeTimerItem?.isRunning = true
+        engine.tickTimer()
+        return (engine, clock)
+    }
+
+    private final class Box {
+        var value: Date
+        init(_ value: Date) { self.value = value }
+    }
+
+    func testTimerCatchesUpAfterMissedTicks() {
+        let (engine, clock) = makeRunningEngine()
+
+        clock.value.addTimeInterval(120)
+        engine.tickTimer()
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 120)
+    }
+
+    func testTimerDoesNotAccumulateErrorFromJitteryTicks() {
+        let (engine, clock) = makeRunningEngine()
+
+        for _ in 0..<600 {
+            clock.value.addTimeInterval(1.5)
+            engine.tickTimer()
+        }
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 900)
+    }
+
+    func testTimerContinuesFromExistingElapsedWhenStarted() {
+        let (engine, clock) = makeRunningEngine(elapsed: 90)
+
+        clock.value.addTimeInterval(10)
+        engine.tickTimer()
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 100)
+    }
+
+    func testPausedTimeIsNotCountedOnResume() {
+        let (engine, clock) = makeRunningEngine()
+        clock.value.addTimeInterval(30)
+        engine.tickTimer()
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 30)
+
+        engine.activeTimerItem?.isRunning = false
+        clock.value.addTimeInterval(500)
+        engine.tickTimer()
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 30)
+
+        engine.activeTimerItem?.isRunning = true
+        engine.tickTimer()
+        clock.value.addTimeInterval(5)
+        engine.tickTimer()
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 35)
+    }
+
+    func testExternalElapsedChangeReanchorsTheClock() {
+        let (engine, clock) = makeRunningEngine()
+        clock.value.addTimeInterval(20)
+        engine.tickTimer()
+
+        engine.activeTimerItem?.elapsedSeconds = 300
+        engine.tickTimer()
+        clock.value.addTimeInterval(7)
+        engine.tickTimer()
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 307)
+    }
+
+    func testResetRestartsTheClockFromZero() {
+        let (engine, clock) = makeRunningEngine()
+        clock.value.addTimeInterval(50)
+        engine.tickTimer()
+
+        engine.activeTimerItem?.elapsedSeconds = 0
+        engine.tickTimer()
+        clock.value.addTimeInterval(3)
+        engine.tickTimer()
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 3)
+    }
+
+    func testAdjustingLengthDoesNotDisturbElapsed() {
+        let (engine, clock) = makeRunningEngine()
+        clock.value.addTimeInterval(40)
+        engine.tickTimer()
+
+        engine.adjustTimerRemainingTime(bySeconds: 60)
+        clock.value.addTimeInterval(10)
+        engine.tickTimer()
+
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 50)
     }
 
     func testSetTimerRemainingTimeComputesLengthFromLiveElapsed() {

@@ -30,3 +30,12 @@ public struct InterTeamMessage: Identifiable, Codable, Equatable, Sendable {
         self.isHighPriority = isHighPriority
     }
 }
+
+extension InterTeamMessage {
+    func clampedForStorage() -> InterTeamMessage {
+        var copy = self
+        copy.text = String(text.prefix(ContentLimits.messageText))
+        copy.sender = String(sender.prefix(ContentLimits.name))
+        return copy
+    }
+}

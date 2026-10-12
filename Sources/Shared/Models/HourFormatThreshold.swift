@@ -29,7 +29,7 @@ public enum HourFormatThreshold: String, CaseIterable, Codable, Identifiable, Se
 
 public enum TimeFormatting {
     public static func string(forSeconds totalSeconds: Int, threshold: HourFormatThreshold) -> String {
-        let absSeconds = abs(totalSeconds)
+        let absSeconds = TimerLimits.safeAbs(totalSeconds)
         let core: String
         if let cutoff = threshold.thresholdSeconds, absSeconds >= cutoff {
             let hours = absSeconds / 3600

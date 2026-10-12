@@ -42,6 +42,12 @@ public struct HTTPResponse: Sendable {
         if canonical["Content-Length"] == nil {
             canonical["Content-Length"] = String(body.count)
         }
+        if canonical["X-Content-Type-Options"] == nil {
+            canonical["X-Content-Type-Options"] = "nosniff"
+        }
+        if canonical["X-Frame-Options"] == nil {
+            canonical["X-Frame-Options"] = "DENY"
+        }
         if canonical["Connection"] == nil {
             canonical["Connection"] = "keep-alive"
         }
@@ -89,6 +95,7 @@ public struct HTTPResponse: Sendable {
         case 204: return "No Content"
         case 400: return "Bad Request"
         case 401: return "Unauthorized"
+        case 403: return "Forbidden"
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
         case 409: return "Conflict"

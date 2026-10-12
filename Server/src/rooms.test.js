@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { joinRoom, relay, roomSize, roomCount } from './rooms.js';
+import { joinRoom, relay, roomSize, roomCount, isRoomFull, MAX_CONNECTIONS_PER_ORG } from './rooms.js';
 
 function fakeSocket() {
   const sent = [];
@@ -77,4 +77,64 @@ test('a socket that is not OPEN is skipped, not delivered to', () => {
   const delivered = relay(orgId, a, Buffer.from('x'), true);
   assert.equal(delivered, 0);
   assert.equal(b.sent.length, 0);
+});
+
+test('v2 sync packets pass through byte-for-byte, as binary frames', () => {
+  const sender = fakeSocket();
+  const receiver = fakeSocket();
+  const orgId = 'org_test_v2_passthrough';
+  joinRoom(orgId, sender);
+  joinRoom(orgId, receiver);
+
+  const packets = [
+    { type: 'SYNC', senderId: 'p', t0: 1760000000000 },
+    { type: 'SYNC_REPLY', senderId: 'h', t0: 1760000000000, t1: 1760000000010, t2: 1760000000011 },
+    { type: 'TIMER_ANCHOR', senderId: 'h', rev: 4, anchor: null },
+    { type: 'CUE_DELTA', senderId: 'h', rev: 5, cueDeltas: [{ id: 'host', state: 'GO', lastUpdated: 1 }] },
+    { type: 'DIGEST', senderId: 'h', rev: 5, digestMs: 1760000000000, hashes: { roles: 'a', timer: 'b', messages: 'c' } },
+    { type: 'PING', senderId: 'p', proto: 2 },
+  ];
+  for (const packet of packets) {
+    relay(orgId, sender, Buffer.from(JSON.stringify(packet)), true);
+  }
+
+  assert.equal(receiver.sent.length, packets.length);
+  receiver.sent.forEach((entry, index) => {
+    assert.equal(entry.binary, true);
+    assert.deepEqual(JSON.parse(entry.data.toString()), packets[index]);
+  });
+});
+
+test('refuses connections beyond the per-org cap', () => {
+  const orgId = 'org_test_cap';
+  const leaves = [];
+  for (let i = 0; i < MAX_CONNECTIONS_PER_ORG; i++) leaves.push(joinRoom(orgId, fakeSocket()));
+  assert.ok(leaves.every((leave) => typeof leave === 'function'));
+  assert.equal(isRoomFull(orgId), true);
+  assert.equal(joinRoom(orgId, fakeSocket()), null);
+  leaves[0]();
+  assert.equal(isRoomFull(orgId), false);
+  leaves.slice(1).forEach((leave) => leave());
+});
+
+test('drops slow consumers whose send buffer is too large', () => {
+  const orgId = 'org_test_slow';
+  const sender = fakeSocket();
+  const slow = fakeSocket();
+  slow.bufferedAmount = 3 * 1024 * 1024;
+  let terminated = false;
+  slow.terminate = () => {
+    terminated = true;
+  };
+  const fast = fakeSocket();
+  fast.bufferedAmount = 10;
+  const leaves = [joinRoom(orgId, sender), joinRoom(orgId, slow), joinRoom(orgId, fast)];
+
+  const delivered = relay(orgId, sender, Buffer.from('x'), true);
+
+  assert.equal(delivered, 1);
+  assert.equal(terminated, true);
+  assert.equal(slow.sent.length, 0);
+  assert.equal(fast.sent.length, 1);
+  leaves.forEach((leave) => leave());
 });

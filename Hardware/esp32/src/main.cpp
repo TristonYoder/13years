@@ -16,7 +16,7 @@ static cue::Engine engine;
 static String serialLineBuf;
 
 static void onCueTransition(CueState newState) {
-  Serial.printf("[cue] role \"%s\" transitioned -> %s\n", engine.selectedRoleId().c_str(), cueStateDisplayName(newState));
+  Serial.printf("[cue] role \"%s\" transitioned -> %s\n", engine.selectedRoleId().c_str(), cueStateLogName(newState));
   led::setForCueState(newState);
   buzzer::playCueTransition(newState);
 }
@@ -206,6 +206,15 @@ static void handleSerialLine(String line) {
       Serial.println("[serial] usage: rotate 180|normal   (bare `rotate` reports the current setting)");
     }
 
+  } else if (line.startsWith("cue")) {
+    String rest = line.length() > 3 ? line.substring(3) : "";
+    rest.trim();
+    if (rest == "") {
+      Serial.printf("[serial] cue display is %s — `cue outline` or `cue full` to change\n", ui::cueDisplayName());
+    } else if (!ui::setCueDisplay(rest.c_str())) {
+      Serial.println("[serial] usage: cue outline|full   (bare `cue` reports the current setting)");
+    }
+
   } else if (line == "status") {
     cue::RoleView role = engine.activeRole();
     cue::TimerView timer = engine.activeTimer();
@@ -214,18 +223,20 @@ static void handleSerialLine(String line) {
     String producerDisplay = hasStaticHost
       ? (lan::isStaticFallbackActive() ? producerHost + " (unreachable — fell back to mDNS)" : producerHost)
       : String("(mDNS)");
-    Serial.printf("[serial] rotation=%s\n", ui::isDisplayFlipped() ? "180" : "normal");
+    Serial.printf("[serial] rotation=%s cueDisplay=%s\n", ui::isDisplayFlipped() ? "180" : "normal", ui::cueDisplayName());
     Serial.printf("[serial] deviceId=%s role=%s wifi=%s lan=%s producer=%s cueState=%s\n",
                   store::deviceId().c_str(), engine.selectedRoleId().c_str(),
                   wifinet::isConnected() ? "connected" : "disconnected",
                   lan::isConnected() ? "connected" : "not connected",
                   producerDisplay.c_str(),
-                  role.found ? cueStateDisplayName(role.state) : "(no role data yet)");
+                  role.found ? cueStateLogName(role.state) : "(no role data yet)");
     if (timer.found) {
       Serial.printf("[serial]   timer: \"%s\" remaining=%ds running=%d actual=%d note=\"%s\"\n",
                     timer.title.c_str(), timer.remainingSeconds(), timer.isRunning, timer.isDurationActual,
                     engine.currentNote().c_str());
     }
+    Serial.printf("[serial] heap free=%u min=%u maxblock=%u\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
     cue::MessageView msg = engine.latestRelevantMessage();
     if (msg.found) {
       Serial.printf("[serial]   latest relevant message: \"%s\" (from=%s target=%s)\n",
@@ -315,6 +326,7 @@ static void handleSerialLine(String line) {
     Serial.println("  role <id>                set this pager's role (whatever ids the Producer's roster has — see the on-screen picker)");
     Serial.println("  rotate 180|normal        turn the display (and touch with it) 180 degrees, for upside-down mounting");
     Serial.println("  producer <ip>|auto       set a static Producer IP (skips mDNS discovery), or `auto` to discover via mDNS again; bare `producer` reports the current setting");
+    Serial.println("  cue outline|full         choose how the cue is shown: a coloured frame (outline) or the whole screen filled with the cue colour; bare `cue` reports it");
     Serial.println("  status                   print device id / role / connection state");
     Serial.println("  testpacket <json>        inject a raw CuePacket JSON string directly into the engine (debug aid, bypasses the network)");
     Serial.println("  led <red|green|blue|rg|rb|gb|all|off>  drive the RGB LED's raw channels directly (debug aid)");

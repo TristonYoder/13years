@@ -45,18 +45,20 @@ public struct SettingsView: View {
                     }
                 }
 
-                Button(action: { engine.signInWithPCO() }) {
-                    Label(
-                        engine.isPCOConnected ? "Re-authenticate with Planning Center" : "Sign in with Planning Center",
-                        systemImage: "person.badge.key.fill"
-                    )
+                if !engine.isRemoteMirror {
+                    Button(action: { engine.signInWithPCO() }) {
+                        Label(
+                            engine.isPCOConnected ? "Re-authenticate with Planning Center" : "Sign in with Planning Center",
+                            systemImage: "person.badge.key.fill"
+                        )
+                    }
                 }
 
                 Button(action: { showingPlanPicker = true }) {
                     Label("Choose a Plan to Sync", systemImage: "arrow.triangle.2.circlepath")
                 }
 
-                if engine.isPCOConnected {
+                if engine.isPCOConnected && !engine.isRemoteMirror {
                     Button(role: .destructive, action: { engine.signOutOfPCO() }) {
                         Label("Sign Out", systemImage: "person.badge.minus")
                     }
@@ -97,6 +99,21 @@ public struct SettingsView: View {
                 Text("Pick a lead time before each service and this device goes live automatically — switching into the live producer view and, optionally, loading a specific Planning Center plan. Setup done once, ahead of a week's flow.")
             }
 
+            Section {
+                CustomScreenURLSection()
+            } header: {
+                Text("Custom screen URL")
+            } footer: {
+                Text("Builds an address for the built-in web pager, for a screen that can't run the app: a laptop, an OBS browser source, a lobby display. Open it in a browser on that screen.")
+            }
+
+            if engine.isRemoteMirror {
+                Section {
+                    Label("Display, network, startup and Control API settings belong to \(engine.remoteProducerName ?? "the remote Producer") and can only be changed on that device.", systemImage: "lock")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
             Section {
                 HStack(spacing: 10) {
                     ForEach([HourFormatThreshold.never, .over90Minutes, .over60Minutes]) { threshold in
@@ -140,7 +157,7 @@ public struct SettingsView: View {
                 Text("Devices on the same LAN — Pager apps and ESP32 hardware pagers — discover this device via Bonjour and connect directly for real-time cue delivery.")
             }
 
-            #if os(macOS)
+            #if os(macOS) || os(iOS)
             Section {
                 LaunchSettingsSection()
             } header: {
@@ -222,6 +239,7 @@ public struct SettingsView: View {
                 }
             }
             #endif
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingPlanPicker) {

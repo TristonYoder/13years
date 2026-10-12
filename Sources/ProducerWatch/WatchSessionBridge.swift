@@ -35,7 +35,7 @@ final class WatchSessionBridge: NSObject, WCSessionDelegate, ObservableObject {
 
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         AppLog.bridge.info(
-            "Watch bridge: activation=\(activationState.rawValue, privacy: .public) error=\(String(describing: error), privacy: .public)"
+            "Watch bridge: activation=\(activationState.rawValue, privacy: .public) error=\(String(describing: error), privacy: .private)"
         )
         isSessionActive = activationState == .activated
         if isSessionActive {
@@ -60,7 +60,7 @@ final class WatchSessionBridge: NSObject, WCSessionDelegate, ObservableObject {
     private func apply(dictionary context: [String: Any]) {
         if let ip = context[Self.hostKey] as? String, !ip.isEmpty {
             producerIP = ip
-            AppLog.bridge.info("Watch bridge: adopted producer IP \(ip, privacy: .public)")
+            AppLog.bridge.info("Watch bridge: adopted producer IP \(ip, privacy: .private)")
         } else {
             AppLog.bridge.info("Watch bridge: no producer IP in context")
         }

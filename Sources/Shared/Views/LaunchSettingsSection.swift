@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -10,8 +10,12 @@ struct LaunchSettingsSection: View {
     @State private var isChoosingFile = false
 
     private var fileTypes: [UTType] {
-        [ProducerDocument.fileExtension, ProducerDocument.templateExtension]
-            .map { UTType(filenameExtension: $0) ?? .json }
+        [
+            .thirteenYearsDocument,
+            .thirteenYearsTemplate,
+            UTType(filenameExtension: ProducerDocument.fileExtension),
+            UTType(filenameExtension: ProducerDocument.templateExtension)
+        ].compactMap { $0 }
     }
 
     var body: some View {
@@ -33,7 +37,7 @@ struct LaunchSettingsSection: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("No file chosen")
+                    Text("No document chosen")
                         .foregroundStyle(.secondary)
                 }
 
@@ -46,6 +50,12 @@ struct LaunchSettingsSection: View {
             }
             .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: fileTypes) { result in
                 if case .success(let url) = result { preferences.setFile(url) }
+            }
+
+            if let error = preferences.bookmarkError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
     }

@@ -86,6 +86,14 @@ void store::setDisplayFlipped(bool flipped) {
   prefs.putBool("disp_flip", flipped);
 }
 
+String store::getCueDisplay() {
+  return prefs.getString("cue_disp", "outline");
+}
+
+void store::setCueDisplay(const String &name) {
+  prefs.putString("cue_disp", name);
+}
+
 bool store::getTouchCalibration(uint16_t calData[5]) {
   size_t got = prefs.getBytes("touch_cal", calData, sizeof(uint16_t) * 5);
   return got == sizeof(uint16_t) * 5;

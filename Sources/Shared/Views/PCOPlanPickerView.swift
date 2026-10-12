@@ -27,7 +27,7 @@ public struct PCOPlanPickerView: View {
         VStack(spacing: 0) {
             HStack {
                 if engine.pcoSelectedServiceTypeId != nil {
-                    Button(action: { engine.pcoSelectedServiceTypeId = nil }) {
+                    Button(action: { engine.clearPCOServiceTypeSelection() }) {
                         Label("Plan Types", systemImage: "chevron.left")
                     }
                 }
@@ -67,7 +67,7 @@ public struct PCOPlanPickerView: View {
                     }
                     if engine.pcoSelectedServiceTypeId != nil {
                         ToolbarItem(placement: .navigation) {
-                            Button(action: { engine.pcoSelectedServiceTypeId = nil }) {
+                            Button(action: { engine.clearPCOServiceTypeSelection() }) {
                                 Label("Plan Types", systemImage: "chevron.left")
                             }
                         }

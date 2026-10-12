@@ -14,6 +14,7 @@ public struct PagerPresentationState: Equatable, Sendable {
     public var isLANConnected: Bool
     public var connectedMasterName: String?
     public var hourFormatThreshold: HourFormatThreshold
+    public var receivedNextItem: PCOTimerItem?
 
     public init(
         roles: [RoleCue],
@@ -25,7 +26,8 @@ public struct PagerPresentationState: Equatable, Sendable {
         isProducerLive: Bool,
         isLANConnected: Bool,
         connectedMasterName: String?,
-        hourFormatThreshold: HourFormatThreshold
+        hourFormatThreshold: HourFormatThreshold,
+        receivedNextItem: PCOTimerItem? = nil
     ) {
         self.roles = roles
         self.planItems = planItems
@@ -37,6 +39,11 @@ public struct PagerPresentationState: Equatable, Sendable {
         self.isLANConnected = isLANConnected
         self.connectedMasterName = connectedMasterName
         self.hourFormatThreshold = hourFormatThreshold
+        self.receivedNextItem = receivedNextItem
+    }
+
+    public static func cueWordText(for state: CueState) -> String {
+        state == .off ? "" : state.displayName.uppercased()
     }
 
     public var activeRole: RoleCue? {
@@ -59,8 +66,9 @@ public struct PagerPresentationState: Equatable, Sendable {
     }
 
     public var nextItem: PCOTimerItem? {
-        let nextIndex = activeItemIndex + 1
-        return planItems.indices.contains(nextIndex) ? planItems[nextIndex] : nil
+        guard !planItems.isEmpty else { return receivedNextItem }
+        guard planItems.indices.contains(activeItemIndex) else { return nil }
+        return planItems[(activeItemIndex + 1)...].first { !$0.isHeader }
     }
 
     public var nextNotes: [(category: String, text: String)] {
@@ -71,6 +79,12 @@ public struct PagerPresentationState: Equatable, Sendable {
     }
 
     public var latestRelevantMessage: InterTeamMessage? {
-        recentMessages.first { $0.targetRoleId == nil || $0.targetRoleId == selectedRoleId }
+        let incoming = recentMessages.first {
+            ($0.targetRoleId == nil || $0.targetRoleId == selectedRoleId) && $0.senderRoleId == nil
+        }
+        guard let incoming else { return nil }
+        let ownReply = recentMessages.first { $0.senderRoleId == selectedRoleId }
+        if let ownReply, ownReply.timestamp >= incoming.timestamp { return nil }
+        return incoming
     }
 }

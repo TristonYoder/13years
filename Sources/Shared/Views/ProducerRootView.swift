@@ -5,16 +5,16 @@ import SwiftUI
 
 public struct ProducerRootView: View {
     @EnvironmentObject var engine: CueEngine
-    #if os(macOS)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    #endif
 
     public init() {}
 
     public var body: some View {
         VStack(spacing: 0) {
             #if !os(tvOS)
-            UpdateBannerView()
+            if !engine.isRemoteMirror {
+                UpdateBannerView()
+            }
             #endif
 
             LiveTimerHeaderView()
@@ -26,22 +26,32 @@ public struct ProducerRootView: View {
 
             Divider()
 
-            #if os(macOS)
-            macOSNavigationSplitView
-            #else
-            iPadNavigationLayout
-            #endif
+            adaptiveNavigation
         }
         #if os(macOS)
         .ignoresSafeArea(.container, edges: .top)
         #endif
         .task {
+            guard !engine.isRemoteMirror else { return }
             UpdateChecker.shared.startPeriodicChecks()
         }
     }
 
-    #if os(macOS)
-    private var macOSNavigationSplitView: some View {
+    private var adaptiveNavigation: some View {
+        #if os(macOS)
+        splitLayout
+        #else
+        GeometryReader { proxy in
+            if proxy.size.height > proxy.size.width || proxy.size.width < 640 {
+                tabLayout
+            } else {
+                splitLayout
+            }
+        }
+        #endif
+    }
+
+    private var splitLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(AppMode.sidebarCases, id: \.self, selection: Binding(
                 get: { engine.appMode },
@@ -68,9 +78,8 @@ public struct ProducerRootView: View {
             }
         }
     }
-    #endif
 
-    private var iPadNavigationLayout: some View {
+    private var tabLayout: some View {
         TabView(selection: $engine.appMode) {
             ForEach(AppMode.sidebarCases, id: \.self) { mode in
                 NavigationStack { detailView(for: mode) }

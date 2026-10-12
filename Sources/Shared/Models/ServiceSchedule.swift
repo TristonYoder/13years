@@ -47,7 +47,7 @@ public struct ServiceSchedule: Identifiable, Codable, Equatable, Sendable {
 
     public var goLiveOffsetMinutes: Int {
         get { goLiveOffsetSeconds / 60 }
-        set { goLiveOffsetSeconds = newValue * 60 }
+        set { goLiveOffsetSeconds = TimerLimits.clampDelta(TimerLimits.seconds(fromMinutes: newValue) ?? (newValue < 0 ? -TimerLimits.maxSeconds : TimerLimits.maxSeconds)) }
     }
 
     public static let lateFireGrace: TimeInterval = 60 * 60

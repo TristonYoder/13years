@@ -49,9 +49,9 @@ enum WatchProducerBridge {
             if let normalized {
                 context[hostKey] = normalized
                 context[portKey] = engine.connectedProducerAPIPort ?? Int(ControlAPIServer.defaultPort)
-                AppLog.bridge.info("Phone bridge: pushing host \(normalized, privacy: .public) (raw \(host, privacy: .public)) port \(context[portKey].map { String(describing: $0) } ?? "?", privacy: .public)")
+                AppLog.bridge.info("Phone bridge: pushing host \(normalized, privacy: .public) (raw \(host, privacy: .private)) port \(context[portKey].map { String(describing: $0) } ?? "?", privacy: .public)")
             } else {
-                AppLog.bridge.info("Phone bridge: ignoring host \(host, privacy: .public) (not a numeric IP)")
+                AppLog.bridge.info("Phone bridge: ignoring host \(host, privacy: .private) (not a numeric IP)")
             }
         }
         if let previous = lastSentSnapshot, (previous as NSDictionary).isEqual(to: context) {
@@ -77,7 +77,7 @@ enum WatchProducerBridge {
 private final class BridgeDelegate: NSObject, WCSessionDelegate {
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         AppLog.bridge.info(
-            "Phone bridge: session activation=\(activationState.rawValue, privacy: .public) isReachable=\(session.isReachable ? "yes" : "no", privacy: .public) error=\(String(describing: error), privacy: .public)"
+            "Phone bridge: session activation=\(activationState.rawValue, privacy: .public) isReachable=\(session.isReachable ? "yes" : "no", privacy: .public) error=\(String(describing: error), privacy: .private)"
         )
         if activationState == .activated {
             Task { @MainActor in

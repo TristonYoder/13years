@@ -59,15 +59,26 @@ public struct SplashScreenView: View {
     }
 }
 
+private struct SplashScreenModifier: ViewModifier {
+    let isPresented: Bool
+    let status: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isPresented {
+                    SplashScreenView(status: status)
+                        .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: isPresented)
+    }
+}
+
 public extension View {
     func splashScreen(isPresented: Bool, status: String? = nil) -> some View {
-        overlay {
-            if isPresented {
-                SplashScreenView(status: status)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.45), value: isPresented)
+        modifier(SplashScreenModifier(isPresented: isPresented, status: status))
     }
 }
 
@@ -76,22 +87,56 @@ public final class SplashCoordinator: ObservableObject {
     @Published public private(set) var isPresented = true
 
     public static let minimumDisplay: TimeInterval = 2.0
+    public static let shortDisplay: TimeInterval = 0.6
+    private static let launchedBeforeKey = "hasLaunchedBefore"
+
+    public static func displayDuration(isFirstLaunch: Bool, reduceMotion: Bool) -> TimeInterval {
+        isFirstLaunch && !reduceMotion ? minimumDisplay : shortDisplay
+    }
+
+    private static var systemReduceMotion: Bool {
+        #if os(macOS)
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        #elseif os(watchOS)
+        false
+        #else
+        UIAccessibility.isReduceMotionEnabled
+        #endif
+    }
+
+    private static func resolvedDisplay(defaults: UserDefaults) -> TimeInterval {
+        let isFirst = !defaults.bool(forKey: launchedBeforeKey)
+        defaults.set(true, forKey: launchedBeforeKey)
+        return displayDuration(isFirstLaunch: isFirst, reduceMotion: systemReduceMotion)
+    }
+
+    private let displayDuration: TimeInterval
 
     private var isReady = false
     private var minimumElapsed = false
 
-    public init(autoStart: Bool = true) {
-        guard autoStart else { return }
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.minimumDisplay * 1_000_000_000))
-            self?.minimumElapsed = true
-            self?.dismissIfDone()
-        }
+    private let autoStart: Bool
+    private var hasStartedClock = false
+
+    public init(autoStart: Bool = true, defaults: UserDefaults = .standard) {
+        self.autoStart = autoStart
+        self.displayDuration = autoStart ? Self.resolvedDisplay(defaults: defaults) : Self.minimumDisplay
     }
 
     public func markReady() {
         isReady = true
+        startClockIfNeeded()
         dismissIfDone()
+    }
+
+    private func startClockIfNeeded() {
+        guard autoStart, !hasStartedClock else { return }
+        hasStartedClock = true
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((self?.displayDuration ?? Self.shortDisplay) * 1_000_000_000))
+            self?.minimumElapsed = true
+            self?.dismissIfDone()
+        }
     }
 
     private func dismissIfDone() {

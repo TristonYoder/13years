@@ -48,7 +48,7 @@ final class WatchProducerBrowser: ObservableObject {
         browser.stateUpdateHandler = { [weak self] state in
             if case .failed(let error) = state {
                 AppLog.networking.error(
-                    "WatchProducerBrowser browse failed: \(String(describing: error), privacy: .public)"
+                    "WatchProducerBrowser browse failed: \(String(describing: error), privacy: .private)"
                 )
             }
         }
@@ -94,7 +94,7 @@ final class WatchProducerBrowser: ObservableObject {
         resolver?.cancel()
         resolver = nil
         AppLog.networking.info(
-            "WatchProducerBrowser discovered producer \(name, privacy: .public) at \(host, privacy: .public) port \(port.map(String.init) ?? "default", privacy: .public)"
+            "WatchProducerBrowser discovered producer \(name, privacy: .public) at \(host, privacy: .private) port \(port.map(String.init) ?? "default", privacy: .public)"
         )
         DispatchQueue.main.async {
             self.discoveredHost = host

@@ -6,6 +6,7 @@ import SwiftUI
 @main
 struct PagerIOSApp: App {
     @StateObject private var cueEngine = CueEngine(isMasterServer: false)
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         AppFonts.registerIfNeeded()
@@ -15,6 +16,9 @@ struct PagerIOSApp: App {
         WindowGroup {
             PagerRootView()
                 .environmentObject(cueEngine)
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { cueEngine.deviceDidBecomeActive() }
+                }
                 .onAppear {
                     @MainActor in
                     WatchProducerBridge.attach(to: cueEngine)

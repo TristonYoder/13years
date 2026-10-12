@@ -88,6 +88,30 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Sources/PagerIOS/Info.plist
 
+  PagerMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/Shared
+      - path: Sources/PagerMac
+        excludes:
+          - "PagerMac.entitlements"
+    resources:
+      - path: Sources/PagerMac/Assets.xcassets
+    settings:
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+        Release:
+          CODE_SIGN_IDENTITY: "Developer ID Application"
+      base:
+        PRODUCT_NAME: "13 Years"
+        PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager.mac
+        INFOPLIST_FILE: Sources/PagerMac/Info.plist
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PAGER_MAC"
+        CODE_SIGN_ENTITLEMENTS: Sources/PagerMac/PagerMac.entitlements
+
   PagerTV:
     type: application
     platform: tvOS
@@ -140,6 +164,10 @@ targets:
       - path: Sources/Shared/Models/InterTeamMessage.swift
       - path: Sources/Shared/Models/PCOTimerItem.swift
       - path: Sources/Shared/Models/RoleCue.swift
+      - path: Sources/Shared/Models/TimerAnchor.swift
+      - path: Sources/Shared/Models/TimerLimits.swift
+      - path: Sources/Shared/Services/SyncHash.swift
+      - path: Sources/Shared/Services/API/ControlAPILimits.swift
       - path: Sources/Shared/Services/API/ControlAPIModels.swift
       - path: Sources/Shared/Services/AppFonts.swift
       - path: Sources/Shared/Services/AppLog.swift
@@ -182,6 +210,11 @@ schemes:
     build:
       targets:
         PagerIOS: all
+
+  PagerMac:
+    build:
+      targets:
+        PagerMac: all
 
   PagerTV:
     build:

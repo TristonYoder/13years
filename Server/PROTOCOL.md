@@ -9,6 +9,15 @@ Producer and a Pager aren't on the same LAN.**
 The design goal: the most real-time, least data-impacting connection possible. The producer does
 all the heavy lifting; the server only handles auth and proxying. Everything below follows from that.
 
+## Sync Protocol v2
+
+Clock-synchronised, hash-checked, delta-based updates (`SYNC`, `SYNC_REPLY`,
+`TIMER_ANCHOR`, `CUE_DELTA`, `DIGEST`, and the optional `proto`, `rev`,
+`anchor`, `cueDeltas`, `digestMs`, `hashes` keys) are specified in
+[PROTOCOL-V2.md](PROTOCOL-V2.md). They are additive: the relay forwards the new
+packets like any other bytes, and a device that does not announce `proto: 2`
+keeps receiving the packets described below.
+
 ## Transport: WebSocket, not polling
 
 - **WebSocket (`wss://`) over TLS**, one persistent connection per device.

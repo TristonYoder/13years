@@ -5,8 +5,8 @@ A hardware parallel of the iPhone Host Pager
 an ESP32 "CYD" (Cheap Yellow Display) board that connects to the same local
 TCP-based cue channel the Producer/iOS apps use (discovered via mDNS as
 `_13years._tcp`), and reflects this device's assigned role's cue state —
-full-screen color, active PCO item + countdown, assigned note category,
-message-received indicator — plus an RGB LED visible from across a room and
+cue frame or full-screen colour, active PCO item + countdown, assigned note
+categories, next item, message panel — plus an RGB LED visible from across a room and
 (once the buzzer arrives) haptic-style buzz patterns matching
 [`PagerHaptics.swift`](../../Sources/Shared/Services/PagerHaptics.swift).
 
@@ -46,6 +46,55 @@ replies to another peer's `PING` and never broadcasts `CUE_UPDATE` — it
 sends exactly one `PING` after connecting, requesting the hub's catch-up
 burst (mirrors `CueEngine.swift`'s `requestCatchUp()`).
 
+### Sync Protocol v2
+
+The catch-up `PING` carries `"proto":2`; a legacy producer ignores it and
+everything it sends is handled exactly as before. Against a v2 producer
+([`Server/PROTOCOL-V2.md`](../../Server/PROTOCOL-V2.md)) the pager also:
+
+- sends a burst of 5 `SYNC` packets (100 ms apart) after connecting, then one
+  every 30 s, and keeps the lowest-RTT of the last 8 samples. The local clock is
+  `esp_timer_get_time()/1000`, so no NTP is needed; offsets under 20 ms slew
+  25%, larger ones jump.
+- runs the countdown from `TIMER_ANCHOR` against the producer clock instead of
+  a free-running 1 s timer.
+- applies `CUE_DELTA` per role id, ignores packets with a lower `rev`
+  (reset on every reconnect), and checks each `DIGEST` (FNV-1a 64 over roles,
+  timer and message ids). A mismatch sends one catch-up `PING`.
+- treats the producer as lost after 25 s of silence (12 s for a legacy one).
+
+Spec v2.1 on the device: a changed `epoch` discards the anchor, rev gate and
+clock samples and triggers a sync burst plus one catch-up `PING`; packets with a
+`to` other than this device are ignored; v2 is only inferred from packets
+addressed to this device; clock samples age out after 90 s and are discarded
+when a fresh one diverges by more than `max(50 ms, 2*rtt)`; non-`PONG` `rev`
+must be strictly greater than the held one (`DIGEST` may equal it, since it
+repeats the current `rev`) and a jump over 1,000,000 is ignored; anchors outside
+the spec bounds are ignored; messages sort by timestamp descending then id
+ascending and a v2 `PONG` replaces the list.
+
+Receive path: frames are reassembled into a heap buffer of up to 12 KB (4 KB
+fallback when free heap is short; see `kRxBufPreferred` in `lan_client.cpp`).
+Larger frames are consumed and discarded without dropping the connection and a
+catch-up `PING` follows after 5 s. Packets are parsed with an ArduinoJson filter
+that keeps only the fields the pager uses. A parse failure is logged and
+requests a (rate-limited) catch-up. If the producer is silent for the
+staleness limit plus 5 s the pager sends one `PING`, and closes the socket if
+nothing arrives within another 5 s. `status` also prints free, minimum free and
+largest-block heap.
+
+The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly) lives in
+`src/sync/sync_core.h` with no Arduino dependency. The host test runs on a Mac
+without hardware:
+
+```
+g++ -std=c++17 -Wall -o /tmp/test_sync tools/test_sync.cpp \
+  -I.pio/libdeps/cyd/ArduinoJson/src && /tmp/test_sync
+```
+
+(The ArduinoJson include is optional; it enables the 64-bit JSON checks and
+exists once `pio run` has fetched the libraries.)
+
 Self-filtering (dropping this device's own broadcasts) works the same way
 the Swift apps' does: a `senderId` generated once from the ESP32's MAC
 address, persisted in NVS, compared on every inbound packet.
@@ -77,6 +126,7 @@ list):
 
 ```
 provision <json>    set ssid/pass/role/producer in one shot — see below
+cue outline|full    choose how the cue is shown (see "Pager screen layout"); bare `cue` reports it
 rotate 180|normal   turn the display 180 degrees for upside-down mounting (touch turns with it)
 role <id>          assign this pager's role (host, keys, speaker, lead_vocal, producer, ...)
 status              device id / role / WiFi+LAN state / active cue+timer/note/message
@@ -208,7 +258,7 @@ while — it only fires on an actual cue-state change, not on a schedule).
 The very first real `CUE_UPDATE` replaces this placeholder data with the
 Producer's actual role list, same as always.
 
-Tap the "Role: &lt;name&gt;" pill, top-left on the pager screen, to open an
+Tap the role chip (with a chevron), top-right on the pager screen under the connection status,, to open an
 on-device role picker listing whichever role list is currently known
 (the seeded defaults, or the Producer's real list once one's arrived).
 Selection is persisted to NVS and immediately re-syncs the RGB LED too
@@ -359,6 +409,59 @@ Portrait, 240×320 (`tft.setRotation(0)` in `src/ui/ui.cpp`) — the pager's
 content (role pill, big state text, item/timer card, note, message banner)
 is stacked vertically. **Confirmed right-side-up against a photo of the
 real physical unit**.
+
+## Pager screen layout
+
+The 240 by 320 screen follows the portrait framed layout in
+`Server/PROTOCOL-V2.md` ("Portrait layout (framed)", "Cue display setting",
+"Producer time zone (v2.3)", "ESP32 panel"), scaled to the generated Inter
+fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
+
+- **Frame.** Outline mode: a 7 px frame in the cue colour (STANDBY yellow, GO
+  green) around a near-black (`#111114`) ground with rounded inner corners; a
+  barely visible neutral frame with no cue. Full screen mode: no frame, the
+  whole screen is the cue colour (near-black with no cue), cards are 28%
+  black, and the cue word is plain dark text without a pill.
+- **Top row.** Left slot: the local time of day `h:mm:ss AM/PM` (bold 18, with
+  a small `LOCAL TIME` caption) while there is no cue, replaced by the cue
+  word (`GO!`, `STANDBY`) while a cue is active; the slot reserves the widest
+  word. The cue word uses black 32 only when `STANDBY` fits next to the right
+  column, otherwise bold 18. Right column: the role chooser (a chip with a
+  chevron that opens the role picker) with a small `No connection` marker
+  under it while the link is lost. There is no `FOR: person`.
+- **Connection state.** The connection state (`Live`, `Disconnected - retrying`,
+  `Not connected`), the producer name or address and the clock offset are shown
+  at the top of the role picker screen. After 12 s without a packet the pager
+  screen shows the marker; after 20 s without any packet it shows the
+  `Waiting for Producer...` logo screen until packets resume
+  (`pagersync::linkPhase` in `src/sync/sync_core.h`, host-tested).
+- **Local time of day.** The producer's epoch time (synced offset applied to
+  `esp_timer`) plus the optional integer `utcOffsetSeconds` the producer sends
+  in `TIMER_ANCHOR`, `PONG` and `TIMER_UPDATE` (bounded to one day either way).
+  Without it the time shows as UTC offset 0 with the caption `UTC`; before any
+  clock sample or anchor it shows `--:--:--`. The formatting
+  (`pagersync::formatTimeOfDay` in `src/sync/sync_core.h`) is covered by the
+  host tests.
+- **Current item card**, centred between the top row and the bottom stack:
+  the title (uppercase, one line, ellipsised), the countdown (black 32), the
+  `PROJECTED`/`ACTUAL` tag, then under a divider the notes for the role's
+  categories as `Category: text` with the category in bold. The notes shrink to
+  whole lines (ellipsis) when the space is short; a heading item shows the
+  title only.
+- **Bottom stack**, aligned to the bottom edge: the Next card (title, one line,
+  with the projected length `m:ss` or `h:mm:ss` right aligned; then the first
+  note as `Category: text`) and, while a message stands, a yellow message
+  panel below it (dark text, up to 3 lines at bold 18, falling back to bold 14,
+  ellipsis). The message pushes the Next card up and the current card
+  re-centres; tap the panel to dismiss it (a newer message shows again).
+- **Cue display setting.** `cueDisplay` is `outline` (default) or `fullscreen`,
+  stored in NVS (`cue_disp`). Change it on the device with the "Cue display"
+  row in the role picker, or over serial with `cue outline` / `cue full`
+  (bare `cue` and `status` report it). The screen only touches LVGL objects
+  when a value changes.
+
+Layout fit on the real panel (font widths, line counts, card heights) is
+unverified without hardware.
 
 ## Colors — two deliberate deviations from the iPhone app
 

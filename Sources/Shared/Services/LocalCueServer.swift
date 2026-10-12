@@ -7,7 +7,7 @@ public final class LocalCueServer: @unchecked Sendable {
     private let channel = LANUnicastServer()
     private var isRunning = false
 
-    public var onPacketReceived: ((CuePacket) -> Void)? {
+    public var onPacketReceived: ((CuePacket, LANConnectionID) -> Void)? {
         get { channel.onPacketReceived }
         set { channel.onPacketReceived = newValue }
     }
@@ -18,6 +18,11 @@ public final class LocalCueServer: @unchecked Sendable {
     public var advertisedControlAPIPort: Int? {
         get { channel.advertisedControlAPIPort }
         set { channel.advertisedControlAPIPort = newValue }
+    }
+
+    public var advertisedDeviceId: String? {
+        get { channel.advertisedDeviceId }
+        set { channel.advertisedDeviceId = newValue }
     }
 
     public init() {}
@@ -40,7 +45,11 @@ public final class LocalCueServer: @unchecked Sendable {
         channel.advertisingTXTDidChange()
     }
 
-    public func broadcast(packet: CuePacket) {
-        channel.send(packet)
+    public func broadcast(packet: CuePacket, to audience: LANAudience = .all) {
+        channel.send(packet, to: audience)
+    }
+
+    public func markProtocolV2(_ id: LANConnectionID) {
+        channel.markProtocolV2(id)
     }
 }

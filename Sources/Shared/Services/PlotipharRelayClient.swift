@@ -3,14 +3,16 @@
 
 import Foundation
 
-public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
+public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
     public var onPacketReceived: ((CuePacket) -> Void)?
     public var onTextMessageReceived: ((Data) -> Void)?
+    public var onConnected: (() -> Void)?
+    public var onDisconnected: (() -> Void)?
 
     public var relayHost: String = ""
     public var token: String = ""
 
-    private let session: URLSession
+    private var session: URLSession!
     private var task: URLSessionWebSocketTask?
     private let queue = DispatchQueue(label: "dev.7co.13years.relay")
     private var isRunning = false
@@ -22,9 +24,9 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
     private static let maxReconnectDelay: TimeInterval = 30
 
     public override init() {
-        self.session = URLSession(configuration: .default)
         self.reconnectDelay = PlotipharRelayClient.initialReconnectDelay
         super.init()
+        self.session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }
 
     public func start() {
@@ -56,7 +58,7 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
             guard isRunning, let task, let data = packet.encode() else { return }
             task.send(.data(data)) { error in
                 if let error {
-                    print("[PlotipharRelayClient] Send error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Send error: \(String(describing: error), privacy: .private)")
                 }
             }
         }
@@ -67,16 +69,23 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
             guard isRunning, let task, let string = String(data: data, encoding: .utf8) else { return }
             task.send(.string(string)) { error in
                 if let error {
-                    print("[PlotipharRelayClient] Text send error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Text send error: \(String(describing: error), privacy: .private)")
                 }
             }
+        }
+    }
+
+    public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        queue.async { [self] in
+            guard isRunning, task === webSocketTask else { return }
+            DispatchQueue.main.async { [weak self] in self?.onConnected?() }
         }
     }
 
     private func connect() {
         guard isRunning else { return }
         guard let url = relayURL() else {
-            print("[PlotipharRelayClient] Invalid relay host: \(relayHost)")
+            AppLog.networking.error("PlotipharRelayClient: Invalid relay host: \(self.relayHost, privacy: .private)")
             scheduleReconnect()
             return
         }
@@ -96,21 +105,7 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
     }
 
     private func relayURL() -> URL? {
-        var host = relayHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { return nil }
-
-        if !host.contains("://") {
-            host = "wss://\(host)"
-        }
-        guard var components = URLComponents(string: host) else { return nil }
-        if components.scheme == "http" { components.scheme = "ws" }
-        if components.scheme == "https" { components.scheme = "wss" }
-        if components.scheme == nil { components.scheme = "wss" }
-
-        if components.path.isEmpty || components.path == "/" {
-            components.path = "/relay"
-        }
-        return components.url
+        RelayHostPolicy.websocketURL(for: relayHost)
     }
 
     private func receiveLoop(task: URLSessionWebSocketTask, generation: Int) {
@@ -121,7 +116,7 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
 
                 switch result {
                 case .failure(let error):
-                    print("[PlotipharRelayClient] Receive error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Receive error: \(String(describing: error), privacy: .private)")
                     self.handleDisconnect(generation: generation)
                 case .success(let message):
                     self.handle(message: message)
@@ -153,6 +148,7 @@ public final class PlotipharRelayClient: NSObject, @unchecked Sendable {
     private func handleDisconnect(generation: Int) {
         guard generation == self.generation, isRunning else { return }
         task = nil
+        DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
         scheduleReconnect()
     }
 

@@ -34,7 +34,16 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 
 **Projected/Actual exists at two levels, and they are not the same control.** `POST /v1/plan/items/{id}/duration-actual` sets the plan item's own persisted `isDurationActual` — the item's real duration type, which survives into the next time that plan loads. `POST /v1/timer/actual-override` sets a transient override for whatever item is live, deliberately never written into the plan, and it goes stale the moment a different item becomes active. Use the first for "this song is genuinely 4:32"; use the second for "the stream is on a five-minute delay today." Read the displayed result from `timer.isDurationActualForDisplay`, which already folds the override over the plan's value — a client toggling against the plan item's raw flag will look like it does nothing on the first press whenever an override is in force.
 
-**CORS is open** (`Access-Control-Allow-Origin: *`, full method and header list) so a browser-based dashboard works without a proxy.
+**Web hardening.** There is no CORS: the server never sends `Access-Control-Allow-Origin`, so another website's script cannot read or drive the API from a browser on the LAN.
+
+- A request that carries an `Origin` header is accepted only when that origin is the Producer's own (same host and port as the `Host` header, which is how the built-in web pager talks to it). Any other origin gets `403`, and a WebSocket upgrade with a foreign `Origin` is refused with `403`. Requests with no `Origin` header (Bitfocus Companion, curl, the Swift remote client, native apps) are unaffected.
+- The `Host` header must be an IP literal, `localhost`, a `*.local` name or this machine's own hostname; anything else gets `403`. This stops DNS-rebinding pages from reaching the API through a hostname they control.
+- `POST`, `PUT` and `PATCH` requests that carry a body must send `Content-Type: application/json`; otherwise the answer is `415`. Bodyless requests (`POST /v1/timer/start`) need no content type.
+- Every response carries `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
+
+**Limits.** Request bodies are capped at 1 MiB and WebSocket frames at 1 MiB. The listener holds at most 32 connections in total and 8 per remote IP; further connections are refused. An HTTP request (head and body) must arrive within 10 seconds of its first byte, and a connection that has not upgraded to a WebSocket is closed after 30 seconds without traffic.
+
+**Value limits.** Timer lengths are `0...604800` seconds and timer adjustments `-604800...604800`; values outside answer `400`. Names (roles, waypoints, person names) are at most 100 characters, titles 200, message text 2000 and note values 4000. At most 64 roles, 500 plan items, 200 waypoints and 100 schedules; creating more answers `409`, and over-long text answers `400`.
 
 ## The State Snapshot
 
@@ -42,6 +51,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 
 ```json
 {
+  "rev": 128,
+  "serverNowMs": 1760000000000,
   "appMode": "producerControl",
   "network": {
     "isMasterServer": true,
@@ -72,6 +83,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
       "lengthInSeconds": 300,
       "isDurationActual": false,
       "remainingSeconds": 45,
+      "elapsedSeconds": 255,
       "isRunning": true,
       "isOvertime": false,
       "servicePlanTitle": "Sunday Morning Service",
@@ -83,8 +95,9 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     "isRunning": true,
     "remainingSeconds": 45,
     "isOvertime": false,
-    "formattedRemaining": "0:45",
-    "isDurationActualForDisplay": false
+    "formattedRemaining": "00:45",
+    "isDurationActualForDisplay": false,
+    "nextItem": null
   },
   "plan": {
     "title": "Sunday Morning Service",
@@ -106,6 +119,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     ],
     "activeItemIndex": 2,
     "isAtEndOfPlan": false,
+    "isAtStartOfPlan": true,
     "canLoadNextService": false,
     "pcoServiceTypeId": null,
     "pcoPlanId": null
@@ -189,6 +203,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 **Key pieces:**
 - **`appMode`** is one of the app's internal display modes (`producerControl`, `pagerLive`, etc.), expressed as the wire value. These are stable identifiers, not UI labels — `producerControl` is the section the Producer now shows as "Pagers".
 - **`notificationsClearedAt`** is the line between "already dealt with" and "somebody should be looking at this". A message newer than it is still notifying; everything at or before it has been acknowledged. `null` means nothing has ever been cleared. This is how a producer takes a message off a lower third without deleting the thread — a separate act from `DELETE /v1/messages`, and the reason both exist.
+- **`timer.anchor`** (additive) is the Sync Protocol v2 anchor, always present when `timer` is not `null`: `{"itemId", "lengthInSeconds", "elapsedMs", "anchorMs", "isRunning", "isDurationActual"}`. `elapsedMs` was true at `anchorMs` (producer epoch milliseconds); while `isRunning`, a client computes `elapsedMs + (producerNow - anchorMs)`, floors to seconds, and the digits flip at `anchorMs + k * 1000` on the producer clock. See [Clock sync and the anchor](#clock-sync-and-the-anchor-protocol-v2).
+- **`timer.nextItem`** (additive) is the first non-header plan item after the active one, as a full `PCOTimerItem` with all of its notes, or `null` when the active item is the last. It appears in the snapshot, in `GET /v1/timer` and in the `timer` event, so a client that does not hold the plan can show what is coming next. See "Next item (v2.2)" in [Server/PROTOCOL-V2.md](Server/PROTOCOL-V2.md).
 - **`timer`** is `null` when no plan is loaded or when the loaded plan is nothing but headers — there's genuinely no active item then, and inventing a placeholder would make "is something running?" unanswerable.
 - **`roles`**, **`plan.items`**, **`messages`** use the app's own `Codable` models verbatim (`RoleCue`, `PCOTimerItem`, `InterTeamMessage`). An integrator reading this API and someone reading `Server/PROTOCOL.md` see one vocabulary.
 - **`formattedRemaining`** is the time string the producer's own screen shows, run through `TimeFormatting.string` so a Stream Deck button and the UI can't disagree about when a countdown reads `1:35:00` versus `95:00`.
@@ -196,6 +212,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 - **`pairingState`** and **`assignmentSyncStatus`** are string names, not enum cases (Plotiphar states have associated values and JSON has no natural representation for those).
 - **`waypoints`** is the whole waypoint library plus this week's resolution — `itemId`/`itemTitle`/`itemIndex` are `null` on an entry nothing in the current plan carries, same "not wired up yet" meaning as `timer` being `null`. See [Waypoints](#service-waypoints).
 - **`schedules.nextId`** is the id (or `null`) of whichever entry in `schedules.entries` is the next one that will actually fire, so a client can render "next: Sunday 10am, live at 9:30" without reasoning about every entry itself. See [Service Schedules](#service-schedules).
+
+**`rev`** is a counter that increases every time the server builds a snapshot, so a client that receives snapshots from several paths (REST replies, `state` and `timer` events) keeps only the highest `rev` it has seen and ignores anything older. **`serverNowMs`** is the server clock in epoch milliseconds when the snapshot was built; a client counting down locally compares it with its own clock to correct for transit time and skew.
 
 ## Routes
 
@@ -205,7 +223,7 @@ Grouped by function. Dates in requests and responses are ISO-8601. Every request
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `GET /v1/health` | GET | Returns `{"service": "13 Years Control API", "version": "1.0.0", "device": "<hostname>", "role": "master\|client"}` so monitoring can verify the API is alive and identify this device. |
+| `GET /v1/health` | GET | Returns `{"service": "13 Years Control API", "version": "1.0.0", "device": "<hostname>", "role": "master\|client", "deviceId": "<uuid>"}` so monitoring can verify the API is alive and identify this device. `deviceId` is a stable per-install identifier (persisted on first use); remote controllers record it at connect and require the same value on every reconnect, and the same id is published as the `did` key in the `_13years._tcp` Bonjour TXT record (`apiport` is only published while the Control API is switched on). |
 | `GET /v1/state` | GET | Full state snapshot (see above). |
 
 ### Roles
@@ -242,13 +260,15 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/timer/remaining` | POST | Set or adjust remaining time. Body: either `{"seconds": number}` (absolute) or `{"input": "string"}` (relative/absolute command text). Input uses the same GrandMA-style grammar the producer types: `"4350"` (absolute seconds), `"+30s"`, `"-5m"`, `"1h30m"`. Parsed by the same parser the app's UI uses so a macro pad and a keyboard agree on meaning. Returns the full state snapshot. |
 | `POST /v1/timer/actual-override` | POST | Set whether the active timer displays as Projected or Actual. Body: `{"isActual": boolean}`. This is a transient visual override; the plan item's own `isDurationActual` flag is unchanged. Returns the full state snapshot. |
 
+`GET /v1/timer` returns just the timer: `{"rev": number, "serverNowMs": number, "timer": ActiveTimer | null}`, with `timer` shaped exactly as in the snapshot.
+
 ### Plan
 
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/plan` | GET | The plan structure, metadata, and current position. |
-| `POST /v1/plan/next` | POST | Advance to the next item (or mark end-of-plan if already at the last). Returns the full state snapshot. |
-| `POST /v1/plan/previous` | POST | Go back to the previous item. Returns the full state snapshot. |
+| `POST /v1/plan/next` | POST | Advance to the next item (or mark end-of-plan if already at the last). Starts the countdown by default. Body: `{"startTimer": boolean?}`, optional; absent means `true`, `false` moves without running the clock. Returns the full state snapshot. |
+| `POST /v1/plan/previous` | POST | Go back to the previous item. Starts the countdown by default; same optional `{"startTimer": boolean}` body as `plan/next`. Returns the full state snapshot. |
 | `POST /v1/plan/next-service` | POST | Load the next service from Planning Center (202). Only works if a PCO flow is synced. Returns the current state snapshot and marks the operation as in-progress; watch for a later `state` event showing the new plan. |
 | `GET /v1/plan/active` | GET | Just the active timer item (shorthand for reading it out of the full state). |
 | `POST /v1/plan/active` | POST | Jump to a specific item. Body: `{"itemId": "string"}`. Id must exist. Returns the full state snapshot. |
@@ -277,6 +297,7 @@ One wrinkle worth knowing: PCO *header* items ("Pre Gathering", "Host Moment") a
 | `PATCH /v1/waypoints/{ref}` | PATCH | Rename a waypoint. Body: `{"name": "string"}`. The id never changes, so every existing assignment and every button already pointed at the id keeps working through a rename. Empty name is 400; a new slug colliding with a *different* waypoint is 409 (renaming a waypoint to a different casing of its own name is fine). |
 | `DELETE /v1/waypoints/{ref}` | DELETE | Remove a waypoint from the library and strip it from every plan item's assignment. Returns the remaining waypoint list. |
 | `POST /v1/waypoints/{ref}/assign` | POST | Assign (or unassign) this waypoint for the week. Body: `{"itemId": "string?"}` — a null or absent `itemId` unassigns. Assigning steals the waypoint away from whatever other item held it, since a waypoint is on at most one item at a time. 404 if the waypoint or the item id doesn't exist. Returns the updated waypoint. |
+| `POST /v1/waypoints/next` | POST | Jump to the next item after the active one, in plan order, that carries any waypoint, with the same clock behaviour and optional `{"startTimer": boolean}` body as `/go`. **409** if no waypoint-carrying item is ahead. (A waypoint whose ref is literally `next` is only reachable by id for POST.) Returns the full state snapshot. |
 | `POST /v1/waypoints/{ref}/go` | POST | Fire the waypoint — jump to whatever item currently carries it, identically to tapping that row in Service Flow, **which includes starting its countdown**. Body: `{"startTimer": boolean?}`, optional and normally absent; absent means `true`. Send `{"startTimer": false}` to jump without running the clock, for pre-rolling to a cue ahead of time. Firing the same waypoint twice never pauses a running show. 404 if the waypoint doesn't exist; **409** if it exists but nothing in this week's plan carries it (see above). Returns the full state snapshot. |
 | `POST /v1/plan/items/{id}/waypoints` | POST | Replace one plan item's whole waypoint list in one call (the item editor's waypoint picker). Body: `{"waypoints": ["string"]}`, each entry resolved by id, slug, or name. A full list rather than add/remove ops, so resending the same state is idempotent. Any entry that doesn't resolve to a real waypoint is a 404 naming which one; each kept waypoint is stolen away from whatever other item held it, same as `/assign`. Returns the plan section of state. |
 
@@ -310,7 +331,7 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | `POST /v1/pco/sign-out` | POST | Disconnect from PCO. Returns the PCO section of state. |
 | `GET /v1/pco/service-types` | GET | List available service types (calendar segments in PCO, e.g., Sunday Morning, Wednesday Evening). Returns an array of `{"id": "string", "name": "string"}`. |
 | `POST /v1/pco/service-types/refresh` | POST | Fetch the latest service types from PCO (202). Watch the socket for `pco.serviceTypes` to update. |
-| `POST /v1/pco/service-type` | POST | Select a service type to filter plans. Body: `{"id": "string"}`. Returns 202 (the selection takes effect immediately but plan lists are refreshed asynchronously). |
+| `POST /v1/pco/service-type` | POST | Select a service type to filter plans. Body: `{"id": "string?"}`; a null or empty `id` clears the selection (what the app's plan picker does when you step back to the service-type list). Returns 202 (the selection takes effect immediately but plan lists are refreshed asynchronously). |
 | `POST /v1/pco/default-service-type` | POST | Remember this service type for next time. Body: `{"id": "string?"}` (null clears). Returns the PCO section of state. |
 | `GET /v1/pco/plans` | GET | List available plans for the selected service type. Returns an array of `{"id": "string", "title": "string", "dates": "string?"}`. |
 | `POST /v1/pco/plans/refresh` | POST | Fetch the latest plans from PCO (202). Requires a service type to be selected (409 if not). Watch the socket for `pco.plans` to update. |
@@ -345,6 +366,12 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 | `GET /v1/ui/mode` | GET | The current app mode (display screen). Returns `{"mode": "string"}`. |
 | `POST /v1/ui/mode` | POST | Switch the app's display mode. Body: `{"mode": "string"}`. Mode must be one of the app's actual `AppMode` cases (e.g., `producerControl`, `pagerLive`). Accepts either uppercase wire form (PRODUCER_CONTROL) or camelCase (producerControl). Returns `{"mode": "string"}`. |
 
+### Sync
+
+| Route | Method | What It Does |
+| --- | --- | --- |
+| `POST /v1/sync` | POST | Clock measurement for Sync Protocol v2. Body: `{"t0": number}` (the caller's send time, epoch ms). Returns `{"t0", "t1", "t2"}` where `t0` is echoed, `t1` is the producer clock (epoch ms) when the request was received and `t2` when the reply was built. See [Clock sync and the anchor](#clock-sync-and-the-anchor-protocol-v2). |
+
 ### Settings
 
 | Route | Method | Purpose |
@@ -365,7 +392,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `PUT /v1/relay` | PUT | Configure the off-LAN relay. Body: `{"enabled": boolean?, "host": "string?"}`. Both fields optional. Setting `host` changes the relay address; setting `enabled: true` without an existing pairing returns 409. `proxyToken` is deliberately absent in both directions — it's a Keychain-held session credential, and handing it out over an unauthenticated LAN endpoint would make the relay's own auth boundary meaningless. Pairing happens on the device via `POST /v1/plotiphar/pair/start`. Returns the full state snapshot. |
+| `PUT /v1/relay` | PUT | Configure the off-LAN relay. Body: `{"enabled": boolean?, "host": "string?"}`. Both fields optional. Setting `host` changes the relay address: it must be a bare hostname (optionally with a port) or a `wss://` / `https://` address, and plain `ws://` or `http://` hosts are rejected with `400`. Changing to a different host clears the stored proxy token, turns the relay off and returns pairing to idle, so the new host can never receive the old token; pair again afterwards. A loaded `.13years` document never changes the relay host. setting `enabled: true` without an existing pairing returns 409. `proxyToken` is deliberately absent in both directions — it's a Keychain-held session credential, and handing it out over an unauthenticated LAN endpoint would make the relay's own auth boundary meaningless. Pairing happens on the device via `POST /v1/plotiphar/pair/start`. Returns the full state snapshot. |
 
 ## The WebSocket
 
@@ -393,7 +420,16 @@ Then, as the show runs:
 }
 ```
 
-`state` events are coalesced; they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync.
+`state` and `timer` events are coalesced; on a legacy socket they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync. A socket that has negotiated protocol v2 (below) gets `timer` events only when the timer actually changes.
+
+```json
+{
+  "event": "timer",
+  "data": { "rev": 129, "serverNowMs": 1760000001000, "timer": { ... ActiveTimer | null ... } }
+}
+```
+
+When the only thing that changed since the last push is the active timer (its remaining time, running flag or item), the server sends this slim `timer` event instead of the full `state`. Anything else changing sends a full `state`. A client should apply `timer` onto its last snapshot and treat `rev` as above. The built-in web pager does this; clients that only understand `state` will no longer see the countdown tick every second and should handle `timer` or poll `GET /v1/timer`.
 
 ```json
 {
@@ -403,6 +439,31 @@ Then, as the show runs:
 ```
 
 When a message is sent, each connected socket receives a `message` event (in addition to the next `state` event that includes the updated message list).
+
+### Clock sync and the anchor (protocol v2)
+
+Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PROTOCOL-V2.md](Server/PROTOCOL-V2.md). A socket that never negotiates it behaves exactly as described above, including the 1 Hz `timer` events. A producer that does not know the `proto` op answers it with an error status, and a client then simply stays on legacy behaviour.
+
+**Negotiation.** After the socket opens, send `{"id":"1","op":"proto","body":{"version":2}}`. The reply is `{"id":"1","status":200,"data":{"version":2}}`. The setting belongs to that connection only. `version: 1` returns the socket to legacy behaviour; any other value is a 400. The op does not exist over REST (400).
+
+**Clock measurement.** `{"id":"2","op":"sync","body":{"t0":<client send, epoch ms>}}` (or `POST /v1/sync` with the same body) returns `{"t0","t1","t2"}`: `t1` is the producer's clock when it received the request, `t2` when it replied. With `t3` the client's receive time, `rtt = (t3 - t0) - (t2 - t1)` and `offset = ((t1 - t0) + (t2 - t3)) / 2`, where `offset` is producer time minus local time. Keep the last 8 samples and use the one with the smallest `rtt`; send 5 samples (100 ms apart) on connect, one every 30 s, and one on every return to foreground. Apply a new offset gradually: move 25% of the way if it changed by under 20 ms, otherwise jump. `producerNow = localNow + offset`.
+
+**Timer.** Every `timer` object carries `anchor` (see above). A v2 client runs its timer locally from `anchor` and `producerNow` and does not wait for ticks. On a v2 socket the `timer` event is sent only when something about the timer changes (start, pause, reset, adjust, item change, Projected/Actual change, live-sync correction), never once a second.
+
+**Digest.** Every 10 seconds a v2 socket receives
+
+```json
+{
+  "event": "digest",
+  "data": {
+    "rev": 130,
+    "serverNowMs": 1760000010000,
+    "hashes": { "roles": "aded3b3c0e486304", "timer": "20a9d930a0849518", "plan": "218cc3247b5ee3f9", "messages": "dddb4a3dc4d94432" }
+  }
+}
+```
+
+Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets.
 
 ### Sending (Client to Server)
 
@@ -458,7 +519,11 @@ The banner on the home page *is* the standing notification, so clicking it clear
 | Parameter | Values | Meaning |
 | --- | --- | --- |
 | `role` | a role id or name, case-insensitive | Which role's cue to show — `?role=Host` or `?role=Front%20of%20House`. Takes precedence over whatever that browser last had selected, every load, so a bookmark or an OBS source URL is stable. Falls back to the first role if it matches nothing. |
-| `layout` | `auto` (default), `standard`, `lowerthird` | `auto` picks per viewport. |
+| `layout` | `auto` (default), `landscape`, `portrait` (or `standard`), `lowerthird` | `auto` picks per viewport. |
+| `cue` | `outline`, `full` | How the cue is shown: a coloured outline, or the full screen in the cue colour. Omitted, the viewer's saved choice (or the default) applies. |
+| `settings` | `0` | Hides the settings button. Omitted, it is shown. |
+| `roles` | `0` | Locks the role chooser to the selected role; viewers cannot change it. Omitted, it can be changed. |
+| `messages` | `0` | Hides the chat button. Omitted, it is shown. Use both for a confidence monitor nobody can click. |
 
 **Two layouts.** The standard one is the same screen every other pager shows — full-bleed cue color, the state word, the running item and its countdown, note panels, the latest message. A short, wide viewport (height ≤ 400px, or an aspect ratio of 3:1 or wider) switches to a single lower-third line instead:
 

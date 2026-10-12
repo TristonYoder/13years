@@ -17,7 +17,7 @@ public final class PCOClient: @unchecked Sendable {
         public let name: String
     }
 
-    public struct PCOPlanInfo: Codable, Sendable, Identifiable {
+    public struct PCOPlanInfo: Codable, Sendable, Identifiable, Equatable {
         public let id: String
         public let title: String
         public let dates: String?
