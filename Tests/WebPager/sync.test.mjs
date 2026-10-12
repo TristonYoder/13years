@@ -11,8 +11,10 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
+  "backoffDelay", "lowerThirdForViewport", "createRoleSelection", "matchRole", "countdownStage",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer",
 ];
-const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, BigInt, String, Number });
+const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number });
 
 const US = "\u001f";
 const RS = "\u001e";
@@ -49,7 +51,8 @@ test("canonical strings reproduce spec vectors", () => {
   };
   assert.equal(core.fnv1a64(core.timerCanonical(anchor)), "20a9d930a0849518");
   assert.equal(core.fnv1a64(core.timerCanonical(null)), "3c0d17bad169557b");
-  assert.equal(core.fnv1a64(core.messagesCanonical([{ id: "m2" }, { id: "m1" }])), "dddb4a3dc4d94432");
+  const stamp = (n) => new Date(1760000000000 + n * 1000).toISOString();
+  assert.equal(core.fnv1a64(core.messagesCanonical([{ id: "m1", timestamp: stamp(1) }, { id: "m2", timestamp: stamp(2) }])), "dddb4a3dc4d94432");
   const plan = {
     items: [
       { id: "i1", title: "Song", lengthInSeconds: 300, isDurationActual: false },
@@ -58,9 +61,38 @@ test("canonical strings reproduce spec vectors", () => {
     activeItemIndex: 1,
   };
   assert.equal(core.fnv1a64(core.planCanonical(plan)), "218cc3247b5ee3f9");
-  const local = core.localHashes({ roles, timer: { anchor }, messages: [{ id: "m2" }, { id: "m1" }], plan });
+  const local = core.localHashes({ roles, timer: { anchor }, messages: [{ id: "m1", timestamp: stamp(1) }, { id: "m2", timestamp: stamp(2) }], plan });
   assert.equal(local.plan, "218cc3247b5ee3f9");
   assert.equal(local.timer, "20a9d930a0849518");
+  assert.equal(local.messages, "dddb4a3dc4d94432");
+});
+
+test("messages tie vector: equal timestamps order by id ascending", () => {
+  const at = "2025-10-09T08:00:00.000Z";
+  const forward = [{ id: "a", timestamp: at }, { id: "b", timestamp: at }];
+  const backward = [{ id: "b", timestamp: at }, { id: "a", timestamp: at }];
+  assert.equal(core.messagesCanonical(forward), "a" + RS + "b");
+  assert.equal(core.messagesCanonical(backward), "a" + RS + "b");
+  assert.equal(core.fnv1a64(core.messagesCanonical(backward)), "e5e7b9190438f91c");
+  const mixed = [
+    { id: "a", timestamp: "2025-10-09T08:00:00.000Z" },
+    { id: "z", timestamp: "2025-10-09T08:00:01.000Z" },
+    { id: "b", timestamp: "2025-10-09T08:00:00.000Z" },
+  ];
+  assert.equal(core.messagesCanonical(mixed), "z" + RS + "a" + RS + "b");
+});
+
+test("fnv1a64 handles multi-byte text and long input without BigInt", () => {
+  assert.equal(core.fnv1a64("caf\u00e9").length, 16);
+  assert.notEqual(core.fnv1a64("caf\u00e9"), core.fnv1a64("cafe"));
+  assert.equal(/BigInt|\d+n\b/.test(source), false);
+  let expected = 0xcbf29ce484222325n;
+  const input = "The quick brown fox \u2603 ".repeat(40);
+  for (const byte of new TextEncoder().encode(input)) {
+    expected ^= BigInt(byte);
+    expected = (expected * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  assert.equal(core.fnv1a64(input), expected.toString(16).padStart(16, "0"));
 });
 
 test("offset from symmetric exchange", () => {
@@ -180,12 +212,15 @@ function harness() {
     fullCalls: [],
     timerCalls: [],
     snapshot: null,
+    random: 0.5,
     stateBody: { rev: 50, roles: [], messages: [], plan: { items: [], activeItemIndex: 0 }, timer: null },
   };
   h.env = {
     WebSocket: FakeSocket,
     url: "ws://x/v1/socket",
     now: () => h.time,
+    mono: () => h.time,
+    random: () => h.random,
     setTimeout: (fn, ms) => {
       const entry = { fn, at: h.time + ms, cancelled: false };
       h.timers.push(entry);
@@ -194,7 +229,8 @@ function harness() {
     clearTimeout: (entry) => { if (entry) entry.cancelled = true; },
     fetch: async (url) => {
       h.fetches.push(url);
-      return { ok: true, json: async () => h.stateBody };
+      if (h.fetchImpl) return h.fetchImpl(url);
+      return { ok: true, status: 200, json: async () => h.stateBody };
     },
     getSnapshot: () => h.snapshot,
     onFull: (state) => { h.snapshot = state; h.fullCalls.push(state); },
@@ -327,7 +363,7 @@ function v2Ready() {
   return { h, ws };
 }
 
-test("rev guard ignores lower rev timer events, accepts equal and higher, hello resets", () => {
+test("rev guard is strict for timer events and hello resets", () => {
   const { h, ws } = v2Ready();
   ws.receive({ event: "hello", data: { rev: 10, roles: [] } });
   ws.receive({ event: "timer", data: { rev: 9, timer: { tag: "old" } } });
@@ -335,7 +371,7 @@ test("rev guard ignores lower rev timer events, accepts equal and higher, hello 
   ws.receive({ event: "timer", data: { rev: 10, timer: { tag: "equal" } } });
   ws.receive({ event: "timer", data: { rev: 12, timer: { tag: "new" } } });
   ws.receive({ event: "timer", data: { rev: 11, timer: { tag: "stale" } } });
-  assert.deepEqual(h.timerCalls.map((t) => t.tag), ["equal", "new"]);
+  assert.deepEqual(h.timerCalls.map((t) => t.tag), ["new"]);
   ws.receive({ event: "hello", data: { rev: 2, roles: [] } });
   ws.receive({ event: "timer", data: { rev: 3, timer: { tag: "after-restart" } } });
   assert.equal(h.timerCalls.at(-1).tag, "after-restart");
@@ -372,7 +408,8 @@ test("v2 liveness is 25 s of silence, legacy keeps 6.5 s", () => {
   h.time += 1500;
   assert.equal(h.link.isLive(), false);
   h.link.pollTick();
-  assert.equal(ws.readyState, 3);
+  assert.equal(ws.onclose, null);
+  assert.equal(FakeSocket.instances.length, 2);
 
   const legacy = harness();
   legacy.link.connect();
@@ -384,4 +421,381 @@ test("v2 liveness is 25 s of silence, legacy keeps 6.5 s", () => {
   assert.equal(legacy.link.isLive(), true);
   legacy.time += 600;
   assert.equal(legacy.link.isLive(), false);
+});
+
+function clockAt() {
+  const t = { now: 0 };
+  t.clock = core.createClockSync(() => t.now);
+  return t;
+}
+
+test("samples older than 90 s are ignored", () => {
+  const t = clockAt();
+  t.clock.addSample(0, 1005, 1005, 10);
+  assert.equal(t.clock.offset, 1000);
+  t.now = 60000;
+  t.clock.addSample(0, 1300, 1300, 400);
+  assert.equal(t.clock.count, 2);
+  assert.equal(t.clock.offset, 1000);
+  t.now = 91000;
+  t.clock.addSample(0, 1300, 1300, 400);
+  assert.equal(t.clock.count, 2);
+  assert.equal(t.clock.offset, 1100);
+});
+
+test("fresh offset beyond max(50 ms, 2 rtt) discards older samples", () => {
+  const t = clockAt();
+  t.clock.addSample(0, 1000, 1000, 0);
+  t.now = 1000;
+  t.clock.addSample(0, 1040, 1040, 0);
+  assert.equal(t.clock.count, 2);
+  t.now = 2000;
+  t.clock.addSample(0, 1090, 1090, 0);
+  assert.equal(t.clock.count, 3);
+  t.now = 3000;
+  t.clock.addSample(0, 1300, 1300, 20);
+  assert.equal(t.clock.count, 1);
+  t.now = 4000;
+  t.clock.addSample(0, 1700, 1700, 400);
+  assert.equal(t.clock.count, 2);
+});
+
+test("negative rtt clamps to zero and absurd samples are ignored", () => {
+  const t = clockAt();
+  t.clock.addSample(100, 1100, 1105, 102);
+  assert.equal(t.clock.ready, true);
+  const held = t.clock.offset;
+  t.clock.addSample(0, 5, 5, 10001);
+  assert.equal(t.clock.offset, held);
+  t.clock.addSample(0, 90000000, 90000000, 10);
+  assert.equal(t.clock.offset, held);
+  assert.equal(t.clock.count, 1);
+});
+
+test("clear keeps the offset, reset forgets it", () => {
+  const t = clockAt();
+  t.clock.addSample(0, 500, 500, 0);
+  t.clock.clear();
+  assert.equal(t.clock.count, 0);
+  assert.equal(t.clock.ready, true);
+  t.clock.reset();
+  assert.equal(t.clock.ready, false);
+  assert.equal(t.clock.offset, 0);
+});
+
+function answerSyncs(ws, offset) {
+  for (const m of ws.sent.filter((s) => s.op === "sync" && !s.answered)) {
+    m.answered = true;
+    ws.receive({ id: m.id, status: 200, data: { t0: m.body.t0, t1: m.body.t0 + offset, t2: m.body.t0 + offset } });
+  }
+}
+
+test("epoch change resets anchor hook, rev gate and samples, bursts sync and refetches", async () => {
+  const { h, ws } = v2Ready();
+  let epochResets = 0;
+  h.env.onEpoch = () => { epochResets++; };
+  h.link = core.createLink(h.env);
+  FakeSocket.instances = [];
+  h.link.connect();
+  const sock = FakeSocket.instances[0];
+  sock.open();
+  sock.receive({ id: sock.lastOp("proto").id, status: 200, data: { version: 2 } });
+  sock.receive({ event: "hello", data: { rev: 500, epoch: 7, roles: [] } });
+  h.advance(450);
+  answerSyncs(sock, 3000);
+  assert.equal(h.link.clockReady, true);
+  assert.ok(h.link.sampleCount > 0);
+  assert.equal(h.link.heldRev, 500);
+  const syncsBefore = sock.sent.filter((m) => m.op === "sync").length;
+  sock.receive({ event: "timer", data: { rev: 3, epoch: 7, timer: { tag: "low" } } });
+  assert.equal(h.timerCalls.length, 0);
+  sock.receive({ event: "timer", data: { rev: 4, epoch: 8, timer: { tag: "restarted" } } });
+  assert.equal(epochResets, 1);
+  assert.equal(h.link.epoch, 8);
+  assert.equal(h.link.heldRev, 4);
+  assert.equal(h.link.clockReady, false);
+  assert.equal(h.link.sampleCount, 0);
+  assert.equal(h.timerCalls.at(-1).tag, "restarted");
+  assert.ok(sock.sent.filter((m) => m.op === "sync").length > syncsBefore);
+  await flush();
+  assert.equal(h.fetches.length, 1);
+  assert.equal(h.fullCalls.at(-1), h.stateBody);
+  assert.equal(h.link.heldRev, 50);
+});
+
+test("epoch change on digest triggers a fetch even when the hashes match", async () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 5, epoch: 1, roles: [] } });
+  ws.receive({ event: "digest", data: { rev: 5, epoch: 1, hashes: { roles: core.fnv1a64("") } } });
+  await flush();
+  assert.equal(h.fetches.length, 0);
+  ws.receive({ event: "digest", data: { rev: 1, epoch: 2, hashes: { roles: core.fnv1a64("") } } });
+  await flush();
+  assert.equal(h.fetches.length, 1);
+  assert.equal(h.link.heldRev, 50);
+});
+
+test("hello with a new epoch rebases and bursts a sync", () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 900, epoch: 1, roles: [] } });
+  const before = ws.sent.filter((m) => m.op === "sync").length;
+  ws.receive({ event: "hello", data: { rev: 2, epoch: 2, roles: [] } });
+  assert.equal(h.link.heldRev, 2);
+  assert.ok(ws.sent.filter((m) => m.op === "sync").length > before);
+  ws.receive({ event: "timer", data: { rev: 3, epoch: 2, timer: { tag: "ok" } } });
+  assert.equal(h.timerCalls.at(-1).tag, "ok");
+});
+
+test("strict rev: equal is dropped, jump over 1,000,000 is ignored unless epoch changed", () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 10, epoch: 1, roles: [] } });
+  ws.receive({ event: "state", data: { rev: 10, roles: [{ id: "x" }] } });
+  assert.equal(h.fullCalls.length, 1);
+  ws.receive({ event: "state", data: { rev: 11, roles: [{ id: "y" }] } });
+  assert.equal(h.fullCalls.length, 2);
+  ws.receive({ event: "timer", data: { rev: 11 + 1000001, epoch: 1, timer: { tag: "wild" } } });
+  assert.equal(h.timerCalls.length, 0);
+  assert.equal(h.link.heldRev, 11);
+  ws.receive({ event: "timer", data: { rev: 11 + 1000000, epoch: 1, timer: { tag: "edge" } } });
+  assert.equal(h.timerCalls.at(-1).tag, "edge");
+  ws.receive({ event: "timer", data: { rev: 5000000, epoch: 9, timer: { tag: "newepoch" } } });
+  assert.equal(h.timerCalls.at(-1).tag, "newepoch");
+});
+
+test("fetched state never lowers heldRev and is dropped when stale", async () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 100, roles: [] } });
+  h.stateBody = { rev: 60, roles: [], messages: [], plan: { items: [], activeItemIndex: 0 }, timer: null };
+  const fullsBefore = h.fullCalls.length;
+  await h.link.fetchState();
+  assert.equal(h.fullCalls.length, fullsBefore);
+  assert.equal(h.link.heldRev, 100);
+  h.stateBody = { ...h.stateBody, rev: 120 };
+  await h.link.fetchState();
+  assert.equal(h.fullCalls.length, fullsBefore + 1);
+  assert.equal(h.link.heldRev, 120);
+});
+
+test("fetched state following a reconnect is accepted even with a lower rev", async () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 100, roles: [] } });
+  ws.close();
+  h.advance(600);
+  const next = FakeSocket.instances[1];
+  next.open();
+  h.stateBody = { rev: 3, roles: [], messages: [], plan: { items: [], activeItemIndex: 0 }, timer: null };
+  await h.link.fetchState();
+  assert.equal(h.fullCalls.at(-1), h.stateBody);
+  assert.equal(h.link.heldRev, 3);
+});
+
+test("anchors outside bounds are ignored but the rest of the timer is kept", () => {
+  const good = { itemId: "a", lengthInSeconds: 604800, elapsedMs: 604800000, anchorMs: 1, isRunning: true, isDurationActual: false };
+  assert.equal(core.validAnchor(good), true);
+  assert.equal(core.validAnchor({ ...good, lengthInSeconds: 604801 }), false);
+  assert.equal(core.validAnchor({ ...good, elapsedMs: -1 }), false);
+  assert.equal(core.validAnchor({ ...good, elapsedMs: 604800001 }), false);
+  assert.equal(core.validAnchor({ ...good, anchorMs: NaN }), false);
+  const timer = { remainingSeconds: 9, anchor: { ...good, lengthInSeconds: -5 } };
+  const cleaned = core.sanitizeTimer(timer);
+  assert.equal(cleaned.remainingSeconds, 9);
+  assert.equal("anchor" in cleaned, false);
+  assert.equal(core.sanitizeTimer({ anchor: good }).anchor, good);
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 1, roles: [] } });
+  ws.receive({ event: "timer", data: { rev: 2, timer: timer } });
+  assert.equal("anchor" in h.timerCalls.at(-1), false);
+});
+
+test("backoff delay is jittered and capped at 5 s", () => {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const base = Math.min(5000, 500 * 2 ** attempt);
+    for (const r of [0, 0.25, 0.5, 0.999, 1]) {
+      const d = core.backoffDelay(attempt, r);
+      assert.ok(d >= Math.round(base / 2) && d <= base, `${attempt} ${r} ${d}`);
+      assert.ok(d <= 5000);
+    }
+  }
+  assert.equal(core.backoffDelay(0, 1), 500);
+  assert.equal(core.backoffDelay(20, 1), 5000);
+});
+
+test("reconnect delays grow with attempts and honour jitter", () => {
+  const h = harness();
+  h.random = 1;
+  h.link.connect();
+  const delays = [];
+  for (let i = 0; i < 6; i++) {
+    const sock = FakeSocket.instances.at(-1);
+    const before = FakeSocket.instances.length;
+    sock.close();
+    let waited = 0;
+    while (FakeSocket.instances.length === before && waited < 6000) {
+      h.advance(50);
+      waited += 50;
+    }
+    delays.push(waited);
+  }
+  assert.deepEqual(delays, [500, 1000, 2000, 4000, 5000, 5000]);
+});
+
+test("socket constructor throwing is retried", () => {
+  const h = harness();
+  let calls = 0;
+  h.env.WebSocket = function Throwing(url) {
+    calls++;
+    if (calls < 3) throw new Error("boom");
+    return new FakeSocket(url);
+  };
+  h.link = core.createLink(h.env);
+  h.link.connect();
+  assert.equal(calls, 1);
+  h.advance(600);
+  assert.equal(calls, 2);
+  h.advance(1100);
+  assert.equal(calls, 3);
+  assert.equal(FakeSocket.instances.length, 1);
+});
+
+test("half-open socket is detached and replaced immediately after 25 s of silence", () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 1, roles: [] } });
+  h.time += 25000;
+  h.link.pollTick();
+  assert.equal(FakeSocket.instances.length, 2);
+  assert.equal(ws.onmessage, null);
+  assert.equal(ws.onclose, null);
+  assert.equal(h.link.mode, null);
+  FakeSocket.instances[1].open();
+  assert.equal(h.link.mode, "pending");
+});
+
+test("wake with a stale last frame reconnects, with a fresh one it only resamples", () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 1, roles: [] } });
+  h.time += 2000;
+  const syncs = ws.sent.filter((m) => m.op === "sync").length;
+  h.link.wake();
+  assert.equal(FakeSocket.instances.length, 1);
+  assert.ok(ws.sent.filter((m) => m.op === "sync").length > syncs);
+  h.time += 6000;
+  h.link.wake();
+  assert.equal(FakeSocket.instances.length, 2);
+});
+
+test("hung state fetch times out and does not pin the fetching flag", async () => {
+  const h = harness();
+  let calls = 0;
+  h.fetchImpl = () => {
+    calls++;
+    if (calls === 1) return new Promise(() => {});
+    return Promise.resolve({ ok: true, status: 200, json: async () => h.stateBody });
+  };
+  const first = h.link.fetchState();
+  assert.equal(h.link.fetchState(), first);
+  await flush();
+  h.advance(3000);
+  await first;
+  await flush();
+  await h.link.fetchState();
+  assert.equal(calls, 2);
+  assert.equal(h.fullCalls.length, 1);
+});
+
+test("restRequest passes an abort signal and rejects on timeout", async () => {
+  const h = harness();
+  let seen = null;
+  const env = {
+    fetch: (url, init) => { seen = init; return new Promise(() => {}); },
+    setTimeout: h.env.setTimeout,
+    clearTimeout: h.env.clearTimeout,
+    timeoutSignal: (ms) => ({ ms }),
+  };
+  const outcome = core.restRequest(env, "/v1/messages", { method: "POST" }, false).then(() => "ok", (e) => e.message);
+  await flush();
+  assert.deepEqual(seen.signal, { ms: 3000 });
+  assert.equal(seen.method, "POST");
+  h.advance(3000);
+  assert.equal(await outcome, "timeout");
+});
+
+test("lower-third needs aspect ratio of at least 3:1", () => {
+  assert.equal(core.lowerThirdForViewport(1920, 360), true);
+  assert.equal(core.lowerThirdForViewport(1200, 400), true);
+  assert.equal(core.lowerThirdForViewport(844, 390), false);
+  assert.equal(core.lowerThirdForViewport(667, 375), false);
+  assert.equal(core.lowerThirdForViewport(1920, 1080), false);
+  assert.equal(core.lowerThirdForViewport(300, 100), true);
+  assert.equal(core.lowerThirdForViewport(100, 0), false);
+});
+
+test("role param applies only at load, later choices persist", () => {
+  const roles = [{ id: "r1", name: "Host" }, { id: "r2", name: "Band" }];
+  const sel = core.createRoleSelection("band", "r1");
+  assert.equal(sel.adopt([]), "band");
+  assert.equal(sel.adopt(roles), "r2");
+  sel.select("r1");
+  assert.equal(sel.adopt(roles), "r1");
+  assert.equal(sel.adopt(roles), "r1");
+  const stored = core.createRoleSelection("", "r2");
+  assert.equal(stored.adopt(roles), "r2");
+  const empty = core.createRoleSelection("", "");
+  assert.equal(empty.adopt(roles), "r1");
+  const unknown = core.createRoleSelection("nobody", "");
+  assert.equal(unknown.adopt(roles), "nobody");
+  assert.equal(core.matchRole(roles, "R2"), "r2");
+  assert.equal(core.matchRole(roles, "host"), "r1");
+});
+
+test("countdown stages", () => {
+  assert.equal(core.countdownStage(61), "");
+  assert.equal(core.countdownStage(60), "");
+  assert.equal(core.countdownStage(59), "amber");
+  assert.equal(core.countdownStage(30), "amber");
+  assert.equal(core.countdownStage(29), "red");
+  assert.equal(core.countdownStage(0), "red");
+  assert.equal(core.countdownStage(-12), "red");
+  assert.equal(core.countdownStage(null), "");
+});
+
+test("wake lock is feature detected and re-acquired after release", async () => {
+  assert.equal(await core.createWakeLock({ navigator: {}, visible: () => true }).acquire(), false);
+  assert.equal(await core.createWakeLock({ navigator: undefined, visible: () => true }).acquire(), false);
+  let requests = 0;
+  const listeners = [];
+  const nav = { wakeLock: { request: async (kind) => { requests++; assert.equal(kind, "screen"); return { addEventListener: (_, fn) => listeners.push(fn) }; } } };
+  let visible = false;
+  const lock = core.createWakeLock({ navigator: nav, visible: () => visible });
+  assert.equal(await lock.acquire(), false);
+  visible = true;
+  assert.equal(await lock.acquire(), true);
+  assert.equal(await lock.acquire(), false);
+  assert.equal(requests, 1);
+  assert.equal(lock.held, true);
+  listeners[0]();
+  assert.equal(lock.held, false);
+  assert.equal(await lock.acquire(), true);
+  assert.equal(requests, 2);
+  const failing = core.createWakeLock({ navigator: { wakeLock: { request: async () => { throw new Error("denied"); } } }, visible: () => true });
+  assert.equal(await failing.acquire(), false);
+});
+
+test("digest is accepted at equal rev, ignored when lower, and never advances the gate", async () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 10, epoch: 1, roles: [{ id: "a", name: "A", state: "OFF" }] } });
+  const bad = { roles: "0000000000000000" };
+  ws.receive({ event: "digest", data: { rev: 9, epoch: 1, hashes: bad } });
+  await flush();
+  assert.equal(h.fetches.length, 0);
+  ws.receive({ event: "digest", data: { rev: 10, epoch: 1, hashes: bad } });
+  await flush();
+  assert.equal(h.fetches.length, 1);
+  h.stateBody = { ...h.stateBody, rev: 10 };
+  ws.receive({ event: "digest", data: { rev: 11, epoch: 1, hashes: bad } });
+  assert.equal(h.link.heldRev, 50);
+  const fresh = v2Ready();
+  fresh.ws.receive({ event: "hello", data: { rev: 10, epoch: 1, roles: [] } });
+  fresh.ws.receive({ event: "digest", data: { rev: 10, epoch: 1, hashes: { roles: core.fnv1a64("") } } });
+  fresh.ws.receive({ event: "state", data: { rev: 11, roles: [] } });
+  assert.equal(fresh.h.fullCalls.length, 2);
 });
