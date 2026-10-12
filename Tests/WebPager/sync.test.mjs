@@ -11,10 +11,10 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
-  "backoffDelay", "lowerThirdForViewport", "createRoleSelection", "matchRole", "countdownStage",
+  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor",
 ];
-const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number });
+const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
 const US = "\u001f";
 const RS = "\u001e";
@@ -842,4 +842,54 @@ test("cue word is empty for OFF and unknown states", () => {
 test("pager never shows CLEAR as a cue word", () => {
   assert.equal(/return "CLEAR"/.test(html), false);
   assert.equal(/id="cueWord"[^>]*>CLEAR/.test(html), false);
+});
+
+test("layoutFor picks landscape for wide-but-not-strip viewports", () => {
+  assert.equal(core.layoutFor(1920, 1080, "auto"), "landscape");
+  assert.equal(core.layoutFor(1024, 768, undefined), "landscape");
+  assert.equal(core.layoutFor(1180, 820, ""), "landscape");
+  assert.equal(core.layoutFor(844, 390, "auto"), "landscape");
+  assert.equal(core.layoutFor(1200, 401, "auto"), "landscape");
+  assert.equal(core.layoutFor(390, 844, "auto"), "standard");
+  assert.equal(core.layoutFor(800, 800, "auto"), "standard");
+  assert.equal(core.layoutFor(1200, 400, "auto"), "lowerthird");
+  assert.equal(core.layoutFor(1920, 360, "auto"), "lowerthird");
+  assert.equal(core.layoutFor(100, 0, "auto"), "standard");
+});
+
+test("layoutFor honours the override", () => {
+  assert.equal(core.layoutFor(390, 844, "landscape"), "landscape");
+  assert.equal(core.layoutFor(1920, 360, "Landscape"), "landscape");
+  assert.equal(core.layoutFor(1920, 1080, "standard"), "standard");
+  assert.equal(core.layoutFor(1920, 1080, "full"), "standard");
+  assert.equal(core.layoutFor(1920, 1080, "lowerthird"), "lowerthird");
+  assert.equal(core.layoutFor(1920, 1080, "third"), "lowerthird");
+  assert.equal(core.layoutFor(1920, 1080, "bogus"), "landscape");
+});
+
+test("formatLocalTime follows locale and time zone", () => {
+  const date = new Date(Date.UTC(2026, 0, 5, 15, 7, 42));
+  assert.equal(core.formatLocalTime(date, "en-GB", "UTC"), "15:07");
+  assert.match(core.formatLocalTime(date, "en-US", "UTC"), /^3:07\s?PM$/);
+  assert.match(core.formatLocalTime(date, "en-US", "America/New_York"), /^10:07\s?AM$/);
+  assert.equal(core.formatLocalTime(date, "de-DE", "Asia/Tokyo"), "0:07");
+});
+
+test("formatLocalTime falls back on a bad time zone", () => {
+  const date = new Date(Date.UTC(2026, 0, 5, 15, 7, 42));
+  assert.equal(typeof core.formatLocalTime(date, "en-US", "Not/AZone"), "string");
+  assert.ok(core.formatLocalTime(date, "en-US", "Not/AZone").length > 0);
+});
+
+test("msUntilNextSecond aligns to the second boundary", () => {
+  assert.equal(core.msUntilNextSecond(1500), 500);
+  assert.equal(core.msUntilNextSecond(1999), 1);
+  assert.equal(core.msUntilNextSecond(2000), 1000);
+  assert.equal(core.msUntilNextSecond(1760000000123), 877);
+});
+
+test("countdownEmWidth grows with the digits and the overtime prefix", () => {
+  assert.ok(core.countdownEmWidth("10:00") < core.countdownEmWidth("1:10:00"));
+  assert.ok(core.countdownEmWidth("10:00") < core.countdownEmWidth("+10:00"));
+  assert.equal(core.countdownEmWidth(""), 1);
 });

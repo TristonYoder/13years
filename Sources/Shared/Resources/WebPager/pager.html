@@ -558,6 +558,173 @@
   [data-layout="lowerthird"] #ltClock {
     z-index: 101;
   }
+  html[data-layout="landscape"], html[data-layout="landscape"] body {
+    background: #111114;
+    color: #f5f5f7;
+  }
+  html[data-offline="1"] #landscape { opacity: 0.5; }
+
+  #landscape {
+    --u: min(100vw, 100vh);
+    --s: calc(var(--u) * 0.012);
+    --fg: #f5f5f7;
+    --cue: rgba(255, 255, 255, 0.1);
+    --frame: max(14px, calc(var(--u) * 0.022));
+    --pad: calc(var(--u) * 0.025);
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--pad);
+    padding: var(--pad);
+    border: var(--frame) solid var(--cue);
+    background: #111114;
+    color: var(--fg);
+    overflow: hidden;
+  }
+  html[data-cue="STANDBY"] #landscape, html[data-cue="FLASH_STANDBY"] #landscape { --cue: var(--cue-standby-bg); }
+  html[data-cue="GO"] #landscape, html[data-cue="FLASH_GO"] #landscape { --cue: var(--cue-go-bg); }
+  @media (prefers-reduced-motion: no-preference) {
+    #landscape { transition: border-color 0.2s linear; }
+  }
+
+  #lsTop {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--pad);
+    min-height: calc(var(--u) * 0.12);
+  }
+
+  #lsBadge {
+    flex: 0 0 auto;
+    font-size: min(calc(var(--u) * 0.11), 6.8vw);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    padding: 0.08em 0.28em;
+    border-radius: 0.22em;
+    background: var(--cue);
+    color: #0b0b0d;
+  }
+
+  #lsTime {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    font-size: calc(var(--u) * 0.045);
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  #lsSide {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 38%;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: calc(var(--u) * 0.008);
+    text-align: right;
+  }
+  #landscape .rolepick { font-size: calc(var(--u) * 0.03); max-width: 100%; }
+  #landscape #role { background: rgba(255, 255, 255, 0.12); color: var(--fg); }
+  #lsPerson {
+    font-size: calc(var(--u) * 0.022);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    opacity: 0.85;
+  }
+  #landscape .link { margin-left: 0; font-size: calc(var(--u) * 0.02); }
+
+  #lsCenter {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: calc(var(--u) * 0.01);
+  }
+  #lsTitle {
+    max-width: 92%;
+    font-size: calc(var(--u) * 0.05);
+    font-weight: 800;
+    line-height: 1.1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #lsCountdown {
+    --em: 3.2;
+    font-size: min(calc(var(--u) * 0.32), calc(88vw / var(--em)));
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  #lsTag {
+    font-size: calc(var(--u) * 0.02);
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    opacity: 0.6;
+  }
+
+  #lsBottom {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--pad);
+    min-height: 0;
+  }
+  #lsNotes, #lsNext {
+    min-width: 0;
+    max-height: calc(var(--u) * 0.3);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--u) * 0.012);
+    border-radius: calc(var(--u) * 0.02);
+    background: rgba(255, 255, 255, 0.08);
+    padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
+  }
+  #lsNotes { flex: 0 1 56%; margin-right: auto; }
+  #lsNext { flex: 0 1 40%; max-width: 40%; margin-left: auto; }
+  #lsNextTitle {
+    font-size: calc(var(--u) * 0.026);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #lsNextNotes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01); overflow: hidden; }
+  #lsNextNotes:empty { display: none; }
+  #landscape .note { background: transparent; padding: 0; border-radius: 0; }
+  #landscape .note-label { font-size: calc(var(--u) * 0.016); }
+  #landscape .note-text,
+  #landscape .note[data-current="1"] .note-text { font-size: calc(var(--u) * 0.03); }
+  #lsNext .note-text { font-size: calc(var(--u) * 0.024); font-weight: 600; }
+
+  #lsBanner {
+    position: absolute;
+    left: var(--pad);
+    right: var(--pad);
+    bottom: var(--pad);
+    z-index: 5;
+  }
 </style>
 </head>
 <body>
@@ -621,6 +788,30 @@
         <span id="ltCountdownValue">--:--</span>
         <span id="ltDuration" class="lt-tag">PROJECTED</span>
       </span>
+    </div>
+
+    <div id="landscape" class="hidden">
+      <div id="lsTop">
+        <div id="lsBadge" class="hidden"></div>
+        <div id="lsTime" class="tnum"></div>
+        <div id="lsSide">
+          <div id="lsRoleSlot"></div>
+          <div id="lsPerson" class="hidden"></div>
+        </div>
+      </div>
+      <div id="lsCenter">
+        <div id="lsTitle"></div>
+        <div id="lsCountdown" class="tnum"></div>
+        <div id="lsTag"></div>
+      </div>
+      <div id="lsBottom">
+        <div id="lsNotes" class="hidden"></div>
+        <div id="lsNext" class="hidden">
+          <div id="lsNextTitle"></div>
+          <div id="lsNextNotes"></div>
+        </div>
+      </div>
+      <div id="lsBanner"></div>
     </div>
 
   </div>
@@ -974,6 +1165,47 @@ function cueWordFor(state) {
 
 function lowerThirdForViewport(width, height) {
   return height > 0 && width / height >= LOWER_THIRD_ASPECT;
+}
+
+function layoutFor(width, height, param) {
+  const value = String(param || "auto").toLowerCase().replace(/[^a-z]/g, "");
+  if (value === "lowerthird" || value === "third") return "lowerthird";
+  if (value === "landscape") return "landscape";
+  if (value === "standard" || value === "full") return "standard";
+  if (lowerThirdForViewport(width, height)) return "lowerthird";
+  return height > 0 && width > height ? "landscape" : "standard";
+}
+
+const localTimeFormats = new Map();
+
+function formatLocalTime(date, locale, timeZone) {
+  const key = String(locale) + "|" + String(timeZone);
+  try {
+    let format = localTimeFormats.get(key);
+    if (!format) {
+      const options = { hour: "numeric", minute: "2-digit" };
+      if (timeZone) options.timeZone = timeZone;
+      format = new Intl.DateTimeFormat(locale, options);
+      localTimeFormats.set(key, format);
+    }
+    return format.format(date);
+  } catch (_) {
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+}
+
+function msUntilNextSecond(nowMs) {
+  return 1000 - (((nowMs % 1000) + 1000) % 1000);
+}
+
+function countdownEmWidth(text) {
+  let width = 0;
+  for (const ch of String(text)) {
+    if (ch >= "0" && ch <= "9") width += 0.68;
+    else if (ch === ":") width += 0.32;
+    else width += 0.7;
+  }
+  return Math.max(width, 1);
 }
 
 function matchRole(roles, param) {
@@ -1397,6 +1629,19 @@ const root = document.documentElement;
 const el = {
   standard: document.getElementById("standard"),
   lowerthird: document.getElementById("lowerthird"),
+  landscape: document.getElementById("landscape"),
+  lsRoleSlot: document.getElementById("lsRoleSlot"),
+  lsBadge: document.getElementById("lsBadge"),
+  lsTime: document.getElementById("lsTime"),
+  lsPerson: document.getElementById("lsPerson"),
+  lsTitle: document.getElementById("lsTitle"),
+  lsCountdown: document.getElementById("lsCountdown"),
+  lsTag: document.getElementById("lsTag"),
+  lsNotes: document.getElementById("lsNotes"),
+  lsNext: document.getElementById("lsNext"),
+  lsNextTitle: document.getElementById("lsNextTitle"),
+  lsNextNotes: document.getElementById("lsNextNotes"),
+  lsBanner: document.getElementById("lsBanner"),
   role: document.getElementById("role"),
   rolepick: document.getElementById("rolepick"),
   link: document.getElementById("link"),
@@ -1442,20 +1687,40 @@ function storeRole(id) {
   try { localStorage.setItem(ROLE_STORAGE_KEY, id); } catch (_) {  }
 }
 
-function applyLayout() {
-  let layout;
-  if (LAYOUT_PARAM === "lowerthird" || LAYOUT_PARAM === "third") {
-    layout = "lowerthird";
-  } else if (LAYOUT_PARAM === "standard" || LAYOUT_PARAM === "full") {
-    layout = "standard";
-  } else {
-    layout = lowerThirdForViewport(window.innerWidth, window.innerHeight) ? "lowerthird" : "standard";
+function placeShared(layout) {
+  const landscape = layout === "landscape";
+  const rolebar = document.querySelector(".rolebar");
+  const home = landscape ? el.lsRoleSlot : rolebar;
+  if (el.rolepick.parentNode !== home) {
+    home.append(el.rolepick, el.link);
   }
+  if (landscape) {
+    if (el.banner.parentNode !== el.lsBanner) el.lsBanner.appendChild(el.banner);
+  } else if (el.banner.parentNode !== el.standard) {
+    el.standard.insertBefore(el.banner, el.notifyBar);
+  }
+}
+
+function applyLayout() {
+  const layout = layoutFor(window.innerWidth, window.innerHeight, LAYOUT_PARAM);
   if (root.dataset.layout !== layout) lastLtKey = "";
   root.dataset.layout = layout;
+  placeShared(layout);
   el.standard.classList.toggle("hidden", layout !== "standard");
   el.lowerthird.classList.toggle("hidden", layout !== "lowerthird");
+  el.landscape.classList.toggle("hidden", layout !== "landscape");
+  tickLocalTime();
   if (snapshot) render();
+}
+
+let localTimer = null;
+
+function tickLocalTime() {
+  clearTimeout(localTimer);
+  localTimer = null;
+  if (root.dataset.layout !== "landscape") return;
+  setText(el.lsTime, formatLocalTime(new Date()));
+  localTimer = setTimeout(tickLocalTime, msUntilNextSecond(Date.now()) + 5);
 }
 
 window.addEventListener("resize", applyLayout);
@@ -1642,6 +1907,72 @@ function renderStandard() {
   if (notification) setText(el.banner, notification.text);
 }
 
+function renderLandscapeCountdown() {
+  const item = activeItem();
+  const isHeader = Boolean(item) && (item.itemType || "").toLowerCase() === "header";
+  const remaining = remainingSeconds();
+  const hasCountdown = Boolean(item) && !isHeader && remaining !== null;
+  const text = hasCountdown ? formatDuration(remaining) : "";
+  setText(el.lsCountdown, text);
+  if (el.lsCountdown.__em !== text.length) {
+    el.lsCountdown.__em = text.length;
+    el.lsCountdown.style.setProperty("--em", String(countdownEmWidth(text) * 1.04));
+  }
+  setStage(el.lsCountdown, hasCountdown ? remaining : null);
+  setText(el.lsTag, hasCountdown ? (snapshot.timer.isDurationActualForDisplay ? "ACTUAL" : "PROJECTED") : "");
+  setHidden(el.lsTag, !hasCountdown);
+}
+
+function fillNotes(container, signature, notes, labelFor) {
+  if (container.dataset.signature === signature) return;
+  container.dataset.signature = signature;
+  container.innerHTML = "";
+  notes.forEach((n, index) => container.appendChild(buildNote(labelFor(n, notes.length), n.text, index === 0)));
+}
+
+function renderLandscape() {
+  const role = activeRole();
+  const item = activeItem();
+
+  const word = cueWord(currentCue());
+  setText(el.lsBadge, word);
+  setHidden(el.lsBadge, !word);
+
+  const person = role && role.personName;
+  setText(el.lsPerson, person ? "FOR: " + person.toUpperCase() : "");
+  setHidden(el.lsPerson, !person);
+
+  const title = item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "";
+  setText(el.lsTitle, (title || "").toUpperCase());
+  renderLandscapeCountdown();
+
+  const current = notesFor(item);
+  setHidden(el.lsNotes, current.length === 0);
+  fillNotes(
+    el.lsNotes,
+    current.map((n) => n.category + n.text).join("|"),
+    current,
+    (n, count) => (count > 1 ? "CURRENT — " + n.category.toUpperCase() : "CURRENT")
+  );
+
+  const upcoming = nextItem();
+  setHidden(el.lsNext, !upcoming);
+  if (upcoming) {
+    setText(el.lsNextTitle, "NEXT: " + (upcoming.title || "").toUpperCase());
+    const nextNotes = notesFor(upcoming);
+    fillNotes(
+      el.lsNextNotes,
+      upcoming.id + "|" + nextNotes.map((n) => n.category + n.text).join("|"),
+      nextNotes,
+      (n, count) => (count > 1 ? n.category.toUpperCase() : "NOTES")
+    );
+  }
+
+  const notification = activeNotification();
+  setHidden(el.banner, !notification);
+  if (notification) setText(el.banner, notification.text);
+}
+
 function renderLowerThird() {
   const item = activeItem();
   const message = activeNotification();
@@ -1770,6 +2101,8 @@ function render() {
   renderChat();
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
+  } else if (root.dataset.layout === "landscape") {
+    renderLandscape();
   } else {
     renderStandard();
   }
@@ -1884,6 +2217,8 @@ function paintCountdown() {
   if (!snapshot || document.hidden) return;
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
+  } else if (root.dataset.layout === "landscape") {
+    renderLandscapeCountdown();
   } else if (!el.countdown.classList.contains("hidden")) {
     const remaining = remainingSeconds();
     setText(el.countdown, formatDuration(remaining || 0));
@@ -2001,6 +2336,7 @@ document.addEventListener("visibilitychange", () => {
   wakeLock.acquire();
   lastLtKey = "";
   lastWaitKey = "";
+  tickLocalTime();
   if (snapshot) render();
   renderConnection();
   scheduleTick();
