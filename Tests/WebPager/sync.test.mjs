@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number });
 
@@ -798,4 +798,48 @@ test("digest is accepted at equal rev, ignored when lower, and never advances th
   fresh.ws.receive({ event: "digest", data: { rev: 10, epoch: 1, hashes: { roles: core.fnv1a64("") } } });
   fresh.ws.receive({ event: "state", data: { rev: 11, roles: [] } });
   assert.equal(fresh.h.fullCalls.length, 2);
+});
+
+test("next item falls back to the first non-header item after the active one", () => {
+  const items = [
+    { id: "a", title: "A", itemType: "song" },
+    { id: "h", title: "H", itemType: "Header" },
+    { id: "h2", title: "H2", itemType: "HEADER" },
+    { id: "b", title: "B", itemType: "song" },
+  ];
+  const snap = { plan: { items, activeItemIndex: 0 }, timer: { isRunning: true } };
+  assert.equal(core.nextItemFor(snap).id, "b");
+  assert.equal(core.nextItemFor({ plan: { items, activeItemIndex: 3 }, timer: null }), null);
+  assert.equal(core.nextItemFor({ plan: { items: [items[0], items[1]], activeItemIndex: 0 } }), null);
+  assert.equal(core.nextItemFor(null), null);
+});
+
+test("timer.nextItem wins over the plan and null hides the card", () => {
+  const items = [{ id: "a", itemType: "song" }, { id: "b", itemType: "song" }];
+  const plan = { items, activeItemIndex: 0 };
+  assert.equal(core.nextItemFor({ plan, timer: { nextItem: { id: "z", title: "Z" } } }).id, "z");
+  assert.equal(core.nextItemFor({ plan, timer: { nextItem: null } }), null);
+  assert.equal(core.nextItemFor({ plan, timer: {} }).id, "b");
+});
+
+test("next item notes are filtered by the role's categories", () => {
+  const item = { notes: { audio: "mute", lights: "dim", video: "" } };
+  const role = { assignedNoteCategories: ["lights", "video", "audio"] };
+  assert.deepEqual(core.notesForRole(item, role).map((n) => n.category), ["lights", "audio"]);
+  assert.deepEqual(core.notesForRole(item, { assignedNoteCategories: [] }), []);
+  assert.deepEqual(core.notesForRole(item, null), []);
+  assert.deepEqual(core.notesForRole(null, role), []);
+});
+
+test("cue word is empty for OFF and unknown states", () => {
+  assert.equal(core.cueWordFor("OFF"), "");
+  assert.equal(core.cueWordFor(undefined), "");
+  assert.equal(core.cueWordFor("STANDBY"), "STANDBY");
+  assert.equal(core.cueWordFor("FLASH_GO"), "GO!");
+  assert.equal(core.cueWordFor("GO"), "GO!");
+});
+
+test("pager never shows CLEAR as a cue word", () => {
+  assert.equal(/return "CLEAR"/.test(html), false);
+  assert.equal(/id="cueWord"[^>]*>CLEAR/.test(html), false);
 });
