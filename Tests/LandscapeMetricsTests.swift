@@ -14,6 +14,7 @@ final class LandscapeMetricsTests: XCTestCase {
         XCTAssertEqual(m.titleFontSize, 0.05 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.timeFontSize, 0.075 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.captionFontSize, 0.02 * 1080, accuracy: 0.001)
+        XCTAssertEqual(m.tagFontSize, 0.035 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.timeCaptionFontSize, 0.018 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.nextTitleFontSize, 0.035 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.frameCornerRadius, 0.04 * 1080, accuracy: 0.001)

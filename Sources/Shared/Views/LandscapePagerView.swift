@@ -29,7 +29,7 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var cardContentMaxHeight: CGFloat { max(1, cardMaxHeight - 2 * cardPadding) }
     public var singleCardWidth: CGFloat { 2 * cardWidth + margin }
     public var messageFontSize: CGFloat { 0.06 * shorterSide }
-    public var centreTagBottom: CGFloat { centreY + 0.17 * shorterSide }
+    public var centreTagBottom: CGFloat { centreY + 0.185 * shorterSide }
     public var messageClearance: CGFloat { 0.01 * shorterSide }
     public var bottomRowBottom: CGFloat { size.height - frameThickness - margin }
     public var messageMaxHeight: CGFloat {
@@ -42,6 +42,7 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var nextTitleFontSize: CGFloat { 0.035 * shorterSide }
     public static let widestCueWord = "STANDBY"
     public var captionFontSize: CGFloat { 0.02 * shorterSide }
+    public var tagFontSize: CGFloat { 0.035 * shorterSide }
     public var roleFontSize: CGFloat { 0.04 * shorterSide }
     public var statusFontSize: CGFloat { 0.022 * shorterSide }
     public var noteFontSize: CGFloat { 0.028 * shorterSide }
@@ -54,6 +55,20 @@ public struct LandscapeMetrics: Equatable, Sendable {
 
     public static func cardWidth(for visibleCards: Int, in metrics: LandscapeMetrics) -> CGFloat {
         visibleCards >= 2 ? metrics.cardWidth : metrics.singleCardWidth
+    }
+
+    var chrome: PagerChromeSizes {
+        PagerChromeSizes(
+            timeFont: timeFontSize,
+            timeCaptionFont: timeCaptionFontSize,
+            badgeFont: badgeFontSize,
+            topRowHeight: topRowHeight,
+            slotWidth: slotWidth,
+            statusFont: statusFontSize,
+            roleFont: roleFontSize,
+            margin: margin,
+            cornerRadius: cornerRadius
+        )
     }
 
     public static func isLandscape(_ size: CGSize) -> Bool {
@@ -71,7 +86,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
     let showMessages: () -> Void
     let openMessage: () -> Void
     let dismissMessage: () -> Void
-    @State private var messageDragOffset: CGFloat = 0
+    @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
 
     public init(
         size: CGSize,
@@ -97,153 +112,51 @@ public struct LandscapePagerView<RoleMenu: View>: View {
 
     private var metrics: LandscapeMetrics { LandscapeMetrics(size: size) }
     private var state: CueState { presentation.currentState }
-    private var cueWord: String { PagerPresentationState.cueWordText(for: state) }
-    private static var ground: Color { Color(red: 0.067, green: 0.067, blue: 0.078) }
-    private static var darkText: Color { Color(red: 0.1, green: 0.1, blue: 0.1) }
-
-    private var frameColor: Color {
-        state == .off ? Color.white.opacity(0.06) : state.color
-    }
+    private var style: CueDisplayStyle { CueDisplayStyle.resolve(cueDisplayRaw) }
 
     public var body: some View {
         let m = metrics
         ZStack {
-            Self.ground.ignoresSafeArea()
+            style.groundColor(for: state).ignoresSafeArea()
 
             centre(m)
                 .padding(.horizontal, m.frameThickness + m.margin)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
             VStack(spacing: m.margin) {
-                topRow(m)
+                PagerTopRow(
+                    sizes: m.chrome,
+                    state: state,
+                    style: style,
+                    roleName: presentation.activeRole?.name ?? "Host Pager",
+                    connectionText: connectionText,
+                    isConnected: isConnected,
+                    roleColumnMaxWidth: 0.2 * m.size.width,
+                    showMessages: showMessages,
+                    roleMenu: roleMenu
+                )
                 Spacer(minLength: 0)
                 bottomRow(m)
             }
             .padding(m.frameThickness + m.margin)
 
-            FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
-                .fill(frameColor, style: FillStyle(eoFill: true))
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-        }
-        .onChange(of: standingMessage?.id) { _, _ in
-            messageDragOffset = 0
-        }
-    }
-
-    private func topRow(_ m: LandscapeMetrics) -> some View {
-        HStack(alignment: .top, spacing: m.margin) {
-            ZStack(alignment: .topLeading) {
-                clock(m).opacity(cueWord.isEmpty ? 1 : 0)
-                badge(m)
+            if let frame = style.frameColor(for: state) {
+                FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
+                    .fill(frame, style: FillStyle(eoFill: true))
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
-            .frame(width: m.slotWidth, alignment: .leading)
-
-            Spacer(minLength: 0)
-
-            roleColumn(m)
-                .frame(maxWidth: 0.2 * m.size.width, alignment: .trailing)
-        }
-        .frame(height: m.topRowHeight, alignment: .top)
-    }
-
-    private func clock(_ m: LandscapeMetrics) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: m.timeCaptionFontSize * 0.2) {
-                Text(context.date, format: .dateTime.hour().minute().second())
-                    .font(.inter(size: m.timeFontSize, weight: .black))
-                    .monospacedDigit()
-                    .foregroundColor(Color(white: 0.96))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text("LOCAL TIME")
-                    .font(.inter(size: m.timeCaptionFontSize, weight: .bold))
-                    .tracking(m.timeCaptionFontSize * 0.25)
-                    .foregroundColor(.white.opacity(0.5))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func badgeLabel(_ word: String, _ m: LandscapeMetrics) -> some View {
-        Text(word)
-            .font(.inter(size: m.badgeFontSize, weight: .black))
-            .foregroundColor(Self.darkText)
-            .lineLimit(1)
-            .padding(.horizontal, m.badgeFontSize * 0.3)
-            .padding(.vertical, m.badgeFontSize * 0.08)
-    }
-
-    private func badge(_ m: LandscapeMetrics) -> some View {
-        ZStack {
-            badgeLabel(LandscapeMetrics.widestCueWord, m).hidden()
-            if !cueWord.isEmpty {
-                badgeLabel(cueWord, m)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(state.color)
-                    .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-            }
-        }
-        .fixedSize()
-        .frame(height: m.topRowHeight, alignment: .top)
-    }
-
-    private func roleColumn(_ m: LandscapeMetrics) -> some View {
-        VStack(alignment: .trailing, spacing: m.margin * 0.2) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isConnected ? Color.green : Color.red)
-                    .frame(width: m.statusFontSize * 0.7, height: m.statusFontSize * 0.7)
-                Text(connectionText)
-                    .font(.inter(size: m.statusFontSize, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.6))
-                    .lineLimit(1)
-            }
-
-            Menu {
-                roleMenu
-            } label: {
-                HStack(spacing: m.roleFontSize * 0.35) {
-                    Text(presentation.activeRole?.name ?? "Host Pager")
-                        .font(.inter(size: m.roleFontSize, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: m.roleFontSize * 0.6, weight: .bold))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, m.roleFontSize * 0.5)
-                .padding(.vertical, m.roleFontSize * 0.25)
-                .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-
-            if let person = presentation.activeRole?.personName {
-                Text("FOR: \(person.uppercased())")
-                    .font(.inter(size: m.statusFontSize, weight: .bold))
-                    .tracking(2)
-                    .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
-            }
-
-            Button(action: showMessages) {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: m.statusFontSize * 1.1))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .buttonStyle(.plain)
         }
     }
 
     private func centre(_ m: LandscapeMetrics) -> some View {
-        Group {
+        let primary = style.primaryText(for: state)
+        return Group {
             if let item = presentation.activeTimerItem {
                 VStack(spacing: m.margin * 0.2) {
                     Text(item.title.uppercased())
                         .font(.inter(size: m.titleFontSize, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(primary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.6)
@@ -252,14 +165,14 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation.hourFormatThreshold))
                             .font(.inter(size: m.countdownFontSize, weight: .black))
                             .monospacedDigit()
-                            .foregroundColor(.white)
+                            .foregroundColor(primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.3)
 
                         Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
-                            .font(.inter(size: m.captionFontSize, weight: .bold))
-                            .tracking(2)
-                            .foregroundColor(.white.opacity(0.5))
+                            .font(.inter(size: m.tagFontSize, weight: .bold))
+                            .tracking(m.tagFontSize * 0.12)
+                            .foregroundColor(style.secondaryText(for: state, opacity: 0.6))
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -272,71 +185,21 @@ public struct LandscapePagerView<RoleMenu: View>: View {
     @ViewBuilder
     private func bottomRow(_ m: LandscapeMetrics) -> some View {
         if let message = standingMessage {
-            messagePanel(m, message)
+            PagerMessagePanel(
+                message: message,
+                fontSize: m.messageFontSize,
+                captionFontSize: m.messageCaptionFontSize,
+                maxLines: LandscapeMetrics.messageMaxLines,
+                maxHeight: m.messageMaxHeight,
+                padding: m.cardPadding,
+                cornerRadius: m.cornerRadius,
+                openMessage: openMessage,
+                dismissMessage: dismissMessage
+            )
+            .id(message.id)
         } else {
             cardsRow(m)
         }
-    }
-
-    private var messageOpacity: Double {
-        1.0 - min(Double(abs(messageDragOffset)) / 200.0, 1.0) * 0.7
-    }
-
-    private func messagePanel(_ m: LandscapeMetrics, _ message: InterTeamMessage) -> some View {
-        VStack(alignment: .leading, spacing: m.messageCaptionFontSize * 0.3) {
-            Text(message.sender.uppercased())
-                .font(.inter(size: m.messageCaptionFontSize, weight: .heavy))
-                .tracking(m.messageCaptionFontSize * 0.15)
-                .foregroundColor(Self.darkText.opacity(0.7))
-                .lineLimit(1)
-            Text(message.text)
-                .font(.inter(size: m.messageFontSize, weight: .bold))
-                .foregroundColor(Self.darkText)
-                .multilineTextAlignment(.leading)
-                .lineLimit(LandscapeMetrics.messageMaxLines)
-                .minimumScaleFactor(0.4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(m.cardPadding)
-        .frame(maxWidth: .infinity, maxHeight: m.messageMaxHeight, alignment: .topLeading)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color.yellow)
-        .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-        .offset(x: messageDragOffset)
-        .opacity(messageOpacity)
-        .contentShape(Rectangle())
-        #if os(iOS) || os(macOS)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    messageDragOffset = value.translation.width
-                }
-                .onEnded { value in
-                    let distance = abs(value.translation.width)
-                    if distance > 80 {
-                        let direction: CGFloat = value.translation.width > 0 ? 1 : -1
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            messageDragOffset = direction * 500
-                        }
-                        dismissMessage()
-                    } else if distance < 10 {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            messageDragOffset = 0
-                        }
-                        openMessage()
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            messageDragOffset = 0
-                        }
-                    }
-                }
-        )
-        #else
-        .onTapGesture {
-            openMessage()
-        }
-        .focusable(true)
-        #endif
     }
 
     @ViewBuilder
@@ -409,7 +272,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
         .padding(m.cardPadding)
         .frame(width: width)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white.opacity(0.1))
+        .background(style.cardFill)
         .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
     }
 }

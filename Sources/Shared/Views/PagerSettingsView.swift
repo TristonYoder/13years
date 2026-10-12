@@ -7,6 +7,7 @@ public struct PagerSettingsView: View {
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PagerHaptics.strengthDefaultsKey) private var hapticStrength: Double = PagerHaptics.defaultStrength
+    @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
 
     public init() {}
 
@@ -38,6 +39,18 @@ public struct PagerSettingsView: View {
                     }
                 }
                 #endif
+
+                Section {
+                    Picker("Cue display", selection: $cueDisplayRaw) {
+                        ForEach(CueDisplayStyle.allCases) { style in
+                            Text(style.title).tag(style.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Cue Display")
+                } footer: {
+                    Text("Outline frames the screen in the cue colour. Full screen fills the whole screen with it.")
+                }
 
                 Section {
                     if let master = engine.connectedMasterName {

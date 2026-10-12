@@ -8,7 +8,6 @@ public struct HostPagerView: View {
     @State private var selectedRoleId: String = "default"
     @State private var isShowingChat = false
     @State private var dismissedMessageId: String?
-    @State private var bannerDragOffset: CGFloat = 0
     @State private var lastSeenMessageId: String?
 
     public init() {}
@@ -33,14 +32,6 @@ public struct HostPagerView: View {
 
     private var currentState: CueState { presentation.currentState }
 
-    private var assignedNoteCategories: [String] { presentation.assignedNoteCategories }
-
-    private var currentNotes: [(category: String, text: String)] { presentation.currentNotes }
-
-    private var nextItem: PCOTimerItem? { presentation.nextItem }
-
-    private var nextNotes: [(category: String, text: String)] { presentation.nextNotes }
-
     private var latestRelevantMessage: InterTeamMessage? { presentation.latestRelevantMessage }
 
     public var body: some View {
@@ -51,75 +42,9 @@ public struct HostPagerView: View {
         }
     }
 
-    private var bannerOpacity: Double {
-        let progress: Double = min(Double(abs(bannerDragOffset)) / 200.0, 1.0)
-        return 1.0 - progress * 0.7
-    }
-
     private static var localHostName: String {
         let name = ProcessInfo.processInfo.hostName
         return name.hasSuffix(".local") ? String(name.dropLast(".local".count)) : name
-    }
-
-    @ViewBuilder
-    private var messageBanner: some View {
-        if let latestMsg = latestRelevantMessage, latestMsg.id != dismissedMessageId {
-            HStack(spacing: 10) {
-                Image(systemName: "text.bubble.fill")
-                    .font(.inter(size: 18))
-                Text(latestMsg.text)
-                    .font(.inter(size: 18, weight: .bold))
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                Image(systemName: "arrowshape.turn.up.left.fill")
-                    .font(.inter(size: 14))
-                    .opacity(0.6)
-            }
-            .foregroundColor(.black)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(Color.yellow)
-            .cornerRadius(12)
-            .shadow(radius: 4)
-            .padding(.horizontal, 20)
-            .offset(x: bannerDragOffset)
-            .opacity(bannerOpacity)
-            .contentShape(Rectangle())
-            #if os(iOS) || os(macOS)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        bannerDragOffset = value.translation.width
-                    }
-                    .onEnded { value in
-                        let distance = abs(value.translation.width)
-                        if distance > 80 {
-                            let direction: CGFloat = value.translation.width > 0 ? 1 : -1
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                bannerDragOffset = direction * 500
-                            }
-                            dismissedMessageId = latestMsg.id
-                        } else if distance < 10 {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                bannerDragOffset = 0
-                            }
-                            isShowingChat = true
-                            dismissedMessageId = latestMsg.id
-                        } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                bannerDragOffset = 0
-                            }
-                        }
-                    }
-            )
-            #else
-            .onTapGesture {
-                isShowingChat = true
-                dismissedMessageId = latestMsg.id
-            }
-            .focusable(true)
-            #endif
-        }
     }
 
     private var connectionText: String {
@@ -137,10 +62,10 @@ public struct HostPagerView: View {
             #if os(tvOS)
             landscapeView(size: geo.size)
             #else
-            if LandscapeMetrics.isLandscape(geo.size) {
+            if !PortraitMetrics.isPortrait(geo.size) {
                 landscapeView(size: geo.size)
             } else {
-                portraitView
+                portraitView(size: geo.size)
             }
             #endif
         }
@@ -151,7 +76,6 @@ public struct HostPagerView: View {
             lastSeenMessageId = latestRelevantMessage?.id
         }
         .onChange(of: latestRelevantMessage?.id) { _, newId in
-            bannerDragOffset = 0
             guard let newId, newId != lastSeenMessageId else { return }
             lastSeenMessageId = newId
             guard let msg = latestRelevantMessage, msg.senderRoleId != selectedRoleId else { return }
@@ -172,196 +96,47 @@ public struct HostPagerView: View {
             presentation: presentation,
             connectionText: connectionText,
             isConnected: isConnectedNow,
-            standingMessage: latestRelevantMessage.flatMap { $0.id == dismissedMessageId ? nil : $0 },
-            showMessages: {
-                isShowingChat = true
-                dismissedMessageId = latestRelevantMessage?.id
-            },
-            openMessage: {
-                isShowingChat = true
-                dismissedMessageId = latestRelevantMessage?.id
-            },
-            dismissMessage: {
-                dismissedMessageId = latestRelevantMessage?.id
-            },
-            roleMenu: {
-                ForEach(presentation.roles) { role in
-                    Button(role.name) {
-                        selectedRoleId = role.id
-                    }
-                }
-            }
+            standingMessage: visibleStandingMessage,
+            showMessages: openChat,
+            openMessage: openChat,
+            dismissMessage: dismissStanding,
+            roleMenu: { roleMenuItems }
         )
     }
 
-    private var portraitView: some View {
-        ZStack {
-            currentState.color.ignoresSafeArea()
+    private func portraitView(size: CGSize) -> some View {
+        PortraitPagerView(
+            size: size,
+            presentation: presentation,
+            connectionText: connectionText,
+            isConnected: isConnectedNow,
+            standingMessage: visibleStandingMessage,
+            showMessages: openChat,
+            openMessage: openChat,
+            dismissMessage: dismissStanding,
+            roleMenu: { roleMenuItems }
+        )
+    }
 
-            VStack(spacing: 24) {
-                HStack {
-                    Menu {
-                        ForEach(presentation.roles) { role in
-                            Button(role.name) {
-                                selectedRoleId = role.id
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(activeRole?.name ?? "Host Pager")
-                                .font(.inter(size: 14, weight: .bold))
-                        }
-                        .foregroundColor(currentState.textColor)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.2))
-                        .cornerRadius(8)
-                    }
+    private var visibleStandingMessage: InterTeamMessage? {
+        latestRelevantMessage.flatMap { $0.id == dismissedMessageId ? nil : $0 }
+    }
 
-                    Spacer()
+    private func openChat() {
+        isShowingChat = true
+        dismissedMessageId = latestRelevantMessage?.id
+    }
 
-                    if engine.isMasterServer {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                            Text("Connected to \(Self.localHostName)")
-                                .font(.inter(size: 11, weight: .semibold))
-                                .lineLimit(1)
-                        }
-                        .foregroundColor(currentState.textColor.opacity(0.8))
-                    } else if engine.isProducerLive, let master = engine.connectedMasterName {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                            Text("Live — \(master)")
-                                .font(.inter(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(currentState.textColor.opacity(0.8))
-                    } else {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 8, height: 8)
-                            Text(engine.isLANConnected ? "Disconnected — retrying…" : "Not connected — retrying…")
-                                .font(.inter(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(currentState.textColor.opacity(0.8))
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+    private func dismissStanding() {
+        dismissedMessageId = latestRelevantMessage?.id
+    }
 
-                Spacer()
-
-                VStack(spacing: 12) {
-                    let cueWord = PagerPresentationState.cueWordText(for: currentState)
-                    Text(cueWord.isEmpty ? "OFF" : cueWord)
-                        .font(.inter(size: 72, weight: .black))
-                        .foregroundColor(currentState.textColor)
-                        .minimumScaleFactor(0.5)
-                        .opacity(cueWord.isEmpty ? 0 : 1)
-                        .accessibilityHidden(cueWord.isEmpty)
-
-                    if let person = activeRole?.personName {
-                        Text("FOR: \(person.uppercased())")
-                            .font(.inter(size: 16, weight: .bold))
-                            .foregroundColor(currentState.textColor.opacity(0.8))
-                            .tracking(2.0)
-                    }
-                }
-
-                Spacer()
-
-                if let item = presentation.activeTimerItem {
-                    VStack(spacing: 6) {
-                        Text(item.title.uppercased())
-                            .font(.inter(size: item.isHeader ? 22 : 16, weight: .bold))
-                            .foregroundColor(currentState.textColor)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-
-                        if !item.isHeader {
-                            Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation.hourFormatThreshold))
-                                .font(.inter(size: 54, weight: .black))
-                                .foregroundColor(currentState.textColor)
-
-                            Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
-                                .font(.inter(size: 11, weight: .bold))
-                                .tracking(1.5)
-                                .foregroundColor(currentState.textColor.opacity(0.6))
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                    .background(Color.black.opacity(0.25))
-                    .cornerRadius(16)
-                }
-
-                if !currentNotes.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(currentNotes, id: \.category) { note in
-                            notePanel(category: note.category, text: note.text, emphasized: true)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-
-                if let next = nextItem {
-                    VStack(spacing: 10) {
-                        VStack(spacing: 4) {
-                            Text("NEXT")
-                                .font(.inter(size: 11, weight: .heavy))
-                                .tracking(1.5)
-                                .foregroundColor(currentState.textColor.opacity(0.7))
-                            Text(next.title.uppercased())
-                                .font(.inter(size: 16, weight: .bold))
-                                .foregroundColor(currentState.textColor)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                        }
-                        ForEach(nextNotes, id: \.category) { note in
-                            notePanel(category: note.category, text: note.text, emphasized: false)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                    .background(Color.black.opacity(0.25))
-                    .cornerRadius(16)
-                    .padding(.horizontal, 20)
-                }
-
-                Spacer()
-
-                messageBanner
-
-                Button {
-                    isShowingChat = true
-                    dismissedMessageId = latestRelevantMessage?.id
-                } label: {
-                    Label("Messages", systemImage: "bubble.left.and.bubble.right.fill")
-                        .font(.inter(size: 15, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .tint(currentState.textColor)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+    @ViewBuilder
+    private var roleMenuItems: some View {
+        ForEach(presentation.roles) { role in
+            Button(role.name) {
+                selectedRoleId = role.id
             }
         }
     }
-
-    private func notePanel(category: String, text: String, emphasized: Bool) -> some View {
-        PagerNoteText.line(category: category, text: text)
-            .font(.inter(size: emphasized ? 18 : 15, weight: emphasized ? .bold : .medium))
-            .foregroundColor(currentState.textColor)
-            .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.black.opacity(emphasized ? 0.3 : 0.18))
-        .cornerRadius(12)
-    }
-
 }
