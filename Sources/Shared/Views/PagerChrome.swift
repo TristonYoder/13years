@@ -68,10 +68,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     let state: CueState
     let style: CueDisplayStyle
     let roleName: String
-    let connectionText: String
-    let isConnected: Bool
     let roleColumnMaxWidth: CGFloat
-    let showMessages: () -> Void
     let roleMenu: RoleMenu
 
     private var cueWord: String { PagerPresentationState.cueWordText(for: state) }
@@ -140,17 +137,6 @@ struct PagerTopRow<RoleMenu: View>: View {
 
     private var roleColumn: some View {
         VStack(alignment: .trailing, spacing: sizes.margin * 0.2) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isConnected ? Color.green : Color.red)
-                    .frame(width: sizes.statusFont * 0.7, height: sizes.statusFont * 0.7)
-                Text(connectionText)
-                    .font(.inter(size: sizes.statusFont, weight: .semibold))
-                    .foregroundColor(style.secondaryText(for: state, opacity: 0.6))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-            }
-
             Menu {
                 roleMenu
             } label: {
@@ -169,13 +155,109 @@ struct PagerTopRow<RoleMenu: View>: View {
                 .overlay(RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
             }
             .buttonStyle(.plain)
+        }
+    }
+}
 
-            Button(action: showMessages) {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: sizes.statusFont * 1.1))
-                    .foregroundColor(style.secondaryText(for: state, opacity: 0.7))
+public enum DisconnectPhase: Equatable, Sendable {
+    case live
+    case dimmed
+    case extended
+
+    public static let extendedThreshold: TimeInterval = 20
+
+    public init(elapsedSinceLive: TimeInterval?) {
+        guard let elapsed = elapsedSinceLive, elapsed > 0 else {
+            self = .live
+            return
+        }
+        self = elapsed >= Self.extendedThreshold ? .extended : .dimmed
+    }
+}
+
+public enum PagerConnectionState: Equatable, Sendable {
+    case live
+    case disconnected
+    case notConnected
+
+    public init(isProducerLive: Bool, isLANConnected: Bool) {
+        if isProducerLive {
+            self = .live
+        } else {
+            self = isLANConnected ? .disconnected : .notConnected
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .live: return "Live"
+        case .disconnected: return "Disconnected — retrying…"
+        case .notConnected: return "Not connected"
+        }
+    }
+}
+
+struct PagerFooter: View {
+    let footerHeight: CGFloat
+    let buttonSide: CGFloat
+    let trailingInset: CGFloat
+    let leadingInset: CGFloat
+    let bottomInset: CGFloat
+    let noticeFont: CGFloat
+    let style: CueDisplayStyle
+    let state: CueState
+    let showsNotice: Bool
+    let showMessages: () -> Void
+    let showSettings: () -> Void
+
+    var body: some View {
+        VStack {
+            Spacer(minLength: 0)
+            HStack(spacing: 0) {
+                if showsNotice {
+                    Label("No connection", systemImage: "wifi.slash")
+                        .font(.inter(size: noticeFont, weight: .bold))
+                        .foregroundColor(style.secondaryText(for: state, opacity: 0.8))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                Spacer(minLength: 0)
+                footerButton("bubble.left.and.bubble.right", label: "Messages", action: showMessages)
+                footerButton("gearshape", label: "Settings", action: showSettings)
             }
-            .buttonStyle(.plain)
+            .frame(height: footerHeight)
+            .padding(.leading, leadingInset)
+            .padding(.trailing, trailingInset)
+            .padding(.bottom, bottomInset)
+        }
+    }
+
+    private func footerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: footerHeight * 0.7))
+                .foregroundColor(style.secondaryText(for: state, opacity: 0.75))
+                .frame(width: buttonSide, height: buttonSide)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+struct PagerDisconnectOverlay: View {
+    let phase: DisconnectPhase
+
+    var body: some View {
+        switch phase {
+        case .live:
+            EmptyView()
+        case .dimmed:
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        case .extended:
+            PagerWaitingView()
         }
     }
 }

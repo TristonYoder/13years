@@ -67,6 +67,13 @@ final class PortraitMetricsTests: XCTestCase {
         XCTAssertEqual(s.first, 1)
         XCTAssertEqual(s, s.sorted(by: >))
     }
+
+    func testFooterStripIsReservedBelowBottomStack() {
+        let m = PortraitMetrics(size: phone)
+        XCTAssertEqual(m.footerHeight, 0.065 * 390, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(m.footerButtonSide, 44)
+        XCTAssertEqual(m.bottomEdge + m.margin + m.footerHeight + m.frameThickness, phone.height, accuracy: 0.001)
+    }
 }
 
 final class CueDisplayStyleTests: XCTestCase {

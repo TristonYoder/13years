@@ -11,6 +11,16 @@ public struct PagerSettingsView: View {
 
     public init() {}
 
+    private var connectionState: PagerConnectionState {
+        PagerConnectionState(isProducerLive: engine.isMasterServer || engine.isProducerLive, isLANConnected: engine.isLANConnected)
+    }
+
+    static func syncText(offsetMs: Double, rttMs: Double?) -> String {
+        let offset = String(format: "%+.0f ms", offsetMs)
+        guard let rttMs else { return offset }
+        return "\(offset), RTT \(String(format: "%.0f", rttMs)) ms"
+    }
+
     public var body: some View {
         NavigationStack {
             Form {
@@ -50,6 +60,27 @@ public struct PagerSettingsView: View {
                     Text("Cue Display")
                 } footer: {
                     Text("Outline frames the screen in the cue colour. Full screen fills the whole screen with it.")
+                }
+
+                Section {
+                    LabeledContent("Status") {
+                        Text(connectionState.title)
+                            .foregroundStyle(connectionState == .live ? Color.green : Color.red)
+                            .fontWeight(.medium)
+                    }
+                    LabeledContent("Producer") {
+                        Text(engine.connectedMasterName ?? "—")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let offset = engine.syncV2.estimator.offsetMs {
+                        LabeledContent("Clock sync") {
+                            Text(Self.syncText(offsetMs: offset, rttMs: engine.syncV2.estimator.best?.effectiveRtt))
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Connection")
                 }
 
                 Section {

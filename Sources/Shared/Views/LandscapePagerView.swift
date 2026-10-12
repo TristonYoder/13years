@@ -31,7 +31,9 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var messageFontSize: CGFloat { 0.06 * shorterSide }
     public var centreTagBottom: CGFloat { centreY + 0.185 * shorterSide }
     public var messageClearance: CGFloat { 0.01 * shorterSide }
-    public var bottomRowBottom: CGFloat { size.height - frameThickness - margin }
+    public var footerHeight: CGFloat { 0.065 * shorterSide }
+    public var footerButtonSide: CGFloat { max(44, footerHeight) }
+    public var bottomRowBottom: CGFloat { size.height - frameThickness - margin - footerHeight }
     public var messageMaxHeight: CGFloat {
         max(1, min(0.25 * shorterSide, bottomRowBottom - centreTagBottom - messageClearance))
     }
@@ -79,11 +81,11 @@ public struct LandscapeMetrics: Equatable, Sendable {
 public struct LandscapePagerView<RoleMenu: View>: View {
     let size: CGSize
     let presentation: PagerPresentationState
-    let connectionText: String
-    let isConnected: Bool
+    let disconnectPhase: DisconnectPhase
     let roleMenu: RoleMenu
     let standingMessage: InterTeamMessage?
     let showMessages: () -> Void
+    let showSettings: () -> Void
     let openMessage: () -> Void
     let dismissMessage: () -> Void
     @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
@@ -91,20 +93,20 @@ public struct LandscapePagerView<RoleMenu: View>: View {
     public init(
         size: CGSize,
         presentation: PagerPresentationState,
-        connectionText: String,
-        isConnected: Bool,
+        disconnectPhase: DisconnectPhase,
         standingMessage: InterTeamMessage?,
         showMessages: @escaping () -> Void,
+        showSettings: @escaping () -> Void,
         openMessage: @escaping () -> Void,
         dismissMessage: @escaping () -> Void,
         @ViewBuilder roleMenu: () -> RoleMenu
     ) {
         self.size = size
         self.presentation = presentation
-        self.connectionText = connectionText
-        self.isConnected = isConnected
+        self.disconnectPhase = disconnectPhase
         self.standingMessage = standingMessage
         self.showMessages = showMessages
+        self.showSettings = showSettings
         self.openMessage = openMessage
         self.dismissMessage = dismissMessage
         self.roleMenu = roleMenu()
@@ -129,16 +131,29 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                     state: state,
                     style: style,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
-                    connectionText: connectionText,
-                    isConnected: isConnected,
                     roleColumnMaxWidth: 0.2 * m.size.width,
-                    showMessages: showMessages,
                     roleMenu: roleMenu
                 )
                 Spacer(minLength: 0)
                 bottomRow(m)
             }
-            .padding(m.frameThickness + m.margin)
+            .padding(.init(top: m.frameThickness + m.margin, leading: m.frameThickness + m.margin, bottom: m.frameThickness + m.margin + m.footerHeight, trailing: m.frameThickness + m.margin))
+
+            PagerDisconnectOverlay(phase: disconnectPhase)
+
+            PagerFooter(
+                footerHeight: m.footerHeight,
+                buttonSide: m.footerButtonSide,
+                trailingInset: m.frameThickness + m.margin * 0.5,
+                leadingInset: m.frameThickness + m.margin,
+                bottomInset: m.frameThickness,
+                noticeFont: m.statusFontSize,
+                style: style,
+                state: state,
+                showsNotice: disconnectPhase == .dimmed,
+                showMessages: showMessages,
+                showSettings: showSettings
+            )
 
             if let frame = style.frameColor(for: state) {
                 FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)

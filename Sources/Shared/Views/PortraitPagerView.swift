@@ -40,7 +40,9 @@ public struct PortraitMetrics: Equatable, Sendable {
     public static let messageMaxLines = 4
     public static let fitScales: [CGFloat] = [1, 0.85, 0.72, 0.6, 0.5, 0.4]
 
-    public var bottomEdge: CGFloat { size.height - inset }
+    public var footerHeight: CGFloat { 0.065 * width }
+    public var footerButtonSide: CGFloat { max(44, footerHeight) }
+    public var bottomEdge: CGFloat { size.height - inset - footerHeight }
 
     public func currentCardCentreY(bottomStackHeight: CGFloat) -> CGFloat {
         let top = topRowBottom + margin
@@ -70,11 +72,11 @@ public struct PortraitMetrics: Equatable, Sendable {
 public struct PortraitPagerView<RoleMenu: View>: View {
     let size: CGSize
     let presentation: PagerPresentationState
-    let connectionText: String
-    let isConnected: Bool
+    let disconnectPhase: DisconnectPhase
     let roleMenu: RoleMenu
     let standingMessage: InterTeamMessage?
     let showMessages: () -> Void
+    let showSettings: () -> Void
     let openMessage: () -> Void
     let dismissMessage: () -> Void
     @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
@@ -82,20 +84,20 @@ public struct PortraitPagerView<RoleMenu: View>: View {
     public init(
         size: CGSize,
         presentation: PagerPresentationState,
-        connectionText: String,
-        isConnected: Bool,
+        disconnectPhase: DisconnectPhase,
         standingMessage: InterTeamMessage?,
         showMessages: @escaping () -> Void,
+        showSettings: @escaping () -> Void,
         openMessage: @escaping () -> Void,
         dismissMessage: @escaping () -> Void,
         @ViewBuilder roleMenu: () -> RoleMenu
     ) {
         self.size = size
         self.presentation = presentation
-        self.connectionText = connectionText
-        self.isConnected = isConnected
+        self.disconnectPhase = disconnectPhase
         self.standingMessage = standingMessage
         self.showMessages = showMessages
+        self.showSettings = showSettings
         self.openMessage = openMessage
         self.dismissMessage = dismissMessage
         self.roleMenu = roleMenu()
@@ -116,10 +118,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                     state: state,
                     style: style,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
-                    connectionText: connectionText,
-                    isConnected: isConnected,
                     roleColumnMaxWidth: m.roleColumnMaxWidth,
-                    showMessages: showMessages,
                     roleMenu: roleMenu
                 )
 
@@ -127,7 +126,23 @@ public struct PortraitPagerView<RoleMenu: View>: View {
 
                 bottomStack(m)
             }
-            .padding(m.inset)
+            .padding(.init(top: m.inset, leading: m.inset, bottom: m.inset + m.footerHeight, trailing: m.inset))
+
+            PagerDisconnectOverlay(phase: disconnectPhase)
+
+            PagerFooter(
+                footerHeight: m.footerHeight,
+                buttonSide: m.footerButtonSide,
+                trailingInset: m.frameThickness + m.margin * 0.5,
+                leadingInset: m.inset,
+                bottomInset: m.frameThickness,
+                noticeFont: m.statusFontSize,
+                style: style,
+                state: state,
+                showsNotice: disconnectPhase == .dimmed,
+                showMessages: showMessages,
+                showSettings: showSettings
+            )
 
             if let frame = style.frameColor(for: state) {
                 FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)

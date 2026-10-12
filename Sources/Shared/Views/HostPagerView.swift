@@ -7,6 +7,9 @@ public struct HostPagerView: View {
     @EnvironmentObject var engine: CueEngine
     @State private var selectedRoleId: String = "default"
     @State private var isShowingChat = false
+    @State private var isShowingSettings = false
+    @State private var notLiveSince: Date?
+    @State private var now = Date()
     @State private var dismissedMessageId: String?
     @State private var lastSeenMessageId: String?
 
@@ -42,15 +45,9 @@ public struct HostPagerView: View {
         }
     }
 
-    private static var localHostName: String {
-        let name = ProcessInfo.processInfo.hostName
-        return name.hasSuffix(".local") ? String(name.dropLast(".local".count)) : name
-    }
-
-    private var connectionText: String {
-        if engine.isMasterServer { return "Connected to \(Self.localHostName)" }
-        if engine.isProducerLive, let master = engine.connectedMasterName { return "Live — \(master)" }
-        return engine.isLANConnected ? "Disconnected — retrying…" : "Not connected — retrying…"
+    private var disconnectPhase: DisconnectPhase {
+        guard !isConnectedNow, let since = notLiveSince else { return .live }
+        return DisconnectPhase(elapsedSinceLive: max(0.001, now.timeIntervalSince(since)))
     }
 
     private var isConnectedNow: Bool {
@@ -58,6 +55,23 @@ public struct HostPagerView: View {
     }
 
     private var pagerView: some View {
+        pagerLayouts
+            .onChange(of: isConnectedNow, initial: true) { _, live in
+                now = Date()
+                notLiveSince = live ? nil : (notLiveSince ?? now)
+            }
+            .task(id: isConnectedNow) {
+                while !Task.isCancelled && !isConnectedNow {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    now = Date()
+                }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                PagerSettingsView()
+            }
+    }
+
+    private var pagerLayouts: some View {
         GeometryReader { geo in
             #if os(tvOS)
             landscapeView(size: geo.size)
@@ -94,10 +108,10 @@ public struct HostPagerView: View {
         LandscapePagerView(
             size: size,
             presentation: presentation,
-            connectionText: connectionText,
-            isConnected: isConnectedNow,
+            disconnectPhase: disconnectPhase,
             standingMessage: visibleStandingMessage,
             showMessages: openChat,
+            showSettings: { isShowingSettings = true },
             openMessage: openChat,
             dismissMessage: dismissStanding,
             roleMenu: { roleMenuItems }
@@ -108,10 +122,10 @@ public struct HostPagerView: View {
         PortraitPagerView(
             size: size,
             presentation: presentation,
-            connectionText: connectionText,
-            isConnected: isConnectedNow,
+            disconnectPhase: disconnectPhase,
             standingMessage: visibleStandingMessage,
             showMessages: openChat,
+            showSettings: { isShowingSettings = true },
             openMessage: openChat,
             dismissMessage: dismissStanding,
             roleMenu: { roleMenuItems }

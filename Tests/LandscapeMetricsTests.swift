@@ -90,7 +90,7 @@ final class LandscapeMetricsTests: XCTestCase {
         let m = LandscapeMetrics(size: CGSize(width: 1920, height: 1080))
         XCTAssertEqual(m.cardMaxHeight, 0.28 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.messageFontSize, 0.06 * 1080, accuracy: 0.001)
-        XCTAssertEqual(m.messageMaxHeight, 0.25 * 1080, accuracy: 0.001)
+        XCTAssertEqual(m.messageMaxHeight, min(0.25 * 1080, m.bottomRowBottom - m.centreTagBottom - m.messageClearance), accuracy: 0.001)
         XCTAssertEqual(LandscapeMetrics.messageMaxLines, 3)
         XCTAssertLessThan(m.cardContentMaxHeight, m.cardMaxHeight)
         XCTAssertGreaterThan(m.messageFontSize, m.noteFontSize)
@@ -101,7 +101,7 @@ final class LandscapeMetricsTests: XCTestCase {
         for size in [CGSize(width: 1024, height: 768), CGSize(width: 1920, height: 1080), CGSize(width: 1280, height: 800), CGSize(width: 1180, height: 820), CGSize(width: 1366, height: 1024)] {
             let m = LandscapeMetrics(size: size)
             XCTAssertGreaterThanOrEqual(m.messageTop, m.centreTagBottom)
-            XCTAssertEqual(m.messageMaxHeight, 0.25 * m.shorterSide, accuracy: 0.001)
+            XCTAssertEqual(m.messageMaxHeight, min(0.25 * m.shorterSide, m.bottomRowBottom - m.centreTagBottom - m.messageClearance), accuracy: 0.001)
         }
     }
 
@@ -127,5 +127,15 @@ final class LandscapeMetricsTests: XCTestCase {
         XCTAssertEqual(a.centreY, b.centreY)
         XCTAssertEqual(a.messageMaxHeight, b.messageMaxHeight)
         XCTAssertEqual(a.cardMaxHeight, b.cardMaxHeight)
+    }
+
+    func testFooterStripIsReservedBelowBottomRow() {
+        for size in [CGSize(width: 1024, height: 768), CGSize(width: 1920, height: 1080)] {
+            let m = LandscapeMetrics(size: size)
+            XCTAssertEqual(m.footerHeight, 0.065 * m.shorterSide, accuracy: 0.001)
+            XCTAssertGreaterThanOrEqual(m.footerButtonSide, 44)
+            XCTAssertEqual(m.bottomRowBottom + m.margin + m.footerHeight + m.frameThickness, size.height, accuracy: 0.001)
+            XCTAssertEqual(m.centreY, size.height / 2)
+        }
     }
 }
