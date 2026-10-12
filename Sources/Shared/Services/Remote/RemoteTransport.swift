@@ -13,8 +13,13 @@ public protocol RemoteSocket: AnyObject {
     var onText: ((String) -> Void)? { get set }
     var onClose: ((String) -> Void)? { get set }
     func open()
+    func send(_ text: String)
     func ping(timeout: TimeInterval) async -> Bool
     func close()
+}
+
+public extension RemoteSocket {
+    func send(_ text: String) {}
 }
 
 public typealias RemoteSocketFactory = @MainActor (URL) -> RemoteSocket
@@ -87,6 +92,11 @@ public final class URLSessionRemoteSocket: RemoteSocket {
         isClosed = true
         task.cancel(with: .goingAway, reason: nil)
         onClose?(reason)
+    }
+
+    public func send(_ text: String) {
+        guard !isClosed else { return }
+        task.send(.string(text)) { _ in }
     }
 
     public func ping(timeout: TimeInterval) async -> Bool {

@@ -33,8 +33,9 @@ enum RemoteFixtures {
         "{\"id\":\"\(id)\",\"title\":\"Item \(id)\",\"itemType\":\"Item\",\"sequence\":1,\"lengthInSeconds\":300,\"elapsedSeconds\":\(elapsed),\"isRunning\":\(running),\"notes\":{},\"noteIds\":{},\"isDurationActual\":false,\"waypointIds\":[\"w1\"]}"
     }
 
-    static func timerJSON(elapsed: Int, running: Bool) -> String {
-        "{\"item\":\(itemJSON(id: "b", elapsed: elapsed, running: running)),\"index\":1,\"isRunning\":\(running),\"remainingSeconds\":\(300 - elapsed),\"isOvertime\":false,\"formattedRemaining\":\"00:00\",\"isDurationActualForDisplay\":true}"
+    static func timerJSON(elapsed: Int, running: Bool, anchor: String? = nil) -> String {
+        let anchorField = anchor.map { ",\"anchor\":\($0)" } ?? ""
+        return "{\"item\":\(itemJSON(id: "b", elapsed: elapsed, running: running)),\"index\":1,\"isRunning\":\(running),\"remainingSeconds\":\(300 - elapsed),\"isOvertime\":false,\"formattedRemaining\":\"00:00\",\"isDurationActualForDisplay\":true\(anchorField)}"
     }
 
     static func event(_ name: String, _ payload: String) -> String {
@@ -293,6 +294,9 @@ final class FakeSocket: RemoteSocket {
     var didOpen = false
     var didClose = false
     var helloOnOpen: String?
+    var sent: [String] = []
+
+    func send(_ text: String) { sent.append(text) }
 
     func open() {
         didOpen = true

@@ -52,6 +52,15 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
     private var commandTail: Task<Void, Never>?
     private var errorClearTask: Task<Void, Never>?
     private var isUserDisconnected = false
+    private var estimator = ClockOffsetEstimator()
+    private var pendingSync: [String: Int] = [:]
+    private var syncCounter = 0
+    private var syncTask: Task<Void, Never>?
+    private var isCatchingUp = false
+    public private(set) var isProtocolV2 = false
+    var clock: () -> Double = { SyncClock.nowMs() }
+    var syncBurstSpacing: TimeInterval = 0.1
+    var syncInterval: TimeInterval = 30
 
     public var isLive: Bool { connection == .connected }
 
@@ -114,6 +123,7 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
         reconnectTask?.cancel()
         commandTail?.cancel()
         errorClearTask?.cancel()
+        resetSync()
         closeSocket()
         connection = .disconnected
     }
@@ -164,8 +174,12 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
     }
 
     private func handle(_ text: String, generation: Int) {
-        guard let data = text.data(using: .utf8),
-              let head = try? JSONDecoder().decode(EventHead.self, from: data) else { return }
+        guard let data = text.data(using: .utf8) else { return }
+        let receivedAtMs = clock()
+        guard let head = try? JSONDecoder().decode(EventHead.self, from: data) else {
+            handleReply(data, receivedAtMs: receivedAtMs)
+            return
+        }
         let decoder = ControlAPIJSON.decoder
         switch head.event {
         case "hello":
@@ -175,6 +189,10 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
             helloGeneration = generation
             state = tracker.state
             engine.apply(remoteState: event.data)
+            negotiateProtocol()
+        case "digest":
+            guard let event = try? decoder.decode(Event<ControlAPIDigest>.self, from: data) else { return }
+            verify(digest: event.data)
         case "state":
             guard let event = try? decoder.decode(Event<ControlAPIState>.self, from: data),
                   tracker.accept(event.data) else { return }
@@ -190,6 +208,89 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
         }
     }
 
+    private func negotiateProtocol() {
+        resetSync()
+        socket?.send("{\"id\":\"proto\",\"op\":\"proto\",\"body\":{\"version\":2}}")
+    }
+
+    private func handleReply(_ data: Data, receivedAtMs: Double) {
+        guard let head = try? JSONDecoder().decode(ReplyHead.self, from: data), let id = head.id else { return }
+        if id == "proto" {
+            guard head.status == 200 else { return }
+            isProtocolV2 = true
+            startSync()
+        } else if let t0 = pendingSync.removeValue(forKey: id) {
+            guard head.status == 200, let reply = try? JSONDecoder().decode(Reply<ControlAPISyncReply>.self, from: data),
+                  reply.data.t0 == t0 else { return }
+            let sample = ClockSyncSample(t0: Double(t0), t1: Double(reply.data.t1), t2: Double(reply.data.t2), t3: receivedAtMs)
+            if estimator.add(sample) {
+                engine.setRemoteClockOffset(estimator.offsetMs)
+            }
+        }
+    }
+
+    private func startSync() {
+        syncTask?.cancel()
+        syncTask = Task { [weak self] in
+            guard let self else { return }
+            for index in 0..<CueEngine.syncBurstCount {
+                if Task.isCancelled { return }
+                self.sendSyncSample()
+                if index < CueEngine.syncBurstCount - 1 {
+                    try? await Task.sleep(nanoseconds: UInt64(self.syncBurstSpacing * 1_000_000_000))
+                }
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(self.syncInterval * 1_000_000_000))
+                if Task.isCancelled { return }
+                self.sendSyncSample()
+            }
+        }
+    }
+
+    func sendSyncSample() {
+        guard isProtocolV2, let socket else { return }
+        syncCounter += 1
+        let id = "sync-\(syncCounter)"
+        let t0 = Int(clock().rounded())
+        pendingSync[id] = t0
+        if pendingSync.count > 32, let oldest = pendingSync.keys.min(by: { Int($0.dropFirst(5)) ?? 0 < Int($1.dropFirst(5)) ?? 0 }) {
+            pendingSync.removeValue(forKey: oldest)
+        }
+        socket.send("{\"id\":\"\(id)\",\"op\":\"sync\",\"body\":{\"t0\":\(t0)}}")
+    }
+
+    public func resync() {
+        sendSyncSample()
+    }
+
+    private func resetSync() {
+        syncTask?.cancel()
+        syncTask = nil
+        pendingSync = [:]
+        isProtocolV2 = false
+        estimator.reset()
+        engine.setRemoteClockOffset(nil)
+    }
+
+    private func verify(digest: ControlAPIDigest) {
+        guard digest.rev >= tracker.lastRev else { return }
+        guard !engine.mirrorHashes().mismatches(against: digest.hashes).isEmpty else { return }
+        Task { [weak self] in await self?.catchUpFromState() }
+    }
+
+    func catchUpFromState() async {
+        guard !isCatchingUp, isLive, let url = endpoint.url(path: "/v1/state") else { return }
+        isCatchingUp = true
+        defer { isCatchingUp = false }
+        guard let (status, data) = try? await http.perform(method: "GET", url: url, body: nil),
+              (200..<300).contains(status),
+              let snapshot = try? ControlAPIJSON.decoder.decode(ControlAPIState.self, from: data),
+              tracker.accept(snapshot) else { return }
+        state = tracker.state
+        engine.apply(remoteState: snapshot)
+    }
+
     private func socketClosed(_ reason: String) {
         guard !isUserDisconnected else { return }
         guard connection == .connected else {
@@ -202,6 +303,7 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
     private func connectionLost() {
         guard connection == .connected else { return }
         keepaliveTask?.cancel()
+        resetSync()
         closeSocket()
         connection = .reconnecting
         reconnectTask?.cancel()
@@ -290,6 +392,17 @@ public final class RemoteProducerSession: ObservableObject, RemoteProducerComman
 
     private struct EventHead: Decodable {
         let event: String
+    }
+
+    private struct ReplyHead: Decodable {
+        let id: String?
+        let status: Int
+    }
+
+    private struct Reply<Payload: Decodable>: Decodable {
+        let id: String?
+        let status: Int
+        let data: Payload
     }
 
     private struct Event<Payload: Decodable>: Decodable {

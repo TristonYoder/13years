@@ -47,13 +47,36 @@ extension CueEngine {
         if let timer {
             var item = timer.item
             item.isRunning = timer.isRunning
-            assign(\.activeTimerItem, item)
             assign(\.isActiveTimerActualOverride, timer.isDurationActualForDisplay)
             if actualOverrideItemId != item.id { actualOverrideItemId = item.id }
+            if let anchor = timer.anchor, anchor.itemId == item.id {
+                syncV2.held = HeldAnchor(anchor: anchor, item: item)
+                if syncedProducerNowMs != nil {
+                    refreshHeldTimer()
+                } else {
+                    assign(\.activeTimerItem, item)
+                }
+                armDisplayTick()
+            } else {
+                syncV2.held = nil
+                cancelDisplayTick()
+                assign(\.activeTimerItem, item)
+            }
         } else {
+            syncV2.held = nil
+            cancelDisplayTick()
             assign(\.activeTimerItem, nil)
             actualOverrideItemId = nil
         }
+    }
+
+    public func mirrorHashes() -> SyncHash.Hashes {
+        SyncHash.Hashes(
+            roles: SyncHash.roles(roles),
+            timer: SyncHash.timer(syncV2.held?.anchor),
+            plan: SyncHash.plan(items: planItems, activeItemIndex: activeItemIndex),
+            messages: SyncHash.messages(recentMessages)
+        )
     }
 
     private func assign<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<CueEngine, Value>, _ value: Value) {
