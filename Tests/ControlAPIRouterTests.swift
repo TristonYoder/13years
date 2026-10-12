@@ -803,3 +803,22 @@ final class ControlAPIRouterTests: XCTestCase {
         XCTAssertNotNil(reply.error)
     }
 }
+
+@MainActor
+final class ControlAPIServiceTypeClearTests: XCTestCase {
+    func testNullOrEmptyIdClearsServiceTypeSelection() {
+        let engine = CueEngine()
+        engine.pcoSelectedServiceTypeId = "st-1"
+        let router = ControlAPIRouter(engine: engine)
+        let response = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data("{\"id\":null}".utf8)))
+        XCTAssertEqual(response.status, 202)
+        XCTAssertNil(engine.pcoSelectedServiceTypeId)
+
+        engine.pcoSelectedServiceTypeId = "st-2"
+        _ = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data("{\"id\":\"\"}".utf8)))
+        XCTAssertNil(engine.pcoSelectedServiceTypeId)
+
+        let bad = router.handle(HTTPRequest(method: "POST", path: "/v1/pco/service-type", body: Data()))
+        XCTAssertEqual(bad.status, 400)
+    }
+}

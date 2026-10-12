@@ -242,21 +242,30 @@ final class IOSDocumentController: ObservableObject {
 struct DocumentCommands: Commands {
     @ObservedObject var documents: IOSDocumentController
     let engine: CueEngine
+    @ObservedObject var remote: RemoteProducerHub
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("New Document…") { documents.newDocument(engine) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(remote.isRemoteActive)
             Button("New from Template…") { documents.beginImport(template: true) }
+                .disabled(remote.isRemoteActive)
+            Button("Connect To…") { remote.isConnectPresented = true }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .disabled(remote.isRemoteActive)
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save") { documents.save(engine) }
                 .keyboardShortcut("s")
+                .disabled(remote.isRemoteActive)
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(remote.isRemoteActive)
             Button("Revert to Last Save") { documents.isConfirmingRevert = true }
-                .disabled(!documents.canRevert)
+                .disabled(!documents.canRevert || remote.isRemoteActive)
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
+                .disabled(remote.isRemoteActive)
         }
     }
 }

@@ -9,6 +9,7 @@ struct LauncherActions {
     var newFromTemplate: () -> Void
     var open: () -> Void
     var openRecent: (URL) -> Void
+    var connect: () -> Void
 }
 
 struct LauncherView: View {
@@ -42,12 +43,15 @@ struct LauncherView: View {
                     actionCard(title: "Open…", subtitle: "An existing file", systemImage: "folder") {
                         actions.open()
                     }
+                    actionCard(title: "Connect To…", subtitle: "Control another Producer", systemImage: "dot.radiowaves.left.and.right") {
+                        actions.connect()
+                    }
                 }
 
                 recents
             }
             .padding(36)
-            .frame(width: 560)
+            .frame(width: 640)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)

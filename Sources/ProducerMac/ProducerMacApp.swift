@@ -9,6 +9,7 @@ struct ProducerMacApp: App {
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = DocumentController()
     @StateObject private var launchPreferences = LaunchPreferences()
+    @StateObject private var remoteHub = RemoteProducerHub()
     private let flashingWindow = PagerFlashingWindowController()
 
     init() {
@@ -30,7 +31,8 @@ struct ProducerMacApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.newFromTemplate(cueEngine) },
                                 open: { documents.open(cueEngine) },
-                                openRecent: { documents.open($0, in: cueEngine) }
+                                openRecent: { documents.open($0, in: cueEngine) },
+                                connect: { remoteHub.isConnectPresented = true }
                             )
                         )
                             .transition(.opacity)
@@ -38,6 +40,7 @@ struct ProducerMacApp: App {
                 }
                 .animation(.easeInOut(duration: 0.25), value: documents.isLauncherPresented)
                 .splashScreen(isPresented: splash.isPresented)
+                .modifier(ConnectWindowOpener(hub: remoteHub))
                 .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .task {
                     splash.markReady()
@@ -45,7 +48,7 @@ struct ProducerMacApp: App {
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }
+                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet, !RemoteWindowIDs.isAuxiliary(title: window.title) else { return }
                     documents.saveOnClose(cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
@@ -54,36 +57,16 @@ struct ProducerMacApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(after: .newItem) {
-                Button("New Document…") { documents.newDocument(cueEngine) }
-                    .keyboardShortcut("n", modifiers: [.command, .option])
-                Button("New from Template…") { documents.newFromTemplate(cueEngine) }
-                Button("Open…") { documents.open(cueEngine) }
-                    .keyboardShortcut("o")
-                Menu("Open Recent") {
-                    ForEach(documents.recentURLs, id: \.self) { url in
-                        Button(url.lastPathComponent) { documents.open(url, in: cueEngine) }
-                    }
-                    if !documents.recentURLs.isEmpty { Divider() }
-                    Button("Clear Menu") { documents.clearRecents() }
-                        .disabled(documents.recentURLs.isEmpty)
-                }
-            }
-            CommandGroup(replacing: .saveItem) {
-                Button("Save") { documents.save(cueEngine) }
-                    .keyboardShortcut("s")
-                Button("Save As…") { documents.saveAs(cueEngine) }
-                    .keyboardShortcut("s", modifiers: [.command, .shift])
-                Button("Revert to Last Save") { documents.revert(cueEngine) }
-                    .disabled(!documents.canRevert)
-                Button("Save as Template…") { documents.saveAsTemplate(cueEngine) }
-            }
-            CommandGroup(after: .newItem) {
-                Button("Flash a Pager…") {
-                    flashingWindow.present(cueEngine: cueEngine)
-                }
-                .keyboardShortcut("F", modifiers: [.command, .shift])
-            }
+            MacFileCommands(documents: documents, engine: cueEngine, flashingWindow: flashingWindow)
+        }
+
+        Window(RemoteWindowIDs.connectTitle, id: RemoteWindowIDs.connect) {
+            MacConnectWindow(hub: remoteHub)
+        }
+        .windowResizability(.contentSize)
+
+        Window("Remote Producer", id: RemoteWindowIDs.remote) {
+            MacRemoteWindow(hub: remoteHub)
         }
 
         #if os(macOS)
@@ -104,5 +87,18 @@ struct ProducerMacApp: App {
             }
         }
         #endif
+    }
+}
+
+private struct ConnectWindowOpener: ViewModifier {
+    @ObservedObject var hub: RemoteProducerHub
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.onChange(of: hub.isConnectPresented) { _, requested in
+            guard requested else { return }
+            hub.isConnectPresented = false
+            openWindow(id: RemoteWindowIDs.connect)
+        }
     }
 }

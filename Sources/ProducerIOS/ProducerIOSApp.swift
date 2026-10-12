@@ -9,6 +9,7 @@ struct ProducerIOSApp: App {
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = IOSDocumentController()
     @StateObject private var launchPreferences = LaunchPreferences()
+    @StateObject private var remoteHub = RemoteProducerHub()
     @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(ProducerIOSAppDelegate.self) private var appDelegate
 
@@ -30,7 +31,8 @@ struct ProducerIOSApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.beginImport(template: true) },
                                 open: { documents.beginImport(template: false) },
-                                openRecent: { documents.open($0, in: cueEngine) }
+                                openRecent: { documents.open($0, in: cueEngine) },
+                                connect: { remoteHub.isConnectPresented = true }
                             )
                         )
                         .transition(.opacity)
@@ -48,13 +50,33 @@ struct ProducerIOSApp: App {
                 }
                 .onOpenURL { documents.open($0, in: cueEngine) }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
+                    guard !remoteHub.isRemoteActive else { return }
                     documents.beginImport(template: false)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenRecent)) { note in
+                    guard !remoteHub.isRemoteActive else { return }
                     if let url = note.object as? URL { documents.open(url, in: cueEngine) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .producerClearRecents)) { _ in
+                    guard !remoteHub.isRemoteActive else { return }
                     documents.clearRecents()
+                }
+                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.promotePending() }) {
+                    ConnectToView(
+                        onConnected: { session in
+                            remoteHub.pending = session
+                            remoteHub.isConnectPresented = false
+                        },
+                        onCancel: { remoteHub.isConnectPresented = false }
+                    )
+                }
+                .fullScreenCover(isPresented: Binding(
+                    get: { remoteHub.isRemoteActive },
+                    set: { if !$0 { remoteHub.disconnect() } }
+                )) {
+                    if let session = remoteHub.session {
+                        RemoteProducerContainerView(session: session) { remoteHub.disconnect() }
+                    }
                 }
                 .fileImporter(isPresented: $documents.isImporting, allowedContentTypes: documents.importTypes) {
                     documents.handleImport($0.map { [$0] }, into: cueEngine)
@@ -82,6 +104,6 @@ struct ProducerIOSApp: App {
                     #endif
                 }
         }
-        .commands { DocumentCommands(documents: documents, engine: cueEngine) }
+        .commands { DocumentCommands(documents: documents, engine: cueEngine, remote: remoteHub) }
     }
 }
