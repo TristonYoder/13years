@@ -972,3 +972,10 @@ test("layoutFor maps portrait to the framed standard layout", () => {
   assert.equal(core.layoutFor(390, 844, "auto"), "standard");
   assert.equal(core.layoutFor(844, 390, "auto"), "landscape");
 });
+
+test("every element id the page script looks up exists in the markup", () => {
+  const wanted = [...html.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]);
+  const present = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const missing = [...new Set(wanted)].filter((id) => !present.has(id));
+  assert.deepEqual(missing, []);
+});
