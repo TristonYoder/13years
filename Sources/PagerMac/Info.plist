@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.2</string>
+	<string>1.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSBonjourServices</key>
@@ -26,6 +26,6 @@
 		<string>_13years._udp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>13 Years Pager uses the local network to receive real-time standby/go cues from the production control station.</string>
+	<string>13 Years uses the local network to receive real-time standby/go cues from the production control station.</string>
 </dict>
 </plist>

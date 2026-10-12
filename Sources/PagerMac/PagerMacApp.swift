@@ -17,7 +17,7 @@ struct PagerMacApp: App {
         WindowGroup {
             PagerRootView()
                 .environmentObject(cueEngine)
-                .frame(minWidth: 320, minHeight: 240)
+                .frame(minWidth: 240, minHeight: 64)
                 .ignoresSafeArea()
                 .background(EdgelessWindow(keepOnTop: keepOnTop))
                 .onChange(of: scenePhase) { _, phase in

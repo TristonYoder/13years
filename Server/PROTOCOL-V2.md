@@ -188,3 +188,17 @@ The 240 by 320 panel follows the portrait framed layout and the cue display sett
 - Connection notice: the connection state text ("Live — <producer>") is no longer shown on the main pager screens (portrait, landscape, the ESP32 panel). The top-right column holds only the role chooser. The connection state, the producer name and, where available, the clock sync quality appear in the settings screen (the web pager's settings sheet, the Swift pager's settings screen, the ESP32's role picker screen). A lost connection is still always visible on the main screens: the existing "No connection — last update N s ago" strip (web) or equivalent keeps showing, and the extended-disconnect rule below applies.
 - Header icons (Swift and web pagers): the chat button and the settings button are icon-only buttons (chat bubble and gear, accessible names "Messages" and "Settings", at least 44 pt tall) in a row directly BELOW the role chooser in the top-right column. The row is exactly as wide as the role chooser dropdown, and the buttons share that width equally (a single remaining button takes the whole width). There is no footer strip: nothing is reserved at the bottom edge, so the bottom row (cards, message) runs to the bottom of the frame. The icons never move the centre block. In portrait the same rule applies to the top-right column. The lower third keeps its own controls.
 - Extended disconnect: when no packet has arrived from the producer for 20 seconds, every full layout (portrait and landscape) replaces its content with the logo animation: the animated stoplight mark and the text "Waiting for Producer…" on the near-black ground (the same loader the pager shows before it first connects), until the connection returns, when the normal screen comes back. During the first 20 seconds the last known screen stays up, dimmed, with the "No connection" strip.
+
+## Standing message on pagers (v2.3)
+
+Every pager (Swift, web, ESP32) derives the standing message the same way from the message list, newest first:
+
+- It is the newest message that has no `senderRoleId` (a Producer message) and is addressed to the pager's role or to everyone (`targetRoleId` absent). Messages from roles, including the pager's own, never stand.
+- It is cleared when a message sent by the pager's own role (`senderRoleId` equal to its role) is as new as or newer than it. A newer Producer message after that stands again.
+
+Role messages remain in the thread; this rule only decides what a pager screen shows.
+
+## Lower third on Swift pagers (v2.3)
+
+The Swift pager offers the lower third described for the web pager: one strip with the clock (replaced by the cue word while STANDBY or GO), the element name and the countdown with its PROJECTED/ACTUAL tag; a standing message replaces the clock and the title. It is used when the viewer chooses Lower third in settings, or automatically when the window is at least 3:1 wide. Tapping the strip reveals the role chooser, messages and settings for six seconds. Not offered on tvOS.
+
