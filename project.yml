@@ -109,6 +109,7 @@ targets:
         PRODUCT_NAME: "13 Years Pager"
         PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager.mac
         INFOPLIST_FILE: Sources/PagerMac/Info.plist
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PAGER_MAC"
         CODE_SIGN_ENTITLEMENTS: Sources/PagerMac/PagerMac.entitlements
 
   PagerTV:

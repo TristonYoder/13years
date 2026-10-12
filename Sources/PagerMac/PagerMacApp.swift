@@ -20,9 +20,6 @@ struct PagerMacApp: App {
                 .frame(minWidth: 320, minHeight: 240)
                 .ignoresSafeArea()
                 .background(EdgelessWindow(keepOnTop: keepOnTop))
-                .contextMenu {
-                    Toggle("Keep on Top", isOn: $keepOnTop)
-                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { cueEngine.deviceDidBecomeActive() }
                 }

@@ -8,6 +8,9 @@ public struct PagerSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PagerHaptics.strengthDefaultsKey) private var hapticStrength: Double = PagerHaptics.defaultStrength
     @AppStorage(CueDisplayStyle.storageKey) private var cueDisplayRaw: String = CueDisplayStyle.defaultStyle.rawValue
+    #if PAGER_MAC
+    @AppStorage("keepOnTop") private var keepOnTop = false
+    #endif
 
     public init() {}
 
@@ -61,6 +64,16 @@ public struct PagerSettingsView: View {
                 } footer: {
                     Text("Outline frames the screen in the cue colour. Full screen fills the whole screen with it.")
                 }
+
+                #if PAGER_MAC
+                Section {
+                    Toggle("Keep on top", isOn: $keepOnTop)
+                } header: {
+                    Text("Window")
+                } footer: {
+                    Text("Keeps this window above other windows.")
+                }
+                #endif
 
                 Section {
                     LabeledContent("Status") {
