@@ -465,6 +465,7 @@
   }
   html[data-cue="STANDBY"] .fr, html[data-cue="FLASH_STANDBY"] .fr { --cue: var(--cue-standby-bg); }
   html[data-cue="GO"] .fr, html[data-cue="FLASH_GO"] .fr { --cue: var(--cue-go-bg); }
+  html[data-footer="none"] .fr { --foot: 0px; }
   html[data-cuedisplay="full"] .fr {
     --fg: var(--ink);
     --ground: var(--cuefull);
@@ -1370,6 +1371,13 @@ function layoutFor(width, height, param) {
   return height > 0 && width > height ? "landscape" : "standard";
 }
 
+function parseFlagParam(value, fallback) {
+  const text = String(value === null || value === undefined ? "" : value).trim().toLowerCase();
+  if (text === "0" || text === "false" || text === "no") return false;
+  if (text === "1" || text === "true" || text === "yes") return true;
+  return fallback;
+}
+
 function disconnectPhase(live, elapsedMs) {
   if (elapsedMs >= EXTENDED_DISCONNECT_MS) return "extended";
   return live ? "live" : "stale";
@@ -1833,6 +1841,10 @@ const CUE_DISPLAY_KEY = "pagerCueDisplay";
 
 const CUE_PARAM = params.get("cue");
 
+const SHOW_SETTINGS = parseFlagParam(params.get("settings"), true);
+
+const SHOW_MESSAGES = parseFlagParam(params.get("messages"), true);
+
 let snapshot = null;
 let lastLtKey = "";
 let lastMessageMode = null;
@@ -1948,12 +1960,21 @@ function setCueDisplay(value, remember) {
   lastPortraitKey = "";
 }
 
+function applyControlVisibility() {
+  if (!SHOW_SETTINGS) el.openSettings.remove();
+  if (!SHOW_MESSAGES) el.openChat.remove();
+  if (!SHOW_SETTINGS && !SHOW_MESSAGES) {
+    el.footer.remove();
+    root.dataset.footer = "none";
+  }
+}
+
 function placeShared(layout) {
   const landscape = layout === "landscape";
   const home = landscape ? el.lsRoleSlot : el.ptRoleSlot;
   if (el.rolepick.parentNode !== home) home.append(el.rolepick);
   const footerHome = landscape ? el.landscape : el.standard;
-  if (el.footer.parentNode !== footerHome) footerHome.append(el.footer);
+  if (root.dataset.footer !== "none" && el.footer.parentNode !== footerHome) footerHome.append(el.footer);
 }
 
 function applyLayout() {
@@ -2773,6 +2794,8 @@ function disarmClear() {
   clearArmed = null;
   el.clear.textContent = "Clear History";
 }
+
+applyControlVisibility();
 
 el.openChat.addEventListener("click", () => {
   el.chat.classList.remove("hidden");

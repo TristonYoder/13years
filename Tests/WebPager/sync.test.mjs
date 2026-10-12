@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -1079,4 +1079,24 @@ test("footer holds only the two icon buttons with accessible names", () => {
   assert.match(html, /<button id="openSettings"[^>]*aria-label="Settings"/);
   assert.doesNotMatch(html, />Messages<\/button>/);
   assert.doesNotMatch(html, /Live — /);
+});
+
+test("parseFlagParam accepts 0/1/false/true/no/yes and defaults otherwise", () => {
+  for (const v of ["0", "false", "no", "FALSE", " No "]) assert.equal(core.parseFlagParam(v, true), false);
+  for (const v of ["1", "true", "yes", "True"]) assert.equal(core.parseFlagParam(v, false), true);
+  for (const v of [null, undefined, "", "maybe"]) {
+    assert.equal(core.parseFlagParam(v, true), true);
+    assert.equal(core.parseFlagParam(v, false), false);
+  }
+});
+
+test("settings=0 and messages=0 flags reach the page script", () => {
+  const both = loadPage("?settings=0&messages=false", 390, 844);
+  assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", both.context).join(), "false,false");
+  assert.equal(both.context.document.documentElement.dataset.footer, "none");
+  const one = loadPage("?messages=no", 844, 390);
+  assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", one.context).join(), "true,false");
+  assert.notEqual(one.context.document.documentElement.dataset.footer, "none");
+  const def = loadPage("", 390, 844);
+  assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", def.context).join(), "true,true");
 });
