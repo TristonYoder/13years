@@ -15,6 +15,9 @@ bool isDisplayFlipped();
 
 void update(Phase phase, cue::Engine &engine, bool wifiConnected, bool lanConnected);
 
+bool setCueDisplay(const char *name);
+const char *cueDisplayName();
+
 void setBacklight(uint8_t percent);
 
 void runTouchCalibration();

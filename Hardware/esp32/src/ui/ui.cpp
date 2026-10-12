@@ -17,6 +17,8 @@ namespace ui {
 
 static TFT_eSPI tft = TFT_eSPI();
 
+static pagersync::CueDisplay gCueDisplay = pagersync::CueDisplay::Outline;
+
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf[TFT_WIDTH * TFT_HEIGHT / 10];
 static lv_indev_drv_t indev_drv;
@@ -80,6 +82,8 @@ void init() {
   ledcSetup(kBacklightLedcChannel, kBacklightLedcFreqHz, kBacklightLedcResBits);
   ledcAttachPin(TFT_BL, kBacklightLedcChannel);
   setBacklight(100);
+
+  pagersync::parseCueDisplay(store::getCueDisplay().c_str(), gCueDisplay);
 
   Serial.println("[ui] LVGL + TFT_eSPI + touch initialized");
 }
@@ -173,52 +177,129 @@ static void showWaitingForDataScreen(bool wifiConnected) {
   showBrandedMessageScreen(msg);
 }
 
-static lv_obj_t *pagerScreen = nullptr;
+static constexpr lv_coord_t kScreenW = 240;
+static constexpr lv_coord_t kScreenH = 320;
+static constexpr lv_coord_t kBorder = 7;
+static constexpr lv_coord_t kMargin = 13;
+static constexpr lv_coord_t kContentW = kScreenW - 2 * kMargin;
+static constexpr lv_coord_t kCardPad = 6;
+static constexpr lv_coord_t kInnerW = kContentW - 2 * kCardPad;
+static constexpr lv_coord_t kTopY = 11;
+static constexpr lv_coord_t kTopH = 44;
+static constexpr lv_coord_t kRightColW = 100;
+static constexpr lv_coord_t kStackBottom = 13;
+static constexpr lv_coord_t kGap = 6;
+static constexpr lv_coord_t kDividerGap = 5;
+static constexpr uint32_t kGroundHex = 0x111114;
+static constexpr uint32_t kNeutralFrameHex = 0x24242A;
+static constexpr uint32_t kInkHex = 0xF2F2F5;
+static constexpr uint32_t kMessageHex = 0xFFD400;
+static constexpr int kMessageMaxLines = 3;
+
+static lv_obj_t *pagerScreen = nullptr, *groundBox = nullptr;
+static lv_obj_t *clockLabel = nullptr, *clockCaption = nullptr;
+static lv_obj_t *cuePill = nullptr, *cueLabel = nullptr;
 static lv_obj_t *roleBtn = nullptr, *roleBtnLabel = nullptr, *roleBtnChevron = nullptr;
 static lv_obj_t *connRow = nullptr, *connDot = nullptr, *connLabel = nullptr;
-static lv_obj_t *stateLabel = nullptr;
-static lv_obj_t *personLabel = nullptr;
 static lv_obj_t *itemCard = nullptr, *itemTitleLabel = nullptr, *timerLabel = nullptr, *projActualLabel = nullptr;
-static lv_obj_t *nextCard = nullptr, *nextCaption = nullptr, *nextTitleLabel = nullptr, *nextNoteLabel = nullptr;
-static lv_obj_t *noteLabel = nullptr;
-static lv_obj_t *msgBanner = nullptr, *msgBannerIcon = nullptr, *msgBannerLabel = nullptr;
+static lv_obj_t *itemDivider = nullptr, *itemDividerLine = nullptr, *itemNotes = nullptr;
+static lv_obj_t *bottomStack = nullptr;
+static lv_obj_t *nextCard = nullptr, *nextRow = nullptr, *nextTitleLabel = nullptr, *nextLenLabel = nullptr, *nextNote = nullptr;
+static lv_obj_t *msgPanel = nullptr, *msgLabel = nullptr;
+
+static const lv_font_t *clockFont = &inter_bold_18;
+static const lv_font_t *cueFont = &inter_bold_18;
+static lv_coord_t clockSlotW = 0;
 
 static bool showingRolePicker = false;
 static bool rolePickerNeedsBuild = true;
 static cue::Engine *gEngine = nullptr;
+static String dismissedMsgId;
 
 static void onRoleBtnClicked(lv_event_t *e) {
   showingRolePicker = true;
   rolePickerNeedsBuild = true;
 }
 
+static void onMsgPanelClicked(lv_event_t *e) {
+  const cue::MessageView *m = gEngine ? gEngine->latestRelevantMessageRef() : nullptr;
+  if (m) dismissedMsgId = m->id;
+}
+
+static lv_coord_t textWidth(const lv_font_t *font, const char *text) {
+  lv_point_t size;
+  lv_txt_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  return size.x;
+}
+
+static void styleCard(lv_obj_t *card, lv_coord_t radius) {
+  lv_obj_remove_style_all(card);
+  lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(card, radius, 0);
+  lv_obj_set_style_pad_all(card, kCardPad, 0);
+  lv_obj_set_style_pad_row(card, 2, 0);
+  lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_width(card, kContentW);
+  lv_obj_set_height(card, LV_SIZE_CONTENT);
+}
+
+static lv_obj_t *makeNoteGroup(lv_obj_t *parent) {
+  lv_obj_t *sg = lv_spangroup_create(parent);
+  lv_spangroup_set_mode(sg, LV_SPAN_MODE_FIXED);
+  lv_spangroup_set_overflow(sg, LV_SPAN_OVERFLOW_ELLIPSIS);
+  lv_obj_set_size(sg, kInnerW, 0);
+  return sg;
+}
+
 static void buildPagerScreen() {
   pagerScreen = lv_obj_create(NULL);
   lv_obj_set_style_bg_opa(pagerScreen, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(pagerScreen, 0, 0);
   lv_obj_clear_flag(pagerScreen, LV_OBJ_FLAG_SCROLLABLE);
 
-  roleBtn = lv_obj_create(pagerScreen);
-  lv_obj_remove_style_all(roleBtn);
-  lv_obj_set_size(roleBtn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(roleBtn, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(roleBtn, LV_OPA_30, 0);
-  lv_obj_set_style_radius(roleBtn, 8, 0);
-  lv_obj_set_style_pad_hor(roleBtn, 10, 0);
-  lv_obj_set_style_pad_ver(roleBtn, 5, 0);
-  lv_obj_set_style_pad_column(roleBtn, 5, 0);
-  lv_obj_set_flex_flow(roleBtn, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(roleBtn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_add_flag(roleBtn, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_clear_flag(roleBtn, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(roleBtn, LV_ALIGN_TOP_LEFT, 6, 6);
-  lv_obj_add_event_cb(roleBtn, onRoleBtnClicked, LV_EVENT_CLICKED, nullptr);
+  groundBox = lv_obj_create(pagerScreen);
+  lv_obj_remove_style_all(groundBox);
+  lv_obj_set_size(groundBox, kScreenW - 2 * kBorder, kScreenH - 2 * kBorder);
+  lv_obj_set_pos(groundBox, kBorder, kBorder);
+  lv_obj_set_style_radius(groundBox, 14, 0);
+  lv_obj_set_style_bg_opa(groundBox, LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_color(groundBox, lv_color_hex(kGroundHex), 0);
+  lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_CLICKABLE);
 
-  roleBtnLabel = lv_label_create(roleBtn);
-  lv_obj_set_style_text_font(roleBtnLabel, &inter_bold_14, 0);
-  lv_label_set_text(roleBtnLabel, "Role");
+  clockSlotW = kContentW - kRightColW - 4;
+  if (textWidth(&inter_bold_18, "10:08:08 PM") > clockSlotW) clockFont = &inter_bold_14;
+  if (textWidth(&inter_black_32, "STANDBY") + 16 <= clockSlotW) cueFont = &inter_black_32;
+  lv_coord_t cueW = textWidth(cueFont, "STANDBY") + 20;
+  if (cueW > clockSlotW) cueW = clockSlotW;
+  lv_coord_t cueH = lv_font_get_line_height(cueFont) + 6;
 
-  roleBtnChevron = lv_img_create(roleBtn);
-  lv_img_set_src(roleBtnChevron, &chevron_down);
+  clockLabel = lv_label_create(pagerScreen);
+  lv_obj_set_style_text_font(clockLabel, clockFont, 0);
+  lv_label_set_long_mode(clockLabel, LV_LABEL_LONG_CLIP);
+  lv_obj_set_width(clockLabel, clockSlotW);
+  lv_obj_set_pos(clockLabel, kMargin, kTopY);
+
+  clockCaption = lv_label_create(pagerScreen);
+  lv_obj_set_style_text_font(clockCaption, &inter_regular_14, 0);
+  lv_obj_set_style_text_letter_space(clockCaption, 1, 0);
+  lv_obj_set_style_text_opa(clockCaption, LV_OPA_70, 0);
+  lv_obj_set_pos(clockCaption, kMargin, kTopY + lv_font_get_line_height(clockFont) + 1);
+
+  cuePill = lv_obj_create(pagerScreen);
+  lv_obj_remove_style_all(cuePill);
+  lv_obj_set_size(cuePill, cueW, cueH);
+  lv_obj_set_pos(cuePill, kMargin, kTopY + (kTopH - cueH) / 2);
+  lv_obj_set_style_radius(cuePill, 10, 0);
+  lv_obj_clear_flag(cuePill, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(cuePill, LV_OBJ_FLAG_CLICKABLE);
+
+  cueLabel = lv_label_create(cuePill);
+  lv_obj_set_style_text_font(cueLabel, cueFont, 0);
+  lv_obj_set_style_text_color(cueLabel, lv_color_hex(kGroundHex), 0);
+  lv_obj_center(cueLabel);
 
   connRow = lv_obj_create(pagerScreen);
   lv_obj_remove_style_all(connRow);
@@ -227,7 +308,7 @@ static void buildPagerScreen() {
   lv_obj_set_flex_flow(connRow, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(connRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_clear_flag(connRow, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(connRow, LV_ALIGN_TOP_RIGHT, -6, 10);
+  lv_obj_align(connRow, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY);
 
   connDot = lv_obj_create(connRow);
   lv_obj_remove_style_all(connDot);
@@ -237,109 +318,123 @@ static void buildPagerScreen() {
   lv_obj_clear_flag(connDot, LV_OBJ_FLAG_SCROLLABLE);
 
   connLabel = lv_label_create(connRow);
-  lv_obj_set_style_text_font(connLabel, &inter_bold_14, 0);
+  lv_obj_set_style_text_font(connLabel, &inter_regular_14, 0);
 
-  stateLabel = lv_label_create(pagerScreen);
-  lv_obj_set_style_text_font(stateLabel, &inter_black_32, 0);
-  lv_obj_align(stateLabel, LV_ALIGN_TOP_MID, 0, 42);
+  roleBtn = lv_obj_create(pagerScreen);
+  lv_obj_remove_style_all(roleBtn);
+  lv_obj_set_size(roleBtn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(roleBtn, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(roleBtn, 8, 0);
+  lv_obj_set_style_pad_hor(roleBtn, 8, 0);
+  lv_obj_set_style_pad_ver(roleBtn, 5, 0);
+  lv_obj_set_style_pad_column(roleBtn, 4, 0);
+  lv_obj_set_flex_flow(roleBtn, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(roleBtn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_add_flag(roleBtn, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(roleBtn, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_align(roleBtn, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY + 20);
+  lv_obj_add_event_cb(roleBtn, onRoleBtnClicked, LV_EVENT_CLICKED, nullptr);
 
-  personLabel = lv_label_create(pagerScreen);
-  lv_obj_set_style_text_font(personLabel, &inter_bold_14, 0);
-  lv_obj_align(personLabel, LV_ALIGN_TOP_MID, 0, 84);
+  roleBtnLabel = lv_label_create(roleBtn);
+  lv_obj_set_style_text_font(roleBtnLabel, &inter_bold_14, 0);
+  lv_label_set_long_mode(roleBtnLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(roleBtnLabel, kRightColW - 8 - 8 - 4 - 14 - 4);
+  lv_label_set_text(roleBtnLabel, "Role");
+
+  roleBtnChevron = lv_img_create(roleBtn);
+  lv_img_set_src(roleBtnChevron, &chevron_down);
 
   itemCard = lv_obj_create(pagerScreen);
-  lv_obj_set_style_bg_color(itemCard, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(itemCard, LV_OPA_30, 0);
-  lv_obj_set_style_radius(itemCard, 12, 0);
-  lv_obj_set_style_border_width(itemCard, 0, 0);
-  lv_obj_set_style_pad_all(itemCard, 4, 0);
-  lv_obj_clear_flag(itemCard, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_size(itemCard, 220, 92);
-  lv_obj_align(itemCard, LV_ALIGN_TOP_MID, 0, 104);
+  styleCard(itemCard, 12);
 
   itemTitleLabel = lv_label_create(itemCard);
   lv_obj_set_style_text_font(itemTitleLabel, &inter_bold_14, 0);
   lv_label_set_long_mode(itemTitleLabel, LV_LABEL_LONG_DOT);
-  lv_obj_set_width(itemTitleLabel, 208);
+  lv_obj_set_width(itemTitleLabel, kInnerW);
   lv_obj_set_style_text_align(itemTitleLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(itemTitleLabel, LV_ALIGN_TOP_MID, 0, 2);
 
   timerLabel = lv_label_create(itemCard);
   lv_obj_set_style_text_font(timerLabel, &inter_black_32, 0);
-  lv_obj_align(timerLabel, LV_ALIGN_CENTER, 0, 6);
 
   projActualLabel = lv_label_create(itemCard);
-  lv_obj_set_style_text_font(projActualLabel, &inter_bold_14, 0);
-  lv_obj_align(projActualLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
+  lv_obj_set_style_text_font(projActualLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_letter_space(projActualLabel, 1, 0);
+  lv_obj_set_style_text_opa(projActualLabel, LV_OPA_70, 0);
 
-  nextCard = lv_obj_create(pagerScreen);
-  lv_obj_set_style_bg_color(nextCard, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(nextCard, LV_OPA_20, 0);
-  lv_obj_set_style_radius(nextCard, 10, 0);
-  lv_obj_set_style_border_width(nextCard, 0, 0);
-  lv_obj_set_style_pad_all(nextCard, 4, 0);
-  lv_obj_clear_flag(nextCard, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_size(nextCard, 220, 44);
-  lv_obj_align(nextCard, LV_ALIGN_TOP_MID, 0, 200);
+  itemDivider = lv_obj_create(itemCard);
+  lv_obj_remove_style_all(itemDivider);
+  lv_obj_set_size(itemDivider, kInnerW, 2 * kDividerGap + 1);
+  lv_obj_clear_flag(itemDivider, LV_OBJ_FLAG_SCROLLABLE);
 
-  nextCaption = lv_label_create(nextCard);
-  lv_obj_set_style_text_font(nextCaption, &inter_regular_14, 0);
-  lv_obj_set_style_text_opa(nextCaption, LV_OPA_70, 0);
-  lv_label_set_text(nextCaption, "NEXT");
-  lv_obj_align(nextCaption, LV_ALIGN_TOP_LEFT, 2, 0);
+  itemDividerLine = lv_obj_create(itemDivider);
+  lv_obj_remove_style_all(itemDividerLine);
+  lv_obj_set_size(itemDividerLine, kInnerW, 1);
+  lv_obj_set_style_bg_opa(itemDividerLine, LV_OPA_30, 0);
+  lv_obj_center(itemDividerLine);
 
-  nextTitleLabel = lv_label_create(nextCard);
+  itemNotes = makeNoteGroup(itemCard);
+
+  bottomStack = lv_obj_create(pagerScreen);
+  lv_obj_remove_style_all(bottomStack);
+  lv_obj_set_size(bottomStack, kContentW, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(bottomStack, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(bottomStack, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_row(bottomStack, kGap, 0);
+  lv_obj_clear_flag(bottomStack, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(bottomStack, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_align(bottomStack, LV_ALIGN_BOTTOM_MID, 0, -kStackBottom);
+
+  nextCard = lv_obj_create(bottomStack);
+  styleCard(nextCard, 10);
+  lv_obj_set_style_pad_row(nextCard, 1, 0);
+
+  nextRow = lv_obj_create(nextCard);
+  lv_obj_remove_style_all(nextRow);
+  lv_obj_set_size(nextRow, kInnerW, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(nextRow, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(nextRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(nextRow, LV_OBJ_FLAG_SCROLLABLE);
+
+  nextLenLabel = lv_label_create(nextRow);
+  lv_obj_set_style_text_font(nextLenLabel, &inter_bold_14, 0);
+  lv_label_set_text(nextLenLabel, "0:00:00");
+  lv_coord_t lenW = textWidth(&inter_bold_14, "0:00:00");
+  lv_obj_set_width(nextLenLabel, lenW);
+  lv_obj_set_style_text_align(nextLenLabel, LV_TEXT_ALIGN_RIGHT, 0);
+
+  nextTitleLabel = lv_label_create(nextRow);
   lv_obj_set_style_text_font(nextTitleLabel, &inter_bold_14, 0);
   lv_label_set_long_mode(nextTitleLabel, LV_LABEL_LONG_DOT);
-  lv_obj_set_width(nextTitleLabel, 160);
-  lv_obj_align(nextTitleLabel, LV_ALIGN_TOP_LEFT, 46, 0);
+  lv_obj_set_width(nextTitleLabel, kInnerW - lenW - 6);
+  lv_obj_move_to_index(nextTitleLabel, 0);
 
-  nextNoteLabel = lv_label_create(nextCard);
-  lv_obj_set_style_text_font(nextNoteLabel, &inter_regular_14, 0);
-  lv_label_set_long_mode(nextNoteLabel, LV_LABEL_LONG_DOT);
-  lv_obj_set_width(nextNoteLabel, 208);
-  lv_obj_align(nextNoteLabel, LV_ALIGN_TOP_LEFT, 2, 19);
+  nextNote = makeNoteGroup(nextCard);
 
-  noteLabel = lv_label_create(pagerScreen);
-  lv_obj_set_style_text_font(noteLabel, &inter_bold_14, 0);
-  lv_label_set_long_mode(noteLabel, LV_LABEL_LONG_DOT);
-  lv_obj_set_size(noteLabel, 220, 34);
-  lv_obj_set_style_text_align(noteLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(noteLabel, LV_ALIGN_TOP_MID, 0, 247);
+  msgPanel = lv_obj_create(bottomStack);
+  lv_obj_remove_style_all(msgPanel);
+  lv_obj_set_size(msgPanel, kContentW, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_color(msgPanel, lv_color_hex(kMessageHex), 0);
+  lv_obj_set_style_bg_opa(msgPanel, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(msgPanel, 10, 0);
+  lv_obj_set_style_pad_all(msgPanel, 8, 0);
+  lv_obj_clear_flag(msgPanel, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(msgPanel, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(msgPanel, onMsgPanelClicked, LV_EVENT_CLICKED, nullptr);
 
-  msgBanner = lv_obj_create(pagerScreen);
-  lv_obj_set_style_bg_color(msgBanner, lv_color_hex(0xFFD400), 0);
-  lv_obj_set_style_bg_opa(msgBanner, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(msgBanner, 8, 0);
-  lv_obj_set_style_border_width(msgBanner, 0, 0);
-  lv_obj_set_style_pad_all(msgBanner, 4, 0);
-  lv_obj_set_style_pad_column(msgBanner, 8, 0);
-  lv_obj_set_flex_flow(msgBanner, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(msgBanner, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(msgBanner, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_size(msgBanner, 220, 32);
-  lv_obj_align(msgBanner, LV_ALIGN_BOTTOM_MID, 0, -4);
-
-  msgBannerIcon = lv_img_create(msgBanner);
-  lv_img_set_src(msgBannerIcon, &message_square_text);
-  lv_obj_set_style_img_recolor(msgBannerIcon, lv_color_black(), 0);
-  lv_obj_set_style_img_recolor_opa(msgBannerIcon, LV_OPA_COVER, 0);
-
-  msgBannerLabel = lv_label_create(msgBanner);
-  lv_obj_set_style_text_font(msgBannerLabel, &inter_bold_14, 0);
-  lv_obj_set_style_text_color(msgBannerLabel, lv_color_black(), 0);
-  lv_label_set_long_mode(msgBannerLabel, LV_LABEL_LONG_DOT);
-  lv_obj_set_flex_grow(msgBannerLabel, 1);
-  lv_obj_set_style_text_align(msgBannerLabel, LV_TEXT_ALIGN_CENTER, 0);
+  msgLabel = lv_label_create(msgPanel);
+  lv_obj_set_style_text_color(msgLabel, lv_color_hex(kGroundHex), 0);
+  lv_label_set_long_mode(msgLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(msgLabel, kContentW - 16);
 }
 
 struct PagerCache {
   bool valid = false;
   CueState state = CueState::Off;
+  pagersync::CueDisplay display = pagersync::CueDisplay::Outline;
   int link = -1;
   String role;
-  bool personShown = false;
-  String person;
+  String clockText;
+  int clockUtc = -1;
   bool timerShown = false;
   bool timerHeader = false;
   String title;
@@ -347,34 +442,71 @@ struct PagerCache {
   bool remainingValid = false;
   bool actual = false;
   bool actualValid = false;
-  bool noteShown = false;
-  String note;
+  String notesSig = "\1";
   bool nextShown = false;
-  String nextTitle;
-  String nextNote;
+  String nextTitle = "\1";
+  int nextLen = -1;
+  String nextNoteSig = "\1";
   bool msgShown = false;
   String msgId;
   String msgText;
+  bool layoutDirty = true;
 };
 
 static PagerCache pc;
 
-static void applyStateColors(CueState state) {
-  lv_obj_set_style_bg_color(pagerScreen, lv_color_hex(cueStateBgColor(state)), 0);
-  lv_color_t textColor = lv_color_hex(cueStateTextColor(state));
-  lv_obj_set_style_text_color(roleBtnLabel, textColor, 0);
-  lv_obj_set_style_text_color(connLabel, textColor, 0);
-  lv_obj_set_style_text_color(stateLabel, textColor, 0);
-  lv_obj_set_style_text_color(personLabel, textColor, 0);
-  lv_obj_set_style_text_color(itemTitleLabel, textColor, 0);
-  lv_obj_set_style_text_color(timerLabel, textColor, 0);
-  lv_obj_set_style_text_color(projActualLabel, textColor, 0);
-  lv_obj_set_style_text_color(noteLabel, textColor, 0);
-  lv_obj_set_style_text_color(nextCaption, textColor, 0);
-  lv_obj_set_style_text_color(nextTitleLabel, textColor, 0);
-  lv_obj_set_style_text_color(nextNoteLabel, textColor, 0);
-  lv_obj_set_style_img_recolor(roleBtnChevron, textColor, 0);
+static void updateCueToggleLabel();
+
+static lv_obj_t *cueToggleLabel = nullptr;
+
+static void applyTheme(CueState state, pagersync::CueDisplay display) {
+  bool cue = state != CueState::Off;
+  bool full = display == pagersync::CueDisplay::Fullscreen;
+  lv_color_t cueColor = lv_color_hex(cueStateBgColor(state));
+  lv_color_t ground = lv_color_hex(kGroundHex);
+  lv_color_t ink = (full && cue) ? ground : lv_color_hex(kInkHex);
+
+  lv_color_t screenBg = cue ? cueColor : (full ? ground : lv_color_hex(kNeutralFrameHex));
+  lv_obj_set_style_bg_color(pagerScreen, screenBg, 0);
+  if (full) lv_obj_add_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
+  else lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
+
+  lv_color_t cardColor = full ? lv_color_black() : lv_color_white();
+  lv_opa_t cardOpa = full ? 71 : LV_OPA_10;
+  lv_obj_t *cards[] = {itemCard, nextCard, roleBtn};
+  for (lv_obj_t *c : cards) {
+    lv_obj_set_style_bg_color(c, cardColor, 0);
+    lv_obj_set_style_bg_opa(c, cardOpa, 0);
+  }
+  lv_obj_set_style_bg_color(msgPanel, lv_color_hex(kMessageHex), 0);
+  lv_obj_set_style_border_width(msgPanel, full && cue ? 2 : 0, 0);
+  lv_obj_set_style_border_color(msgPanel, ground, 0);
+
+  lv_obj_set_style_bg_color(cuePill, cueColor, 0);
+  lv_obj_set_style_bg_opa(cuePill, (cue && !full) ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+  lv_label_set_text(cueLabel, cueStateDisplayName(state));
+  lv_obj_center(cueLabel);
+
+  lv_obj_t *labels[] = {clockLabel, clockCaption, connLabel, roleBtnLabel, itemTitleLabel, timerLabel,
+                        projActualLabel, nextTitleLabel, nextLenLabel};
+  for (lv_obj_t *l : labels) lv_obj_set_style_text_color(l, ink, 0);
+  lv_obj_set_style_bg_color(itemDividerLine, ink, 0);
+  lv_obj_set_style_img_recolor(roleBtnChevron, ink, 0);
   lv_obj_set_style_img_recolor_opa(roleBtnChevron, LV_OPA_COVER, 0);
+
+  if (cue) {
+    lv_obj_add_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(clockCaption, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(cuePill, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_clear_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(clockCaption, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(cuePill, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  pc.notesSig = "\1";
+  pc.nextNoteSig = "\1";
+  pc.layoutDirty = true;
 }
 
 static void setHidden(lv_obj_t *obj, bool hidden) {
@@ -382,14 +514,73 @@ static void setHidden(lv_obj_t *obj, bool hidden) {
   else lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
 }
 
+static void clearSpans(lv_obj_t *sg) {
+  while (lv_spangroup_get_child_cnt(sg) > 0) lv_spangroup_del_span(sg, lv_spangroup_get_child(sg, 0));
+}
+
+static void addNoteSpans(lv_obj_t *sg, const char *category, const char *text, bool newline, lv_color_t color) {
+  String head = String(category) + ": ";
+  lv_span_t *a = lv_spangroup_new_span(sg);
+  lv_span_set_text(a, head.c_str());
+  lv_style_set_text_font(&a->style, &inter_bold_14);
+  lv_style_set_text_color(&a->style, color);
+  String body = String(text);
+  if (newline) body += "\n";
+  lv_span_t *b = lv_spangroup_new_span(sg);
+  lv_span_set_text(b, body.c_str());
+  lv_style_set_text_font(&b->style, &inter_regular_14);
+  lv_style_set_text_color(&b->style, color);
+}
+
+static lv_color_t currentInk() {
+  bool cue = pc.state != CueState::Off;
+  bool full = pc.display == pagersync::CueDisplay::Fullscreen;
+  return (full && cue) ? lv_color_hex(kGroundHex) : lv_color_hex(kInkHex);
+}
+
+static void relayoutPager(bool timerShown, bool header, bool stackShown) {
+  setHidden(bottomStack, !stackShown);
+  lv_obj_update_layout(pagerScreen);
+
+  lv_coord_t availTop = kTopY + kTopH + 4;
+  lv_coord_t stackTop = stackShown ? lv_obj_get_y(bottomStack) : kScreenH - kStackBottom;
+  lv_coord_t availH = stackTop - kGap - availTop;
+
+  if (!timerShown) return;
+
+  bool haveNotes = !header && lv_spangroup_get_child_cnt(itemNotes) > 0;
+  setHidden(itemDivider, true);
+  setHidden(itemNotes, true);
+  lv_obj_update_layout(pagerScreen);
+  lv_coord_t baseH = lv_obj_get_height(itemCard);
+
+  if (haveNotes) {
+    lv_coord_t lh = lv_font_get_line_height(&inter_regular_14);
+    lv_coord_t need = lv_spangroup_get_expand_height(itemNotes, kInnerW);
+    lv_coord_t room = availH - baseH - (2 * kDividerGap + 1) - 4;
+    lv_coord_t fit = (room / lh) * lh;
+    lv_coord_t h = need < fit ? need : fit;
+    if (h >= lh) {
+      lv_obj_set_height(itemNotes, h);
+      setHidden(itemDivider, false);
+      setHidden(itemNotes, false);
+    }
+  }
+
+  lv_obj_update_layout(pagerScreen);
+  lv_coord_t cardH = lv_obj_get_height(itemCard);
+  lv_coord_t y = availTop + (availH > cardH ? (availH - cardH) / 2 : 0);
+  lv_obj_set_pos(itemCard, kMargin, y);
+}
+
 static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lanConnected) {
   const cue::RoleView *role = engine.activeRoleRef();
   CueState state = role ? role->state : CueState::Off;
 
-  if (!pc.valid || state != pc.state) {
-    applyStateColors(state);
-    lv_label_set_text(stateLabel, cueStateDisplayName(state));
+  if (!pc.valid || state != pc.state || gCueDisplay != pc.display) {
     pc.state = state;
+    pc.display = gCueDisplay;
+    applyTheme(state, gCueDisplay);
   }
 
   const String &roleLabelText = (role && role->name.length() > 0) ? role->name : engine.selectedRoleIdRef();
@@ -406,16 +597,21 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
     lv_label_set_text(connLabel, link == 0 ? "No WiFi" : link == 1 ? "Connecting..." : link == 2 ? "Live" : "Disconnected");
   }
 
-  bool personShown = role && role->personName.length() > 0;
-  if (!pc.valid || personShown != pc.personShown || (personShown && !pc.person.equals(role->personName.c_str()))) {
-    pc.personShown = personShown;
-    if (personShown) {
-      pc.person = role->personName;
-      String forLine = "FOR: " + role->personName;
-      forLine.toUpperCase();
-      lv_label_set_text(personLabel, forLine.c_str());
-    }
-    setHidden(personLabel, !personShown);
+  int64_t wallMs = 0;
+  char clockBuf[24];
+  if (engine.wallClockMs(wallMs)) {
+    pagersync::formatTimeOfDay(wallMs, engine.utcOffsetSeconds(), clockBuf, sizeof(clockBuf));
+  } else {
+    snprintf(clockBuf, sizeof(clockBuf), "--:--:--");
+  }
+  if (!pc.valid || !pc.clockText.equals(clockBuf)) {
+    pc.clockText = clockBuf;
+    lv_label_set_text(clockLabel, clockBuf);
+  }
+  int utc = engine.hasUtcOffset() ? 0 : 1;
+  if (!pc.valid || utc != pc.clockUtc) {
+    pc.clockUtc = utc;
+    lv_label_set_text(clockCaption, utc ? "UTC" : "LOCAL TIME");
   }
 
   bool timerShown = engine.timerFound();
@@ -425,6 +621,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
     pc.timerShown = timerShown;
     setHidden(itemCard, !timerShown);
     pc.remainingValid = false;
+    pc.layoutDirty = true;
   }
   if (timerShown) {
     const String &titleSrc = engine.timerTitle();
@@ -439,6 +636,8 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
       setHidden(timerLabel, header);
       setHidden(projActualLabel, header);
       pc.remainingValid = false;
+      pc.notesSig = "\1";
+      pc.layoutDirty = true;
     }
     if (!header) {
       int remaining = engine.timerRemainingSeconds();
@@ -456,26 +655,40 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
         lv_label_set_text(projActualLabel, actual ? "ACTUAL" : "PROJECTED");
       }
     }
-  }
 
-  const char *note = engine.currentNoteText();
-  bool noteShown = note[0] != '\0';
-  if (!pc.valid || noteShown != pc.noteShown || (noteShown && !pc.note.equals(note))) {
-    pc.noteShown = noteShown;
-    if (noteShown) {
-      pc.note = note;
-      lv_label_set_text(noteLabel, note);
+    String sig;
+    int noteCount = header ? 0 : engine.roleNoteCount();
+    for (int i = 0; i < noteCount; i++) {
+      const char *cat = "";
+      const char *txt = "";
+      if (!engine.roleNoteAt(i, cat, txt)) break;
+      sig += cat;
+      sig += '\x1F';
+      sig += txt;
+      sig += '\x1E';
     }
-    setHidden(noteLabel, !noteShown);
+    if (!pc.notesSig.equals(sig.c_str())) {
+      pc.notesSig = sig;
+      clearSpans(itemNotes);
+      lv_color_t ink = currentInk();
+      for (int i = 0; i < noteCount; i++) {
+        const char *cat = "";
+        const char *txt = "";
+        if (!engine.roleNoteAt(i, cat, txt)) break;
+        addNoteSpans(itemNotes, cat, txt, i < noteCount - 1, ink);
+      }
+      pc.layoutDirty = true;
+    }
   }
 
   bool nextShown = timerShown && engine.nextFound();
   if (!pc.valid || nextShown != pc.nextShown) {
     pc.nextShown = nextShown;
     setHidden(nextCard, !nextShown);
-    pc.nextTitle = "";
-    pc.nextTitle.concat('\1');
-    pc.nextNote = pc.nextTitle;
+    pc.nextTitle = "\1";
+    pc.nextLen = -1;
+    pc.nextNoteSig = "\1";
+    pc.layoutDirty = true;
   }
   if (nextShown) {
     const char *nextTitleSrc = engine.nextTitle();
@@ -485,27 +698,75 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
       upper.toUpperCase();
       lv_label_set_text(nextTitleLabel, upper.c_str());
     }
-    const char *nextNoteSrc = engine.nextNoteText();
-    if (!pc.nextNote.equals(nextNoteSrc)) {
-      pc.nextNote = nextNoteSrc;
-      lv_label_set_text(nextNoteLabel, nextNoteSrc);
+    int nextLen = engine.nextLengthSeconds();
+    if (nextLen != pc.nextLen) {
+      pc.nextLen = nextLen;
+      char lenBuf[16];
+      pagersync::formatLength(nextLen, lenBuf, sizeof(lenBuf));
+      lv_label_set_text(nextLenLabel, lenBuf);
+    }
+    const char *nCat = "";
+    const char *nTxt = "";
+    bool haveNextNote = engine.nextFirstNote(nCat, nTxt);
+    String nsig = haveNextNote ? (String(nCat) + '\x1F' + nTxt) : String("");
+    if (!pc.nextNoteSig.equals(nsig.c_str())) {
+      pc.nextNoteSig = nsig;
+      clearSpans(nextNote);
+      if (haveNextNote) {
+        addNoteSpans(nextNote, nCat, nTxt, false, currentInk());
+        lv_obj_set_height(nextNote, lv_font_get_line_height(&inter_regular_14));
+      }
+      setHidden(nextNote, !haveNextNote);
+      pc.layoutDirty = true;
     }
   }
 
   const cue::MessageView *msg = engine.latestRelevantMessageRef();
-  bool msgShown = msg != nullptr;
+  bool msgShown = msg != nullptr && !dismissedMsgId.equals(msg->id.c_str());
   if (!pc.valid || msgShown != pc.msgShown ||
       (msgShown && (!pc.msgId.equals(msg->id.c_str()) || !pc.msgText.equals(msg->text.c_str())))) {
     pc.msgShown = msgShown;
     if (msgShown) {
       pc.msgId = msg->id;
       pc.msgText = msg->text;
-      lv_label_set_text(msgBannerLabel, msg->text.c_str());
+      const lv_font_t *fonts[] = {&inter_bold_18, &inter_bold_14};
+      const lv_font_t *chosen = fonts[1];
+      lv_point_t size = {0, 0};
+      for (const lv_font_t *f : fonts) {
+        chosen = f;
+        lv_txt_get_size(&size, msg->text.c_str(), f, 0, 0, kContentW - 16, LV_TEXT_FLAG_NONE);
+        if (size.y <= kMessageMaxLines * lv_font_get_line_height(f)) break;
+      }
+      lv_coord_t maxH = kMessageMaxLines * lv_font_get_line_height(chosen);
+      lv_obj_set_style_text_font(msgLabel, chosen, 0);
+      lv_obj_set_height(msgLabel, size.y < maxH ? size.y : maxH);
+      lv_label_set_text(msgLabel, msg->text.c_str());
     }
-    setHidden(msgBanner, !msgShown);
+    setHidden(msgPanel, !msgShown);
+    pc.layoutDirty = true;
+  }
+
+  if (pc.layoutDirty) {
+    pc.layoutDirty = false;
+    relayoutPager(timerShown, header, nextShown || msgShown);
   }
 
   pc.valid = true;
+}
+
+bool setCueDisplay(const char *name) {
+  pagersync::CueDisplay d;
+  if (!pagersync::parseCueDisplay(name, d)) return false;
+  gCueDisplay = d;
+  store::setCueDisplay(String(pagersync::cueDisplayName(d)));
+  pc.valid = false;
+  updateCueToggleLabel();
+  Serial.printf("[ui] cue display -> %s\n", pagersync::cueDisplayName(d));
+  return true;
+}
+
+const char *cueDisplayName() {
+  return pagersync::cueDisplayName(gCueDisplay);
 }
 
 static const int kMaxRolePickerRows = 8;
@@ -520,6 +781,17 @@ static void onRoleRowClicked(lv_event_t *e) {
     led::setForCueState(gEngine->activeRole().state);
   }
   showingRolePicker = false;
+}
+
+static void updateCueToggleLabel() {
+  if (!cueToggleLabel) return;
+  String text = String("Cue display: ") + (gCueDisplay == pagersync::CueDisplay::Fullscreen ? "Full screen" : "Outline");
+  lv_label_set_text(cueToggleLabel, text.c_str());
+  lv_obj_center(cueToggleLabel);
+}
+
+static void onCueToggleClicked(lv_event_t *e) {
+  setCueDisplay(gCueDisplay == pagersync::CueDisplay::Fullscreen ? "outline" : "full");
 }
 
 static void onRolePickerCancelClicked(lv_event_t *e) {
@@ -577,6 +849,20 @@ static void buildRolePickerScreen(cue::Engine &engine) {
       addRoleRow(rolePickerScreen, rolePickerIds[i].c_str(), kDefaultRoles[i].name);
     }
   }
+
+  lv_obj_t *cueRow = lv_obj_create(rolePickerScreen);
+  lv_obj_set_size(cueRow, 210, 32);
+  lv_obj_set_style_bg_color(cueRow, lv_color_hex(0x2A3244), 0);
+  lv_obj_set_style_bg_opa(cueRow, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(cueRow, 6, 0);
+  lv_obj_set_style_border_width(cueRow, 0, 0);
+  lv_obj_clear_flag(cueRow, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(cueRow, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(cueRow, onCueToggleClicked, LV_EVENT_CLICKED, nullptr);
+  cueToggleLabel = lv_label_create(cueRow);
+  lv_obj_set_style_text_font(cueToggleLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_color(cueToggleLabel, lv_color_white(), 0);
+  updateCueToggleLabel();
 
   lv_obj_t *cancelRow = lv_obj_create(rolePickerScreen);
   lv_obj_set_size(cancelRow, 210, 32);

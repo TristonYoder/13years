@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include <string>
 
@@ -333,5 +334,50 @@ private:
   double offset_ = 0;
   double maxAbsOffsetMs_ = kDefaultMaxOffsetMs;
 };
+
+inline int64_t floorDiv(int64_t a, int64_t b) {
+  int64_t q = a / b;
+  if ((a % b != 0) && ((a < 0) != (b < 0))) q--;
+  return q;
+}
+
+inline bool utcOffsetInBounds(int64_t seconds) {
+  return seconds >= -86400 && seconds <= 86400;
+}
+
+inline void formatTimeOfDay(int64_t epochMs, int64_t utcOffsetSeconds, char *out, size_t cap) {
+  int64_t local = floorDiv(epochMs, 1000) + utcOffsetSeconds;
+  int64_t sod = local - floorDiv(local, 86400) * 86400;
+  int h24 = (int)(sod / 3600);
+  int m = (int)((sod % 3600) / 60);
+  int s = (int)(sod % 60);
+  int h12 = h24 % 12;
+  if (h12 == 0) h12 = 12;
+  snprintf(out, cap, "%d:%02d:%02d %s", h12, m, s, h24 < 12 ? "AM" : "PM");
+}
+
+inline void formatLength(int64_t seconds, char *out, size_t cap) {
+  if (seconds < 0) seconds = 0;
+  if (seconds >= 3600) {
+    snprintf(out, cap, "%d:%02d:%02d", (int)(seconds / 3600), (int)((seconds % 3600) / 60), (int)(seconds % 60));
+  } else {
+    snprintf(out, cap, "%d:%02d", (int)(seconds / 60), (int)(seconds % 60));
+  }
+}
+
+enum class CueDisplay { Outline, Fullscreen };
+
+inline bool parseCueDisplay(const char *s, CueDisplay &out) {
+  if (!s) return false;
+  std::string v;
+  for (const char *p = s; *p; p++) v += (char)((*p >= 'A' && *p <= 'Z') ? *p + 32 : *p);
+  if (v == "outline") { out = CueDisplay::Outline; return true; }
+  if (v == "full" || v == "fullscreen") { out = CueDisplay::Fullscreen; return true; }
+  return false;
+}
+
+inline const char *cueDisplayName(CueDisplay d) {
+  return d == CueDisplay::Fullscreen ? "fullscreen" : "outline";
+}
 
 }

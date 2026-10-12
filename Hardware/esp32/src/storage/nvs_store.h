@@ -27,6 +27,9 @@ void clearProducerHost();
 bool getDisplayFlipped();
 void setDisplayFlipped(bool flipped);
 
+String getCueDisplay();
+void setCueDisplay(const String &name);
+
 bool getTouchCalibration(uint16_t calData[5]);
 void setTouchCalibration(const uint16_t calData[5]);
 void clearTouchCalibration();

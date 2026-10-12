@@ -39,6 +39,12 @@ int64_t Engine::producerNowMs() const {
   return local;
 }
 
+bool Engine::wallClockMs(int64_t &ms) const {
+  if (!clock_.hasOffset() && !anchor_.valid) return false;
+  ms = producerNowMs();
+  return true;
+}
+
 void Engine::onConnected() {
   producerV2_ = false;
   rev_.reset();
@@ -187,6 +193,7 @@ static JsonDocument &packetFilter() {
     filter["to"] = true;
     filter["rev"] = true;
     filter["epoch"] = true;
+    filter["utcOffsetSeconds"] = true;
     filter["t0"] = true;
     filter["t1"] = true;
     filter["t2"] = true;
@@ -280,6 +287,14 @@ void Engine::handlePacketJson(const char *json, size_t len) {
     if (!rev_.accept(rev, pagersync::RevKind::Strict, epochChanged)) return;
   } else if (isDigest) {
     if (!rev_.accept(rev, pagersync::RevKind::NotLower, epochChanged)) return;
+  }
+
+  if ((isAnchor || isPong || isTimerUpdate) && doc["utcOffsetSeconds"].is<int64_t>()) {
+    int64_t off = doc["utcOffsetSeconds"].as<int64_t>();
+    if (pagersync::utcOffsetInBounds(off)) {
+      utcOffsetSeconds_ = (int32_t)off;
+      hasUtcOffset_ = true;
+    }
   }
 
   if (isSyncReply) {
@@ -554,4 +569,44 @@ const char *Engine::nextNoteText() const {
     if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) return next_.notes[i].text;
   }
   return "";
+}
+
+bool Engine::nextFirstNote(const char *&category, const char *&text) const {
+  const RoleView *role = activeRoleRef();
+  if (!next_.found || !role) return false;
+  for (int i = 0; i < next_.noteCount; i++) {
+    if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) {
+      category = next_.notes[i].category;
+      text = next_.notes[i].text;
+      return true;
+    }
+  }
+  return false;
+}
+
+int Engine::roleNoteCount() const {
+  const RoleView *role = activeRoleRef();
+  if (!role || !timer_.found) return 0;
+  int n = 0;
+  for (int i = 0; i < noteCount_; i++) {
+    if (notes_[i].text.length() > 0 && role->hasNoteCategory(notes_[i].category)) n++;
+  }
+  return n;
+}
+
+bool Engine::roleNoteAt(int index, const char *&category, const char *&text) const {
+  const RoleView *role = activeRoleRef();
+  if (!role || !timer_.found) return false;
+  int n = 0;
+  for (int i = 0; i < noteCount_; i++) {
+    if (notes_[i].text.length() > 0 && role->hasNoteCategory(notes_[i].category)) {
+      if (n == index) {
+        category = notes_[i].category.c_str();
+        text = notes_[i].text.c_str();
+        return true;
+      }
+      n++;
+    }
+  }
+  return false;
 }

@@ -472,6 +472,78 @@ static void testJson64() {
 #endif
 }
 
+static std::string tod(int64_t ms, int64_t off) {
+  char b[24];
+  pagersync::formatTimeOfDay(ms, off, b, sizeof(b));
+  return b;
+}
+
+static std::string len(int64_t s) {
+  char b[24];
+  pagersync::formatLength(s, b, sizeof(b));
+  return b;
+}
+
+static void testTimeOfDay() {
+  CHECK_STR(tod(0, 0), "12:00:00 AM");
+  CHECK_STR(tod(12 * 3600 * 1000LL, 0), "12:00:00 PM");
+  CHECK_STR(tod(11 * 3600 * 1000LL + 59 * 60000LL + 59000LL, 0), "11:59:59 AM");
+  CHECK_STR(tod(13 * 3600 * 1000LL + 5 * 60000LL + 7000LL, 0), "1:05:07 PM");
+  CHECK_STR(tod(23 * 3600 * 1000LL + 59 * 60000LL + 59999LL, 0), "11:59:59 PM");
+  CHECK_STR(tod(86400000LL, 0), "12:00:00 AM");
+  CHECK_STR(tod(1760000000123LL, 0), "8:53:20 AM");
+  CHECK_STR(tod(1760000000123LL, -14400), "4:53:20 AM");
+  CHECK_STR(tod(1760000000123LL, 19800), "2:23:20 PM");
+  CHECK_STR(tod(0, -1), "11:59:59 PM");
+  CHECK_STR(tod(-1, 0), "11:59:59 PM");
+  CHECK_STR(tod(-86400000LL, 0), "12:00:00 AM");
+  CHECK_STR(tod(1000, 12 * 3600), "12:00:01 PM");
+  CHECK_STR(tod(0, 43200 + 3600), "1:00:00 PM");
+  CHECK(pagersync::floorDiv(-1, 86400) == -1);
+  CHECK(pagersync::floorDiv(86400, 86400) == 1);
+  CHECK(pagersync::utcOffsetInBounds(-14400));
+  CHECK(pagersync::utcOffsetInBounds(86400));
+  CHECK(!pagersync::utcOffsetInBounds(86401));
+  CHECK(!pagersync::utcOffsetInBounds(-86401));
+}
+
+static void testFormatLength() {
+  CHECK_STR(len(0), "0:00");
+  CHECK_STR(len(59), "0:59");
+  CHECK_STR(len(90), "1:30");
+  CHECK_STR(len(3599), "59:59");
+  CHECK_STR(len(3600), "1:00:00");
+  CHECK_STR(len(3725), "1:02:05");
+  CHECK_STR(len(-5), "0:00");
+}
+
+static void testCueDisplay() {
+  pagersync::CueDisplay d = pagersync::CueDisplay::Outline;
+  CHECK(pagersync::parseCueDisplay("full", d) && d == pagersync::CueDisplay::Fullscreen);
+  CHECK(pagersync::parseCueDisplay("OUTLINE", d) && d == pagersync::CueDisplay::Outline);
+  CHECK(pagersync::parseCueDisplay("Fullscreen", d) && d == pagersync::CueDisplay::Fullscreen);
+  CHECK(!pagersync::parseCueDisplay("bogus", d) && d == pagersync::CueDisplay::Fullscreen);
+  CHECK(!pagersync::parseCueDisplay("", d));
+  CHECK(!pagersync::parseCueDisplay(nullptr, d));
+  CHECK_STR(pagersync::cueDisplayName(pagersync::CueDisplay::Outline), "outline");
+  CHECK_STR(pagersync::cueDisplayName(pagersync::CueDisplay::Fullscreen), "fullscreen");
+}
+
+static void testUtcOffsetFilter() {
+#ifdef HAVE_ARDUINOJSON
+  JsonDocument filter;
+  filter["type"] = true;
+  filter["utcOffsetSeconds"] = true;
+  JsonDocument a;
+  deserializeJson(a, "{\"type\":\"TIMER_ANCHOR\",\"junk\":1,\"utcOffsetSeconds\":-14400}", DeserializationOption::Filter(filter));
+  CHECK(a["utcOffsetSeconds"].is<int64_t>());
+  CHECK(a["utcOffsetSeconds"].as<int64_t>() == -14400);
+  JsonDocument b;
+  deserializeJson(b, "{\"type\":\"PONG\"}", DeserializationOption::Filter(filter));
+  CHECK(!b["utcOffsetSeconds"].is<int64_t>());
+#endif
+}
+
 int main() {
   testHashVectors();
   testOffsetFormula();
@@ -490,6 +562,10 @@ int main() {
   testTruncation();
   testNextItemFilter();
   testJson64();
+  testTimeOfDay();
+  testFormatLength();
+  testCueDisplay();
+  testUtcOffsetFilter();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

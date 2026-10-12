@@ -5,8 +5,8 @@ A hardware parallel of the iPhone Host Pager
 an ESP32 "CYD" (Cheap Yellow Display) board that connects to the same local
 TCP-based cue channel the Producer/iOS apps use (discovered via mDNS as
 `_13years._tcp`), and reflects this device's assigned role's cue state —
-full-screen color, active PCO item + countdown, assigned note category,
-message-received indicator — plus an RGB LED visible from across a room and
+cue frame or full-screen colour, active PCO item + countdown, assigned note
+categories, next item, message panel — plus an RGB LED visible from across a room and
 (once the buzzer arrives) haptic-style buzz patterns matching
 [`PagerHaptics.swift`](../../Sources/Shared/Services/PagerHaptics.swift).
 
@@ -126,6 +126,7 @@ list):
 
 ```
 provision <json>    set ssid/pass/role/producer in one shot — see below
+cue outline|full    choose how the cue is shown (see "Pager screen layout"); bare `cue` reports it
 rotate 180|normal   turn the display 180 degrees for upside-down mounting (touch turns with it)
 role <id>          assign this pager's role (host, keys, speaker, lead_vocal, producer, ...)
 status              device id / role / WiFi+LAN state / active cue+timer/note/message
@@ -257,7 +258,7 @@ while — it only fires on an actual cue-state change, not on a schedule).
 The very first real `CUE_UPDATE` replaces this placeholder data with the
 Producer's actual role list, same as always.
 
-Tap the "Role: &lt;name&gt;" pill, top-left on the pager screen, to open an
+Tap the role chip (with a chevron), top-right on the pager screen under the connection status,, to open an
 on-device role picker listing whichever role list is currently known
 (the seeded defaults, or the Producer's real list once one's arrived).
 Selection is persisted to NVS and immediately re-syncs the RGB LED too
@@ -409,18 +410,52 @@ content (role pill, big state text, item/timer card, note, message banner)
 is stacked vertically. **Confirmed right-side-up against a photo of the
 real physical unit**.
 
-## Next item card
+## Pager screen layout
 
-The producer adds an optional `nextItem` to `TIMER_ANCHOR`, `PONG`,
-`CUE_UPDATE` and `TIMER_UPDATE` (see `Server/PROTOCOL-V2.md`). The engine
-keeps it in fixed buffers (title 95 bytes, notes 159 bytes each, only the
-categories assigned to some role), clears it on null/absent and on a producer
-epoch change. The screen shows a compact "NEXT" card under the timer card:
-the title (uppercase, one line, ellipsised) and the first non-empty note for
-the active role's categories; no card without a next item. The cue word is
-empty while the role's cue is OFF (the layout keeps its place); STANDBY and
-GO are unchanged. Serial logs name the state `OFF`/`STANDBY`/`GO`. Layout fit
-on the real panel is unverified.
+The 240 by 320 screen follows the portrait framed layout in
+`Server/PROTOCOL-V2.md` ("Portrait layout (framed)", "Cue display setting",
+"Producer time zone (v2.3)", "ESP32 panel"), scaled to the generated Inter
+fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
+
+- **Frame.** Outline mode: a 7 px frame in the cue colour (STANDBY yellow, GO
+  green) around a near-black (`#111114`) ground with rounded inner corners; a
+  barely visible neutral frame with no cue. Full screen mode: no frame, the
+  whole screen is the cue colour (near-black with no cue), cards are 28%
+  black, and the cue word is plain dark text without a pill.
+- **Top row.** Left slot: the local time of day `h:mm:ss AM/PM` (bold 18, with
+  a small `LOCAL TIME` caption) while there is no cue, replaced by the cue
+  word (`GO!`, `STANDBY`) while a cue is active; the slot reserves the widest
+  word. The cue word uses black 32 only when `STANDBY` fits next to the right
+  column, otherwise bold 18. Right column: connection status above the role
+  chooser (a chip with a chevron that opens the role picker). There is no
+  `FOR: person`.
+- **Local time of day.** The producer's epoch time (synced offset applied to
+  `esp_timer`) plus the optional integer `utcOffsetSeconds` the producer sends
+  in `TIMER_ANCHOR`, `PONG` and `TIMER_UPDATE` (bounded to one day either way).
+  Without it the time shows as UTC offset 0 with the caption `UTC`; before any
+  clock sample or anchor it shows `--:--:--`. The formatting
+  (`pagersync::formatTimeOfDay` in `src/sync/sync_core.h`) is covered by the
+  host tests.
+- **Current item card**, centred between the top row and the bottom stack:
+  the title (uppercase, one line, ellipsised), the countdown (black 32), the
+  `PROJECTED`/`ACTUAL` tag, then under a divider the notes for the role's
+  categories as `Category: text` with the category in bold. The notes shrink to
+  whole lines (ellipsis) when the space is short; a heading item shows the
+  title only.
+- **Bottom stack**, aligned to the bottom edge: the Next card (title, one line,
+  with the projected length `m:ss` or `h:mm:ss` right aligned; then the first
+  note as `Category: text`) and, while a message stands, a yellow message
+  panel below it (dark text, up to 3 lines at bold 18, falling back to bold 14,
+  ellipsis). The message pushes the Next card up and the current card
+  re-centres; tap the panel to dismiss it (a newer message shows again).
+- **Cue display setting.** `cueDisplay` is `outline` (default) or `fullscreen`,
+  stored in NVS (`cue_disp`). Change it on the device with the "Cue display"
+  row in the role picker, or over serial with `cue outline` / `cue full`
+  (bare `cue` and `status` report it). The screen only touches LVGL objects
+  when a value changes.
+
+Layout fit on the real panel (font widths, line counts, card heights) is
+unverified without hardware.
 
 ## Colors — two deliberate deviations from the iPhone app
 

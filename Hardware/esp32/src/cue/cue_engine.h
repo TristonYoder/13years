@@ -107,6 +107,9 @@ public:
   static int64_t localNowMs() { return esp_timer_get_time() / 1000; }
   int64_t producerNowMs() const;
   bool hasClockOffset() const { return clock_.hasOffset(); }
+  bool hasUtcOffset() const { return hasUtcOffset_; }
+  int32_t utcOffsetSeconds() const { return hasUtcOffset_ ? utcOffsetSeconds_ : 0; }
+  bool wallClockMs(int64_t &ms) const;
   double clockOffsetMs() const { return clock_.offsetMs(); }
   bool producerIsV2() const { return producerV2_; }
   void onConnected();
@@ -129,6 +132,10 @@ public:
   const char *nextTitle() const { return next_.title; }
   const char *nextId() const { return next_.id; }
   const char *nextNoteText() const;
+  bool nextFirstNote(const char *&category, const char *&text) const;
+  int nextLengthSeconds() const { return next_.lengthInSeconds; }
+  int roleNoteCount() const;
+  bool roleNoteAt(int index, const char *&category, const char *&text) const;
 
   String currentNote() const;
   MessageView latestRelevantMessage() const;
@@ -184,6 +191,8 @@ private:
   bool anchorKnown_ = false;
   int64_t anchorRecvLocalMs_ = 0;
   bool producerV2_ = false;
+  int32_t utcOffsetSeconds_ = 0;
+  bool hasUtcOffset_ = false;
   bool catchUpWanted_ = false;
   bool syncBurstWanted_ = false;
   bool noOffsetBurstDone_ = false;
