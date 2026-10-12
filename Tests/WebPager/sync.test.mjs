@@ -12,7 +12,7 @@ const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -892,4 +892,29 @@ test("countdownEmWidth grows with the digits and the overtime prefix", () => {
   assert.ok(core.countdownEmWidth("10:00") < core.countdownEmWidth("1:10:00"));
   assert.ok(core.countdownEmWidth("10:00") < core.countdownEmWidth("+10:00"));
   assert.equal(core.countdownEmWidth(""), 1);
+});
+
+test("note entries: bold category, colon, text on one line, escaped", () => {
+  assert.equal(core.noteEntryHTML("Lighting", "warm wash"), "<strong>Lighting:</strong> warm wash");
+  assert.equal(
+    core.noteEntryHTML("A<b>", `x & "y" <script>'z'</script>`),
+    "<strong>A&lt;b&gt;:</strong> x &amp; &quot;y&quot; &lt;script&gt;&#39;z&#39;&lt;/script&gt;"
+  );
+});
+
+test("projected length formats m:ss and h:mm:ss over the threshold", () => {
+  assert.equal(core.formatProjectedLength(0, 5400), "0:00");
+  assert.equal(core.formatProjectedLength(65, 5400), "1:05");
+  assert.equal(core.formatProjectedLength(5399, 5400), "89:59");
+  assert.equal(core.formatProjectedLength(5400, 5400), "1:30:00");
+  assert.equal(core.formatProjectedLength(3725, 3600), "1:02:05");
+  assert.equal(core.formatProjectedLength(7200, null), "120:00");
+  assert.equal(core.formatProjectedLength(-5, 3600), "0:00");
+});
+
+test("clock slot: cue word replaces the clock while STANDBY or GO", () => {
+  assert.deepEqual({ ...core.clockSlotFor("STANDBY") }, { mode: "cue", word: "STANDBY" });
+  assert.deepEqual({ ...core.clockSlotFor("FLASH_GO") }, { mode: "cue", word: "GO!" });
+  assert.deepEqual({ ...core.clockSlotFor("OFF") }, { mode: "clock", word: "" });
+  assert.deepEqual({ ...core.clockSlotFor(undefined) }, { mode: "clock", word: "" });
 });

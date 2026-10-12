@@ -247,18 +247,13 @@
   }
   .note[data-current="1"] { background: rgba(0, 0, 0, 0.3); }
 
-  .note-label {
-    font-size: max(12px, calc(1.35 * var(--s)));
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    opacity: 0.85;
-  }
-  .note-text {
+  .note {
     font-size: calc(1.85 * var(--s));
     font-weight: 500;
-    margin-top: calc(0.4 * var(--s));
+    overflow-wrap: anywhere;
   }
-  .note[data-current="1"] .note-text { font-size: calc(2.2 * var(--s)); font-weight: 700; }
+  .note strong { font-weight: 900; }
+  .note[data-current="1"] { font-size: calc(2.2 * var(--s)); font-weight: 700; }
 
   #nextCard {
     flex: 0 0 auto;
@@ -462,12 +457,16 @@
   #ltClock {
     position: absolute;
     left: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    display: grid;
+    justify-items: start;
     font-size: 1em;
     font-weight: 900;
   }
+  #ltClockValue, #ltCue { grid-row: 1; grid-column: 1; }
+  #ltClockLabel { grid-row: 2; grid-column: 1; }
+  #ltCue { visibility: hidden; letter-spacing: -0.01em; }
+  #ltClock.cue #ltCue { visibility: visible; }
+  #ltClock.cue #ltClockValue, #ltClock.cue #ltClockLabel { visibility: hidden; }
 
   #ltCountdown {
     position: absolute;
@@ -579,11 +578,19 @@
     display: flex;
     flex-direction: column;
     gap: var(--pad);
-    padding: var(--pad);
-    border: var(--frame) solid var(--cue);
-    background: #111114;
+    padding: calc(var(--frame) + var(--pad));
+    background: var(--cue);
     color: var(--fg);
     overflow: hidden;
+    isolation: isolate;
+  }
+  #landscape::before {
+    content: "";
+    position: absolute;
+    inset: var(--frame);
+    border-radius: max(18px, calc(var(--u) * 0.04));
+    background: #111114;
+    z-index: -1;
   }
   @media (max-aspect-ratio: 8/5) {
     #landscape {
@@ -594,7 +601,7 @@
   html[data-cue="STANDBY"] #landscape, html[data-cue="FLASH_STANDBY"] #landscape { --cue: var(--cue-standby-bg); }
   html[data-cue="GO"] #landscape, html[data-cue="FLASH_GO"] #landscape { --cue: var(--cue-go-bg); }
   @media (prefers-reduced-motion: no-preference) {
-    #landscape { transition: border-color 0.2s linear; }
+    #landscape { transition: background-color 0.2s linear; }
   }
 
   #lsTop {
@@ -607,35 +614,45 @@
     min-height: calc(var(--badge) * 1.16);
   }
 
-  #lsBadge {
+  #lsSlot {
     flex: 0 0 auto;
+    display: grid;
+    justify-items: start;
+    align-items: start;
+  }
+  #lsSlot > * { grid-row: 1; grid-column: 1; }
+  #lsBadge {
     font-size: var(--badge);
     font-weight: 900;
     line-height: 1;
     letter-spacing: -0.01em;
     white-space: nowrap;
+    text-align: center;
     padding: 0.08em 0.28em;
     border-radius: 0.22em;
     background: var(--cue);
     color: #0b0b0d;
+    visibility: hidden;
   }
-  #lsBadge.ghost { visibility: hidden; }
-
+  #lsBadge::before {
+    content: "STANDBY";
+    display: block;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  #lsSlot.cue #lsBadge { visibility: visible; }
   #lsTime {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     font-size: var(--clock);
     font-weight: 900;
     line-height: 1;
     white-space: nowrap;
     color: #f5f5f7;
-    z-index: 1;
   }
+  #lsSlot.cue #lsTime { visibility: hidden; }
   #lsTimeLabel {
     font-size: calc(var(--u) * 0.018);
     font-weight: 700;
@@ -667,10 +684,10 @@
 
   #lsCenter {
     position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
+    left: var(--frame);
+    right: var(--frame);
+    top: var(--frame);
+    bottom: var(--frame);
     display: grid;
     grid-template-rows: 1fr auto 1fr;
     justify-items: center;
@@ -711,11 +728,11 @@
     position: relative;
     z-index: 1;
     flex: 0 0 auto;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
     gap: var(--pad);
-    min-height: 0;
+    min-height: calc(var(--u) * 0.2);
   }
   #lsNotes, #lsNext {
     min-width: 0;
@@ -728,30 +745,40 @@
     background: rgba(255, 255, 255, 0.08);
     padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
   }
-  #lsNotes { flex: 0 1 56%; margin-right: auto; }
-  #lsNext { flex: 0 1 40%; max-width: 40%; margin-left: auto; }
+  #lsNotes.ghost, #lsNext.ghost { visibility: hidden; }
+  #lsNextHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: calc(var(--u) * 0.02);
+  }
   #lsNextTitle {
-    font-size: calc(var(--u) * 0.026);
+    min-width: 0;
+    font-size: calc(var(--u) * 0.035);
     font-weight: 800;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  #lsNextLength {
+    flex: 0 0 auto;
+    font-size: calc(var(--u) * 0.035);
+    font-weight: 800;
+    opacity: 0.85;
+    white-space: nowrap;
+  }
   #lsNextNotes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01); overflow: hidden; }
   #lsNextNotes:empty { display: none; }
-  #landscape .note { background: transparent; padding: 0; border-radius: 0; }
-  #landscape .note-label { font-size: calc(var(--u) * 0.016); }
-  #landscape .note-text,
-  #landscape .note[data-current="1"] .note-text { font-size: calc(var(--u) * 0.03); }
-  #lsNext .note-text { font-size: calc(var(--u) * 0.024); font-weight: 600; }
+  #landscape .note { background: transparent; padding: 0; border-radius: 0; font-size: calc(var(--u) * 0.026); font-weight: 600; }
+  #landscape .note[data-current="1"] { font-size: calc(var(--u) * 0.026); font-weight: 600; }
 
   #lsBanner {
     position: absolute;
-    left: var(--pad);
-    right: var(--pad);
-    bottom: var(--pad);
+    left: calc(var(--frame) + var(--pad));
+    right: calc(var(--frame) + var(--pad));
+    bottom: calc(var(--frame) + var(--pad));
     z-index: 5;
   }
 </style>
@@ -810,6 +837,7 @@
     <div id="lowerthird" class="hidden">
       <span id="ltClock" class="tnum">
         <span id="ltClockValue"></span>
+        <span id="ltCue">STANDBY</span>
         <span id="ltClockLabel" class="lt-tag">LOCAL TIME</span>
       </span>
       <span id="ltTitle">—</span>
@@ -821,8 +849,10 @@
 
     <div id="landscape" class="hidden">
       <div id="lsTop">
-        <div id="lsBadge" class="ghost">STANDBY</div>
-        <div id="lsTime"><span id="lsTimeValue" class="tnum"></span><span id="lsTimeLabel">LOCAL TIME</span></div>
+        <div id="lsSlot">
+          <div id="lsTime"><span id="lsTimeValue" class="tnum"></span><span id="lsTimeLabel">LOCAL TIME</span></div>
+          <div id="lsBadge">STANDBY</div>
+        </div>
         <div id="lsSide">
           <div id="lsRoleSlot"></div>
           <div id="lsPerson" class="hidden"></div>
@@ -834,9 +864,12 @@
         <div id="lsTag"></div>
       </div>
       <div id="lsBottom">
-        <div id="lsNotes" class="hidden"></div>
-        <div id="lsNext" class="hidden">
-          <div id="lsNextTitle"></div>
+        <div id="lsNotes" class="ghost"></div>
+        <div id="lsNext" class="ghost">
+          <div id="lsNextHead">
+            <div id="lsNextTitle"></div>
+            <div id="lsNextLength" class="tnum"></div>
+          </div>
           <div id="lsNextNotes"></div>
         </div>
       </div>
@@ -1184,6 +1217,28 @@ function notesForRole(item, role) {
   return categories
     .map((category) => ({ category, text: item.notes[category] }))
     .filter((note) => note.text);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function noteEntryHTML(category, text) {
+  return "<strong>" + escapeHtml(category) + ":</strong> " + escapeHtml(text);
+}
+
+function formatProjectedLength(seconds, cutoff) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const two = (n) => String(n).padStart(2, "0");
+  if (cutoff !== null && cutoff !== undefined && total >= cutoff) {
+    return Math.floor(total / 3600) + ":" + two(Math.floor(total / 60) % 60) + ":" + two(total % 60);
+  }
+  return Math.floor(total / 60) + ":" + two(total % 60);
+}
+
+function clockSlotFor(state) {
+  const word = cueWordFor(state);
+  return word ? { mode: "cue", word } : { mode: "clock", word: "" };
 }
 
 function cueWordFor(state) {
@@ -1660,7 +1715,10 @@ const el = {
   lowerthird: document.getElementById("lowerthird"),
   landscape: document.getElementById("landscape"),
   lsRoleSlot: document.getElementById("lsRoleSlot"),
+  lsSlot: document.getElementById("lsSlot"),
   lsBadge: document.getElementById("lsBadge"),
+  lsNextLength: document.getElementById("lsNextLength"),
+  ltCue: document.getElementById("ltCue"),
   lsTimeValue: document.getElementById("lsTimeValue"),
   lsPerson: document.getElementById("lsPerson"),
   lsTitle: document.getElementById("lsTitle"),
@@ -1824,17 +1882,11 @@ function nextItem() { return nextItemFor(snapshot); }
 
 function notesFor(item) { return notesForRole(item, activeRole()); }
 
-function buildNote(label, text, current) {
+function buildNote(category, text, current) {
   const node = document.createElement("div");
   node.className = "note";
   node.dataset.current = current ? "1" : "0";
-  const labelNode = document.createElement("div");
-  labelNode.className = "note-label";
-  labelNode.textContent = label;
-  const textNode = document.createElement("div");
-  textNode.className = "note-text";
-  textNode.textContent = text;
-  node.append(labelNode, textNode);
+  node.innerHTML = noteEntryHTML(category, text);
   return node;
 }
 
@@ -1911,8 +1963,7 @@ function renderStandard() {
     el.notes.dataset.signature = notesSignature;
     el.notes.innerHTML = "";
     for (const n of current) {
-      const label = current.length > 1 ? "CURRENT — " + n.category.toUpperCase() : "CURRENT";
-      el.notes.appendChild(buildNote(label, n.text, true));
+      el.notes.appendChild(buildNote(n.category, n.text, true));
     }
   }
 
@@ -1926,7 +1977,7 @@ function renderStandard() {
       el.nextNotes.dataset.signature = nextSignature;
       el.nextNotes.innerHTML = "";
       for (const n of nextNotes) {
-        el.nextNotes.appendChild(buildNote(nextNotes.length > 1 ? n.category.toUpperCase() : "NOTES", n.text, false));
+        el.nextNotes.appendChild(buildNote(n.category, n.text, false));
       }
     }
   }
@@ -1952,11 +2003,11 @@ function renderLandscapeCountdown() {
   setHidden(el.lsTag, !hasCountdown);
 }
 
-function fillNotes(container, signature, notes, labelFor) {
+function fillNotes(container, signature, notes) {
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   container.innerHTML = "";
-  notes.forEach((n, index) => container.appendChild(buildNote(labelFor(n, notes.length), n.text, index === 0)));
+  notes.forEach((n, index) => container.appendChild(buildNote(n.category, n.text, index === 0)));
 }
 
 function renderLandscape() {
@@ -1965,7 +2016,7 @@ function renderLandscape() {
 
   const word = cueWord(currentCue());
   setText(el.lsBadge, word || "STANDBY");
-  el.lsBadge.classList.toggle("ghost", !word);
+  el.lsSlot.classList.toggle("cue", clockSlotFor(currentCue()).mode === "cue");
 
   const person = role && role.personName;
   setText(el.lsPerson, person ? "FOR: " + person.toUpperCase() : "");
@@ -1976,24 +2027,20 @@ function renderLandscape() {
   renderLandscapeCountdown();
 
   const current = notesFor(item);
-  setHidden(el.lsNotes, current.length === 0);
-  fillNotes(
-    el.lsNotes,
-    current.map((n) => n.category + n.text).join("|"),
-    current,
-    (n, count) => (count > 1 ? "CURRENT — " + n.category.toUpperCase() : "CURRENT")
-  );
+  el.lsNotes.classList.toggle("ghost", current.length === 0);
+  fillNotes(el.lsNotes, current.map((n) => n.category + n.text).join("|"), current);
 
   const upcoming = nextItem();
-  setHidden(el.lsNext, !upcoming);
+  el.lsNext.classList.toggle("ghost", !upcoming);
   if (upcoming) {
-    setText(el.lsNextTitle, "NEXT: " + (upcoming.title || "").toUpperCase());
+    setText(el.lsNextTitle, (upcoming.title || "").toUpperCase());
+    const length = upcoming.lengthInSeconds;
+    setText(el.lsNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
     const nextNotes = notesFor(upcoming);
     fillNotes(
       el.lsNextNotes,
       upcoming.id + "|" + nextNotes.map((n) => n.category + n.text).join("|"),
-      nextNotes,
-      (n, count) => (count > 1 ? n.category.toUpperCase() : "NOTES")
+      nextNotes
     );
   }
 
@@ -2014,6 +2061,9 @@ function renderLowerThird() {
   const clockText = formatClock(new Date());
   lastClockText = clockText;
   setText(el.ltClockValue, clockText);
+  const slot = clockSlotFor(currentCue());
+  setText(el.ltCue, slot.word || "STANDBY");
+  el.ltClock.classList.toggle("cue", slot.mode === "cue");
   const title = message
     ? message.text
     : item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "—";
