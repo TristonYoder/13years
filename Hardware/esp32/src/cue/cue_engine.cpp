@@ -502,12 +502,8 @@ String Engine::currentNote() const {
 }
 
 cue::MessageView Engine::latestRelevantMessage() const {
-  for (int i = 0; i < messageCount_; i++) {
-    if (messages_[i].targetRoleId.length() == 0 || messages_[i].targetRoleId == selectedRoleId_) {
-      return messages_[i];
-    }
-  }
-  return MessageView{};
+  const MessageView *standing = latestRelevantMessageRef();
+  return standing ? *standing : MessageView{};
 }
 
 void Engine::checkForCueTransition() {
@@ -535,12 +531,22 @@ const cue::RoleView *Engine::activeRoleRef() const {
 }
 
 const cue::MessageView *Engine::latestRelevantMessageRef() const {
+  const MessageView *incoming = nullptr;
   for (int i = 0; i < messageCount_; i++) {
-    if (messages_[i].targetRoleId.length() == 0 || messages_[i].targetRoleId == selectedRoleId_) {
-      return &messages_[i];
+    bool addressed = messages_[i].targetRoleId.length() == 0 || messages_[i].targetRoleId == selectedRoleId_;
+    if (addressed && messages_[i].senderRoleId.length() == 0) {
+      incoming = &messages_[i];
+      break;
     }
   }
-  return nullptr;
+  if (!incoming) return nullptr;
+  for (int i = 0; i < messageCount_; i++) {
+    if (messages_[i].senderRoleId == selectedRoleId_) {
+      if (messages_[i].timestamp >= incoming->timestamp) return nullptr;
+      break;
+    }
+  }
+  return incoming;
 }
 
 const char *Engine::currentNoteText() const {

@@ -123,4 +123,51 @@ final class PagerPresentationStateTests: XCTestCase {
         )
         XCTAssertNil(state.latestRelevantMessage)
     }
+
+    private func timed(_ id: String, target: String?, sender: String?, at seconds: TimeInterval) -> InterTeamMessage {
+        InterTeamMessage(id: id, sender: sender ?? "Producer", targetRoleId: target, senderRoleId: sender, text: id, timestamp: Date(timeIntervalSince1970: seconds))
+    }
+
+    func testRolesOwnMessageIsNeverTheStandingMessage() {
+        let state = makeState(
+            roles: [role("host"), role("cg")],
+            messages: [timed("mine", target: "cg", sender: "cg", at: 10)],
+            selectedRoleId: "cg"
+        )
+        XCTAssertNil(state.latestRelevantMessage)
+    }
+
+    func testReplyingClearsTheStandingMessage() {
+        let messages = [
+            timed("reply", target: "cg", sender: "cg", at: 20),
+            timed("ask", target: "cg", sender: nil, at: 10)
+        ]
+        let cg = makeState(roles: [role("host"), role("cg")], messages: messages, selectedRoleId: "cg")
+        XCTAssertNil(cg.latestRelevantMessage)
+    }
+
+    func testNewerProducerMessageStandsAfterAReply() {
+        let messages = [
+            timed("again", target: "cg", sender: nil, at: 30),
+            timed("reply", target: "cg", sender: "cg", at: 20),
+            timed("ask", target: "cg", sender: nil, at: 10)
+        ]
+        let cg = makeState(roles: [role("host"), role("cg")], messages: messages, selectedRoleId: "cg")
+        XCTAssertEqual(cg.latestRelevantMessage?.id, "again")
+    }
+
+    func testOtherRolesReplyDoesNotClearMyMessage() {
+        let messages = [
+            timed("hostReply", target: "host", sender: "host", at: 20),
+            timed("ask", target: "cg", sender: nil, at: 10)
+        ]
+        let cg = makeState(roles: [role("host"), role("cg")], messages: messages, selectedRoleId: "cg")
+        XCTAssertEqual(cg.latestRelevantMessage?.id, "ask")
+    }
+
+    func testOnlyProducerMessagesStand() {
+        let messages = [timed("fromHost", target: nil, sender: "host", at: 20)]
+        let cg = makeState(roles: [role("host"), role("cg")], messages: messages, selectedRoleId: "cg")
+        XCTAssertNil(cg.latestRelevantMessage)
+    }
 }

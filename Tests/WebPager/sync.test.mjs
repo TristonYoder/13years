@@ -1106,3 +1106,23 @@ test("roles=0 locks the role chooser", () => {
   assert.equal(vm.runInContext("ALLOW_ROLE_CHANGE", locked.context), false);
   assert.equal(vm.runInContext("ALLOW_ROLE_CHANGE", loadPage("", 390, 844).context), true);
 });
+
+test("a role's own message is never standing and a reply clears the producer's message", () => {
+  const { context } = loadPage("?role=cg", 390, 844);
+  const standing = (messages) => vm.runInContext(
+    `snapshot = { roles: [{ id: "cg", name: "CG", state: "off" }], messages: ${JSON.stringify(messages)}, timer: {}, plan: null }; roleSel.id = "cg"; (latestRelevantMessage() || {}).id || null`,
+    context
+  );
+  const at = (n) => new Date(n * 1000).toISOString();
+  assert.equal(standing([{ id: "ask", targetRoleId: "cg", timestamp: at(10) }]), "ask");
+  assert.equal(standing([{ id: "mine", targetRoleId: "cg", senderRoleId: "cg", timestamp: at(10) }]), null);
+  assert.equal(standing([
+    { id: "reply", targetRoleId: "cg", senderRoleId: "cg", timestamp: at(20) },
+    { id: "ask", targetRoleId: "cg", timestamp: at(10) },
+  ]), null);
+  assert.equal(standing([{ id: "fromHost", senderRoleId: "host", timestamp: at(10) }]), null);
+  assert.equal(standing([
+    { id: "again", targetRoleId: "cg", timestamp: at(30) },
+    { id: "reply", targetRoleId: "cg", senderRoleId: "cg", timestamp: at(20) },
+  ]), "again");
+});

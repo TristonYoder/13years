@@ -2081,9 +2081,14 @@ function buildNote(category, text, current) {
 
 function latestRelevantMessage() {
   if (!snapshot) return null;
-  return (snapshot.messages || []).find(
-    (m) => !m.targetRoleId || m.targetRoleId === roleSel.id
-  ) || null;
+  const messages = snapshot.messages || [];
+  const incoming = messages.find(
+    (m) => (!m.targetRoleId || m.targetRoleId === roleSel.id) && !m.senderRoleId
+  );
+  if (!incoming) return null;
+  const ownReply = messages.find((m) => m.senderRoleId === roleSel.id);
+  if (ownReply && Date.parse(ownReply.timestamp) >= Date.parse(incoming.timestamp)) return null;
+  return incoming;
 }
 
 function remainingSeconds() {

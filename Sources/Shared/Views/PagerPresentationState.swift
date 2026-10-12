@@ -79,6 +79,12 @@ public struct PagerPresentationState: Equatable, Sendable {
     }
 
     public var latestRelevantMessage: InterTeamMessage? {
-        recentMessages.first { $0.targetRoleId == nil || $0.targetRoleId == selectedRoleId }
+        let incoming = recentMessages.first {
+            ($0.targetRoleId == nil || $0.targetRoleId == selectedRoleId) && $0.senderRoleId == nil
+        }
+        guard let incoming else { return nil }
+        let ownReply = recentMessages.first { $0.senderRoleId == selectedRoleId }
+        if let ownReply, ownReply.timestamp >= incoming.timestamp { return nil }
+        return incoming
     }
 }
