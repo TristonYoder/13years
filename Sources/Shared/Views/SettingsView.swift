@@ -99,6 +99,14 @@ public struct SettingsView: View {
                 Text("Pick a lead time before each service and this device goes live automatically — switching into the live producer view and, optionally, loading a specific Planning Center plan. Setup done once, ahead of a week's flow.")
             }
 
+            Section {
+                CustomScreenURLSection()
+            } header: {
+                Text("Custom screen URL")
+            } footer: {
+                Text("Builds an address for the built-in web pager, for a screen that can't run the app: a laptop, an OBS browser source, a lobby display. Open it in a browser on that screen.")
+            }
+
             if engine.isRemoteMirror {
                 Section {
                     Label("Display, network, startup and Control API settings belong to \(engine.remoteProducerName ?? "the remote Producer") and can only be changed on that device.", systemImage: "lock")

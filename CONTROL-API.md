@@ -519,7 +519,10 @@ The banner on the home page *is* the standing notification, so clicking it clear
 | Parameter | Values | Meaning |
 | --- | --- | --- |
 | `role` | a role id or name, case-insensitive | Which role's cue to show — `?role=Host` or `?role=Front%20of%20House`. Takes precedence over whatever that browser last had selected, every load, so a bookmark or an OBS source URL is stable. Falls back to the first role if it matches nothing. |
-| `layout` | `auto` (default), `standard`, `lowerthird` | `auto` picks per viewport. |
+| `layout` | `auto` (default), `landscape`, `portrait` (or `standard`), `lowerthird` | `auto` picks per viewport. |
+| `cue` | `outline`, `full` | How the cue is shown: a coloured outline, or the full screen in the cue colour. Omitted, the viewer's saved choice (or the default) applies. |
+| `settings` | `0` | Hides the settings button. Omitted, it is shown. |
+| `messages` | `0` | Hides the chat button. Omitted, it is shown. Use both for a confidence monitor nobody can click. |
 
 **Two layouts.** The standard one is the same screen every other pager shows — full-bleed cue color, the state word, the running item and its countdown, note panels, the latest message. A short, wide viewport (height ≤ 400px, or an aspect ratio of 3:1 or wider) switches to a single lower-third line instead:
 
