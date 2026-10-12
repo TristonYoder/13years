@@ -78,3 +78,29 @@ test('a socket that is not OPEN is skipped, not delivered to', () => {
   assert.equal(delivered, 0);
   assert.equal(b.sent.length, 0);
 });
+
+test('v2 sync packets pass through byte-for-byte, as binary frames', () => {
+  const sender = fakeSocket();
+  const receiver = fakeSocket();
+  const orgId = 'org_test_v2_passthrough';
+  joinRoom(orgId, sender);
+  joinRoom(orgId, receiver);
+
+  const packets = [
+    { type: 'SYNC', senderId: 'p', t0: 1760000000000 },
+    { type: 'SYNC_REPLY', senderId: 'h', t0: 1760000000000, t1: 1760000000010, t2: 1760000000011 },
+    { type: 'TIMER_ANCHOR', senderId: 'h', rev: 4, anchor: null },
+    { type: 'CUE_DELTA', senderId: 'h', rev: 5, cueDeltas: [{ id: 'host', state: 'GO', lastUpdated: 1 }] },
+    { type: 'DIGEST', senderId: 'h', rev: 5, digestMs: 1760000000000, hashes: { roles: 'a', timer: 'b', messages: 'c' } },
+    { type: 'PING', senderId: 'p', proto: 2 },
+  ];
+  for (const packet of packets) {
+    relay(orgId, sender, Buffer.from(JSON.stringify(packet)), true);
+  }
+
+  assert.equal(receiver.sent.length, packets.length);
+  receiver.sent.forEach((entry, index) => {
+    assert.equal(entry.binary, true);
+    assert.deepEqual(JSON.parse(entry.data.toString()), packets[index]);
+  });
+});
