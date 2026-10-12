@@ -172,8 +172,16 @@ public struct HostPagerView: View {
             presentation: presentation,
             connectionText: connectionText,
             isConnected: isConnectedNow,
+            standingMessage: latestRelevantMessage.flatMap { $0.id == dismissedMessageId ? nil : $0 },
             showMessages: {
                 isShowingChat = true
+                dismissedMessageId = latestRelevantMessage?.id
+            },
+            openMessage: {
+                isShowingChat = true
+                dismissedMessageId = latestRelevantMessage?.id
+            },
+            dismissMessage: {
                 dismissedMessageId = latestRelevantMessage?.id
             },
             roleMenu: {
@@ -182,8 +190,7 @@ public struct HostPagerView: View {
                         selectedRoleId = role.id
                     }
                 }
-            },
-            banner: { messageBanner }
+            }
         )
     }
 

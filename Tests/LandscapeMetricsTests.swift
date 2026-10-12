@@ -79,7 +79,52 @@ final class LandscapeMetricsTests: XCTestCase {
     func testCardsAreEqualWidthAndFillRow() {
         let m = LandscapeMetrics(size: CGSize(width: 1180, height: 820))
         XCTAssertEqual(2 * m.cardWidth + m.margin, m.size.width - 2 * m.clockLeading, accuracy: 0.001)
-        XCTAssertEqual(m.cardHeight, 0.22 * 820, accuracy: 0.001)
+        XCTAssertEqual(m.singleCardWidth, m.size.width - 2 * m.clockLeading, accuracy: 0.001)
+        XCTAssertEqual(LandscapeMetrics.cardWidth(for: 1, in: m), m.singleCardWidth)
+        XCTAssertEqual(LandscapeMetrics.cardWidth(for: 2, in: m), m.cardWidth)
         XCTAssertGreaterThan(m.nextTitleFontSize, m.noteFontSize)
+    }
+
+    func testCardAndMessageCaps() {
+        let m = LandscapeMetrics(size: CGSize(width: 1920, height: 1080))
+        XCTAssertEqual(m.cardMaxHeight, 0.28 * 1080, accuracy: 0.001)
+        XCTAssertEqual(m.messageFontSize, 0.06 * 1080, accuracy: 0.001)
+        XCTAssertEqual(m.messageMaxHeight, 0.25 * 1080, accuracy: 0.001)
+        XCTAssertEqual(LandscapeMetrics.messageMaxLines, 3)
+        XCTAssertLessThan(m.cardContentMaxHeight, m.cardMaxHeight)
+        XCTAssertGreaterThan(m.messageFontSize, m.noteFontSize)
+        XCTAssertGreaterThanOrEqual(m.messageMaxHeight, 3 * m.messageFontSize * 0.9)
+    }
+
+    func testMessagePanelNeverOverlapsCentreTag() {
+        for size in [CGSize(width: 1024, height: 768), CGSize(width: 1920, height: 1080), CGSize(width: 1280, height: 800), CGSize(width: 1180, height: 820), CGSize(width: 1366, height: 1024)] {
+            let m = LandscapeMetrics(size: size)
+            XCTAssertGreaterThanOrEqual(m.messageTop, m.centreTagBottom)
+            XCTAssertEqual(m.messageMaxHeight, 0.25 * m.shorterSide, accuracy: 0.001)
+        }
+    }
+
+    func testFirstFittingIndex() {
+        XCTAssertEqual(LandscapeMetrics.firstFittingIndex(heights: [300, 200, 100], maxHeight: 250), 1)
+        XCTAssertEqual(LandscapeMetrics.firstFittingIndex(heights: [100, 50], maxHeight: 250), 0)
+        XCTAssertEqual(LandscapeMetrics.firstFittingIndex(heights: [300, 280], maxHeight: 250), 1)
+        XCTAssertEqual(LandscapeMetrics.firstFittingIndex(heights: [], maxHeight: 250), 0)
+    }
+
+    func testFitScalesDescendFromOne() {
+        let scales = LandscapeMetrics.fitScales
+        XCTAssertEqual(scales.first, 1)
+        XCTAssertEqual(scales, scales.sorted(by: >))
+        XCTAssertGreaterThan(scales.last ?? 0, 0)
+    }
+
+    func testCentreIndependentOfBottomRowContent() {
+        let size = CGSize(width: 1180, height: 820)
+        let a = LandscapeMetrics(size: size)
+        let b = LandscapeMetrics(size: size)
+        XCTAssertEqual(a.centreY, 410)
+        XCTAssertEqual(a.centreY, b.centreY)
+        XCTAssertEqual(a.messageMaxHeight, b.messageMaxHeight)
+        XCTAssertEqual(a.cardMaxHeight, b.cardMaxHeight)
     }
 }

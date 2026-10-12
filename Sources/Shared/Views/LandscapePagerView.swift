@@ -24,7 +24,21 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var slotWidth: CGFloat { min(badgeWidthEstimate, 0.38 * size.width) }
     public var frameCornerRadius: CGFloat { max(18, 0.04 * shorterSide) }
     public var cardWidth: CGFloat { max(1, (size.width - 2 * clockLeading - margin) / 2) }
-    public var cardHeight: CGFloat { 0.22 * shorterSide }
+    public var cardMaxHeight: CGFloat { 0.28 * shorterSide }
+    public var cardPadding: CGFloat { margin * 0.6 }
+    public var cardContentMaxHeight: CGFloat { max(1, cardMaxHeight - 2 * cardPadding) }
+    public var singleCardWidth: CGFloat { 2 * cardWidth + margin }
+    public var messageFontSize: CGFloat { 0.06 * shorterSide }
+    public var centreTagBottom: CGFloat { centreY + 0.17 * shorterSide }
+    public var messageClearance: CGFloat { 0.01 * shorterSide }
+    public var bottomRowBottom: CGFloat { size.height - frameThickness - margin }
+    public var messageMaxHeight: CGFloat {
+        max(1, min(0.25 * shorterSide, bottomRowBottom - centreTagBottom - messageClearance))
+    }
+    public var messageTop: CGFloat { bottomRowBottom - messageMaxHeight }
+    public var messageCaptionFontSize: CGFloat { 0.022 * shorterSide }
+    public static let messageMaxLines = 3
+    public static let fitScales: [CGFloat] = [1, 0.85, 0.72, 0.6, 0.5, 0.4]
     public var nextTitleFontSize: CGFloat { 0.035 * shorterSide }
     public static let widestCueWord = "STANDBY"
     public var captionFontSize: CGFloat { 0.02 * shorterSide }
@@ -34,36 +48,51 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var margin: CGFloat { 0.03 * shorterSide }
     public var cornerRadius: CGFloat { 0.02 * shorterSide }
 
+    public static func firstFittingIndex(heights: [CGFloat], maxHeight: CGFloat) -> Int {
+        heights.firstIndex { $0 <= maxHeight } ?? max(0, heights.count - 1)
+    }
+
+    public static func cardWidth(for visibleCards: Int, in metrics: LandscapeMetrics) -> CGFloat {
+        visibleCards >= 2 ? metrics.cardWidth : metrics.singleCardWidth
+    }
+
     public static func isLandscape(_ size: CGSize) -> Bool {
         size.width > size.height
     }
 }
 
-public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
+public struct LandscapePagerView<RoleMenu: View>: View {
     let size: CGSize
     let presentation: PagerPresentationState
     let connectionText: String
     let isConnected: Bool
     let roleMenu: RoleMenu
-    let banner: Banner
+    let standingMessage: InterTeamMessage?
     let showMessages: () -> Void
+    let openMessage: () -> Void
+    let dismissMessage: () -> Void
+    @State private var messageDragOffset: CGFloat = 0
 
     public init(
         size: CGSize,
         presentation: PagerPresentationState,
         connectionText: String,
         isConnected: Bool,
+        standingMessage: InterTeamMessage?,
         showMessages: @escaping () -> Void,
-        @ViewBuilder roleMenu: () -> RoleMenu,
-        @ViewBuilder banner: () -> Banner
+        openMessage: @escaping () -> Void,
+        dismissMessage: @escaping () -> Void,
+        @ViewBuilder roleMenu: () -> RoleMenu
     ) {
         self.size = size
         self.presentation = presentation
         self.connectionText = connectionText
         self.isConnected = isConnected
+        self.standingMessage = standingMessage
         self.showMessages = showMessages
+        self.openMessage = openMessage
+        self.dismissMessage = dismissMessage
         self.roleMenu = roleMenu()
-        self.banner = banner()
     }
 
     private var metrics: LandscapeMetrics { LandscapeMetrics(size: size) }
@@ -92,17 +121,13 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
             }
             .padding(m.frameThickness + m.margin)
 
-            VStack {
-                Spacer()
-                banner
-                    .padding(.horizontal, m.frameThickness + m.margin)
-                    .padding(.bottom, m.frameThickness + m.margin)
-            }
-
             FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
                 .fill(frameColor, style: FillStyle(eoFill: true))
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+        }
+        .onChange(of: standingMessage?.id) { _, _ in
+            messageDragOffset = 0
         }
     }
 
@@ -236,60 +261,175 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
         }
     }
 
+    @ViewBuilder
     private func bottomRow(_ m: LandscapeMetrics) -> some View {
-        HStack(alignment: .top, spacing: m.margin) {
-            card(m, filled: !presentation.currentNotes.isEmpty) {
-                if !presentation.currentNotes.isEmpty {
-                    Text("CURRENT")
-                        .font(.inter(size: m.captionFontSize, weight: .heavy))
-                        .tracking(2)
-                        .foregroundColor(.white.opacity(0.5))
-                    noteLines(m, presentation.currentNotes, weight: .bold, opacity: 1)
-                }
-            }
-
-            card(m, filled: presentation.nextItem != nil) {
-                if let next = presentation.nextItem {
-                    HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
-                        Text(next.title.uppercased())
-                            .font(.inter(size: m.nextTitleFontSize, weight: .bold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        Spacer(minLength: 0)
-                        Text(TimeFormatting.string(forSeconds: next.lengthInSeconds, threshold: presentation.hourFormatThreshold))
-                            .font(.inter(size: m.nextTitleFontSize, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundColor(.white.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85)
-                }
-            }
+        if let message = standingMessage {
+            messagePanel(m, message)
+        } else {
+            cardsRow(m)
         }
-        .frame(height: m.cardHeight, alignment: .top)
     }
 
-    private func noteLines(_ m: LandscapeMetrics, _ notes: [(category: String, text: String)], weight: Font.Weight, opacity: Double) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var messageOpacity: Double {
+        1.0 - min(Double(abs(messageDragOffset)) / 200.0, 1.0) * 0.7
+    }
+
+    private func messagePanel(_ m: LandscapeMetrics, _ message: InterTeamMessage) -> some View {
+        VStack(alignment: .leading, spacing: m.messageCaptionFontSize * 0.3) {
+            Text(message.sender.uppercased())
+                .font(.inter(size: m.messageCaptionFontSize, weight: .heavy))
+                .tracking(m.messageCaptionFontSize * 0.15)
+                .foregroundColor(Self.darkText.opacity(0.7))
+                .lineLimit(1)
+            Text(message.text)
+                .font(.inter(size: m.messageFontSize, weight: .bold))
+                .foregroundColor(Self.darkText)
+                .multilineTextAlignment(.leading)
+                .lineLimit(LandscapeMetrics.messageMaxLines)
+                .minimumScaleFactor(0.4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(m.cardPadding)
+        .frame(maxWidth: .infinity, maxHeight: m.messageMaxHeight, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Color.yellow)
+        .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+        .offset(x: messageDragOffset)
+        .opacity(messageOpacity)
+        .contentShape(Rectangle())
+        #if os(iOS) || os(macOS)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    messageDragOffset = value.translation.width
+                }
+                .onEnded { value in
+                    let distance = abs(value.translation.width)
+                    if distance > 80 {
+                        let direction: CGFloat = value.translation.width > 0 ? 1 : -1
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            messageDragOffset = direction * 500
+                        }
+                        dismissMessage()
+                    } else if distance < 10 {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            messageDragOffset = 0
+                        }
+                        openMessage()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            messageDragOffset = 0
+                        }
+                    }
+                }
+        )
+        #else
+        .onTapGesture {
+            openMessage()
+        }
+        .focusable(true)
+        #endif
+    }
+
+    @ViewBuilder
+    private func cardsRow(_ m: LandscapeMetrics) -> some View {
+        let hasCurrent = !presentation.currentNotes.isEmpty
+        let hasNext = presentation.nextItem != nil
+        let width = LandscapeMetrics.cardWidth(for: (hasCurrent ? 1 : 0) + (hasNext ? 1 : 0), in: m)
+        if hasCurrent || hasNext {
+            HStack(alignment: .top, spacing: m.margin) {
+                if hasCurrent {
+                    card(m, width: width) { scale in currentContent(m, scale: scale) }
+                }
+                if hasNext {
+                    card(m, width: width) { scale in nextContent(m, scale: scale) }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func currentContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
+            Text("CURRENT")
+                .font(.inter(size: m.captionFontSize * scale, weight: .heavy))
+                .tracking(2)
+                .foregroundColor(.white.opacity(0.5))
+            noteLines(m, presentation.currentNotes, weight: .bold, opacity: 1, scale: scale)
+        }
+    }
+
+    @ViewBuilder
+    private func nextContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+        if let next = presentation.nextItem {
+            VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
+                HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
+                    Text(next.title.uppercased())
+                        .font(.inter(size: m.nextTitleFontSize * scale, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Spacer(minLength: 0)
+                    Text(TimeFormatting.string(forSeconds: next.lengthInSeconds, threshold: presentation.hourFormatThreshold))
+                        .font(.inter(size: m.nextTitleFontSize * scale, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+                noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85, scale: scale)
+            }
+        }
+    }
+
+    private func noteLines(_ m: LandscapeMetrics, _ notes: [(category: String, text: String)], weight: Font.Weight, opacity: Double, scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
             ForEach(notes, id: \.category) { note in
                 PagerNoteText.line(category: note.category, text: note.text)
-                    .font(.inter(size: m.noteFontSize, weight: weight))
+                    .font(.inter(size: m.noteFontSize * scale, weight: weight))
                     .foregroundColor(.white.opacity(opacity))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func card<Content: View>(_ m: LandscapeMetrics, filled: Bool, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: m.margin * 0.3) {
-            content()
-            Spacer(minLength: 0)
+    private func card<Content: View>(_ m: LandscapeMetrics, width: CGFloat, @ViewBuilder content: @escaping (CGFloat) -> Content) -> some View {
+        FirstFittingLayout(maxHeight: m.cardContentMaxHeight) {
+            ForEach(Array(LandscapeMetrics.fitScales.enumerated()), id: \.offset) { _, scale in
+                content(scale)
+            }
         }
-        .padding(m.margin * 0.6)
-        .frame(width: m.cardWidth, height: m.cardHeight, alignment: .topLeading)
-        .background(Color.white.opacity(filled ? 0.1 : 0.03))
+        .padding(m.cardPadding)
+        .frame(width: width)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.white.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+    }
+}
+
+struct FirstFittingLayout: Layout {
+    let maxHeight: CGFloat
+
+    private func chosen(_ subviews: Subviews, width: CGFloat?) -> (index: Int, size: CGSize)? {
+        guard !subviews.isEmpty else { return nil }
+        let sizes = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)) }
+        let index = LandscapeMetrics.firstFittingIndex(heights: sizes.map(\.height), maxHeight: maxHeight)
+        return (index, sizes[index])
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let pick = chosen(subviews, width: proposal.width) else { return .zero }
+        return CGSize(width: proposal.width ?? pick.size.width, height: min(pick.size.height, maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let pick = chosen(subviews, width: bounds.width) else { return }
+        for (i, sub) in subviews.enumerated() {
+            if i == pick.index {
+                sub.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: nil))
+            } else {
+                sub.place(at: CGPoint(x: -10000, y: -10000), anchor: .topLeading, proposal: ProposedViewSize(width: 1, height: 1))
+            }
+        }
     }
 }
 
