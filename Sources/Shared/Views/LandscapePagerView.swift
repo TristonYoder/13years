@@ -191,14 +191,32 @@ public struct LandscapePagerView<RoleMenu: View>: View {
 
     private func roleColumn(_ m: LandscapeMetrics) -> some View {
         VStack(alignment: .trailing, spacing: m.margin * 0.2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isConnected ? Color.green : Color.red)
+                    .frame(width: m.statusFontSize * 0.7, height: m.statusFontSize * 0.7)
+                Text(connectionText)
+                    .font(.inter(size: m.statusFontSize, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
+
             Menu {
                 roleMenu
             } label: {
-                Text(presentation.activeRole?.name ?? "Host Pager")
-                    .font(.inter(size: m.roleFontSize, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
+                HStack(spacing: m.roleFontSize * 0.35) {
+                    Text(presentation.activeRole?.name ?? "Host Pager")
+                        .font(.inter(size: m.roleFontSize, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: m.roleFontSize * 0.6, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, m.roleFontSize * 0.5)
+                .padding(.vertical, m.roleFontSize * 0.25)
+                .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
@@ -207,16 +225,6 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                     .font(.inter(size: m.statusFontSize, weight: .bold))
                     .tracking(2)
                     .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isConnected ? Color.green : Color.red)
-                    .frame(width: m.statusFontSize * 0.7, height: m.statusFontSize * 0.7)
-                Text(connectionText)
-                    .font(.inter(size: m.statusFontSize, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.6))
                     .lineLimit(1)
             }
 
