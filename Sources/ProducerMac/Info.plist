@@ -33,9 +33,9 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>dev.7co.13years.show</string>
+			<string>dev.7co.13years.document</string>
 			<key>UTTypeDescription</key>
-			<string>13 Years Show</string>
+			<string>13 Years Document</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
@@ -53,7 +53,7 @@
 			<key>UTTypeIdentifier</key>
 			<string>dev.7co.13years.template</string>
 			<key>UTTypeDescription</key>
-			<string>13 Years Show Template</string>
+			<string>13 Years Template</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
@@ -72,19 +72,19 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>13 Years Show</string>
+			<string>13 Years Document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>dev.7co.13years.show</string>
+				<string>dev.7co.13years.document</string>
 			</array>
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>13 Years Show Template</string>
+			<string>13 Years Template</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>

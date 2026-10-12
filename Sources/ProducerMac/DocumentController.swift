@@ -16,7 +16,7 @@ final class DocumentController: ObservableObject {
     private static let maxRecents = 10
 
     private var contentType: UTType {
-        .thirteenYearsShow
+        .thirteenYearsDocument
     }
 
     private var templateType: UTType {

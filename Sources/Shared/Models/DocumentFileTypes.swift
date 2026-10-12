@@ -5,14 +5,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let thirteenYearsShow = UTType(exportedAs: "dev.7co.13years.show")
+    static let thirteenYearsDocument = UTType(exportedAs: "dev.7co.13years.document")
     static let thirteenYearsTemplate = UTType(exportedAs: "dev.7co.13years.template")
 }
 
 #if !os(tvOS)
 struct ProducerDocumentFile: FileDocument {
-    static var readableContentTypes: [UTType] { [.thirteenYearsShow, .thirteenYearsTemplate] }
-    static var writableContentTypes: [UTType] { [.thirteenYearsShow, .thirteenYearsTemplate] }
+    static var readableContentTypes: [UTType] { [.thirteenYearsDocument, .thirteenYearsTemplate] }
+    static var writableContentTypes: [UTType] { [.thirteenYearsDocument, .thirteenYearsTemplate] }
 
     var document: ProducerDocument
     var isTemplate: Bool

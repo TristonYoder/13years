@@ -37,7 +37,7 @@ final class DocumentFileTypesTests: XCTestCase {
     }
 
     func testTypeIdentifiers() {
-        XCTAssertEqual(UTType.thirteenYearsShow.identifier, "dev.7co.13years.show")
+        XCTAssertEqual(UTType.thirteenYearsDocument.identifier, "dev.7co.13years.document")
         XCTAssertEqual(UTType.thirteenYearsTemplate.identifier, "dev.7co.13years.template")
     }
 
@@ -47,11 +47,11 @@ final class DocumentFileTypesTests: XCTestCase {
             let url = root.appendingPathComponent("Sources/\(name)/Info.plist")
             let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])
             let exported = try XCTUnwrap(plist["UTExportedTypeDeclarations"] as? [[String: Any]])
-            XCTAssertEqual(Set(exported.compactMap { $0["UTTypeIdentifier"] as? String }), ["dev.7co.13years.show", "dev.7co.13years.template"], name)
+            XCTAssertEqual(Set(exported.compactMap { $0["UTTypeIdentifier"] as? String }), ["dev.7co.13years.document", "dev.7co.13years.template"], name)
             let extensions = exported.flatMap { ($0["UTTypeTagSpecification"] as? [String: Any])?["public.filename-extension"] as? [String] ?? [] }
             XCTAssertEqual(Set(extensions), [ProducerDocument.fileExtension, ProducerDocument.templateExtension], name)
             let docs = try XCTUnwrap(plist["CFBundleDocumentTypes"] as? [[String: Any]])
-            XCTAssertEqual(Set(docs.flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }), ["dev.7co.13years.show", "dev.7co.13years.template"], name)
+            XCTAssertEqual(Set(docs.flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }), ["dev.7co.13years.document", "dev.7co.13years.template"], name)
         }
     }
 }

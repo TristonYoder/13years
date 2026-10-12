@@ -21,7 +21,7 @@ struct ProducerIOSApp: App {
                 .splashScreen(isPresented: splash.isPresented)
                 .task { splash.markReady() }
                 .onOpenURL { documents.open($0, in: cueEngine) }
-                .fileImporter(isPresented: $documents.isImporting, allowedContentTypes: [.thirteenYearsShow]) {
+                .fileImporter(isPresented: $documents.isImporting, allowedContentTypes: [.thirteenYearsDocument]) {
                     documents.handleImport($0.map { [$0] }, into: cueEngine)
                 }
                 .fileImporter(isPresented: $documents.isImportingTemplate, allowedContentTypes: [.thirteenYearsTemplate]) {

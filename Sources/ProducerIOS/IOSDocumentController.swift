@@ -15,18 +15,18 @@ final class IOSDocumentController: ObservableObject {
     ))
     @Published var errorMessage: String?
 
-    var exportType: UTType { exportFile.isTemplate ? .thirteenYearsTemplate : .thirteenYearsShow }
+    var exportType: UTType { exportFile.isTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument }
 
     var hasError: Binding<Bool> {
         Binding(get: { self.errorMessage != nil }, set: { if !$0 { self.errorMessage = nil } })
     }
 
-    func exportShow(_ engine: CueEngine) {
+    func saveAs(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument())
         isExporting = true
     }
 
-    func exportTemplate(_ engine: CueEngine) {
+    func saveAsTemplate(_ engine: CueEngine) {
         exportFile = ProducerDocumentFile(engine.makeDocument(), isTemplate: true)
         isExporting = true
     }
@@ -64,12 +64,12 @@ struct DocumentCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Open Show…") { documents.isImporting = true }
+            Button("Open…") { documents.isImporting = true }
                 .keyboardShortcut("o")
-            Button("Open Template…") { documents.isImportingTemplate = true }
-            Button("Export Show…") { documents.exportShow(engine) }
+            Button("New from Template…") { documents.isImportingTemplate = true }
+            Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s")
-            Button("Export as Template…") { documents.exportTemplate(engine) }
+            Button("Save as Template…") { documents.saveAsTemplate(engine) }
         }
     }
 }
@@ -80,11 +80,11 @@ struct DocumentMenu: View {
 
     var body: some View {
         Menu {
-            Button("Open Show…", systemImage: "folder") { documents.isImporting = true }
-            Button("Open Template…", systemImage: "doc.on.doc") { documents.isImportingTemplate = true }
+            Button("Open…", systemImage: "folder") { documents.isImporting = true }
+            Button("New from Template…", systemImage: "doc.on.doc") { documents.isImportingTemplate = true }
             Divider()
-            Button("Export Show…", systemImage: "square.and.arrow.up") { documents.exportShow(engine) }
-            Button("Export as Template…", systemImage: "doc.badge.plus") { documents.exportTemplate(engine) }
+            Button("Save As…", systemImage: "square.and.arrow.up") { documents.saveAs(engine) }
+            Button("Save as Template…", systemImage: "doc.badge.plus") { documents.saveAsTemplate(engine) }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.title3)

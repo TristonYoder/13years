@@ -10,7 +10,7 @@ struct LaunchSettingsSection: View {
     @State private var isChoosingFile = false
 
     private var fileTypes: [UTType] {
-        [.thirteenYearsShow, .thirteenYearsTemplate]
+        [.thirteenYearsDocument, .thirteenYearsTemplate]
     }
 
     var body: some View {
