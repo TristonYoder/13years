@@ -29,8 +29,7 @@ struct ProducerIOSApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.beginImport(template: true) },
                                 open: { documents.beginImport(template: false) },
-                                openRecent: { documents.open($0, in: cueEngine) },
-                                skip: { documents.dismissLauncher() }
+                                openRecent: { documents.open($0, in: cueEngine) }
                             )
                         )
                         .transition(.opacity)

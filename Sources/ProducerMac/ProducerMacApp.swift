@@ -30,8 +30,7 @@ struct ProducerMacApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.newFromTemplate(cueEngine) },
                                 open: { documents.open(cueEngine) },
-                                openRecent: { documents.open($0, in: cueEngine) },
-                                skip: { documents.dismissLauncher() }
+                                openRecent: { documents.open($0, in: cueEngine) }
                             )
                         )
                             .transition(.opacity)

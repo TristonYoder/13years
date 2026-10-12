@@ -45,10 +45,6 @@ final class IOSDocumentController: ObservableObject {
         DocumentMenuBridge.recentURLs = recents.map(\.url)
     }
 
-    func dismissLauncher() {
-        isLauncherPresented = false
-    }
-
     func newDocument(_ engine: CueEngine) {
         engine.resetToNewDocument()
         isLauncherPresented = false

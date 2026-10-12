@@ -9,7 +9,6 @@ struct LauncherActions {
     var newFromTemplate: () -> Void
     var open: () -> Void
     var openRecent: (URL) -> Void
-    var skip: () -> Void
 }
 
 struct LauncherView: View {
@@ -46,13 +45,6 @@ struct LauncherView: View {
                 }
 
                 recents
-
-                Button("Skip for now") { actions.skip() }
-                    .buttonStyle(.plain)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .keyboardShortcut(.cancelAction)
-                    .help("Continue with what you had open last time, without a file")
             }
             .padding(36)
             .frame(width: 560)

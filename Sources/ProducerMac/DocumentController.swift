@@ -165,10 +165,6 @@ final class DocumentController: ObservableObject {
         }
     }
 
-    func dismissLauncher() {
-        isLauncherPresented = false
-    }
-
     func open(_ engine: CueEngine) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [contentType]
