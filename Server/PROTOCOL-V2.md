@@ -61,7 +61,7 @@ FNV-1a 64-bit over the UTF-8 bytes of a canonical string, rendered as exactly 16
 | --- | --- |
 | `roles` | for each role in array order: `id` US `name` US `state` RS, where `state` is the wire string `OFF`, `STANDBY` or `GO` |
 | `timer` | no active item: `none`. Otherwise `itemId` US `lengthInSeconds` US `isRunning` (1 or 0) US `isDurationActual` (1 or 0) US `elapsedMs` US `anchorMs`, taken from the last anchor |
-| `messages` | message ids ordered by `timestamp` descending, ties broken by `id` ascending (byte order), joined with RS (no trailing RS) |
+| `messages` | the ids of the 16 newest messages, ordered by `timestamp` descending with ties broken by `id` ascending (byte order), joined with RS (no trailing RS); fewer than 16 messages hash all of them |
 | `plan` (Control API only) | for each item in order: `id` US `title` US `lengthInSeconds` US `isDurationActual` (1 or 0) RS, then the decimal `activeItemIndex` |
 
 Integers are base-10 with no padding or sign for non-negative values.

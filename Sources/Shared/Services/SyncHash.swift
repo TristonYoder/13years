@@ -71,12 +71,14 @@ public enum SyncHash {
         return fields.joined(separator: unitSeparator)
     }
 
+    public static let digestMessageLimit = 16
+
     public static func messagesCanonical(ids: [String]) -> String {
         ids.joined(separator: recordSeparator)
     }
 
     public static func messageIdsNewestFirst(_ messages: [InterTeamMessage]) -> [String] {
-        sortedNewestFirst(messages).map(\.id)
+        Array(sortedNewestFirst(messages).prefix(digestMessageLimit)).map(\.id)
     }
 
     public static func sortedNewestFirst(_ messages: [InterTeamMessage]) -> [InterTeamMessage] {

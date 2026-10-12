@@ -112,7 +112,7 @@ void Engine::handleDigest(JsonObjectConst doc) {
   const char *timer = h["timer"] | "";
   if (timer[0] && anchorKnown_ && timerHash() != timer) mismatch = true;
   const char *messages = h["messages"] | "";
-  if (messages[0] && !messagesOverflowed_ && messageMismatchStreak_ < kMaxMessageMismatchStreak) {
+  if (messages[0] && messageMismatchStreak_ < kMaxMessageMismatchStreak) {
     if (messagesHash() != messages) {
       messageMismatchStreak_++;
       mismatch = true;

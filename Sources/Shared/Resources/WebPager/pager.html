@@ -783,7 +783,7 @@ function compareMessages(a, b) {
 }
 
 function messagesCanonical(messages) {
-  return (messages || []).slice().sort(compareMessages).map((m) => m.id).join(RS);
+  return (messages || []).slice().sort(compareMessages).slice(0, 16).map((m) => m.id).join(RS);
 }
 
 function planCanonical(plan) {
