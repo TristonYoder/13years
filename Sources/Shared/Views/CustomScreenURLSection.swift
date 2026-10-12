@@ -22,6 +22,7 @@ struct CustomScreenURLSection: View {
     @State private var cue: PagerURLBuilder.CueDisplay = .viewerChoice
     @State private var showSettings = true
     @State private var showMessages = true
+    @State private var allowRoleChange = true
     @AppStorage("pagerURLAddressChoice") private var addressChoice = ""
     @AppStorage("pagerURLCustomAddress") private var customAddress = ""
 
@@ -76,7 +77,8 @@ struct CustomScreenURLSection: View {
             layout: layout,
             cue: cue,
             showSettings: showSettings,
-            showMessages: showMessages
+            showMessages: showMessages,
+            allowRoleChange: allowRoleChange
         )
     }
 
@@ -108,8 +110,9 @@ struct CustomScreenURLSection: View {
 
             Toggle("Show settings button", isOn: $showSettings)
             Toggle("Show messages button", isOn: $showMessages)
+            Toggle("Allow role selection", isOn: $allowRoleChange)
 
-            Text("Turn both buttons off for a confidence monitor nobody can click.")
+            Text("Turn the buttons and role selection off for a confidence monitor nobody can click.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

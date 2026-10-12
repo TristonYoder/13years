@@ -1837,6 +1837,7 @@ const CUE_PARAM = params.get("cue");
 const SHOW_SETTINGS = parseFlagParam(params.get("settings"), true);
 
 const SHOW_MESSAGES = parseFlagParam(params.get("messages"), true);
+const ALLOW_ROLE_CHANGE = parseFlagParam(params.get("roles"), true);
 
 let snapshot = null;
 let lastLtKey = "";
@@ -2115,8 +2116,9 @@ function renderRoles() {
     }
   }
   el.role.value = roleSel.id;
-  el.role.disabled = list.length < 2;
-  el.rolepick.classList.toggle("single", list.length < 2);
+  const locked = list.length < 2 || !ALLOW_ROLE_CHANGE;
+  el.role.disabled = locked;
+  el.rolepick.classList.toggle("single", locked);
 }
 
 function renderCountdown(view, hideEmpty) {

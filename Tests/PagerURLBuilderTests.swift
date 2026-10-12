@@ -41,6 +41,7 @@ final class PagerURLBuilderTests: XCTestCase {
     func testButtonToggles() {
         XCTAssertEqual(PagerURLBuilder(host: "h", showSettings: false).urlString, "http://h:13390/pager?settings=0")
         XCTAssertEqual(PagerURLBuilder(host: "h", showMessages: false).urlString, "http://h:13390/pager?messages=0")
+        XCTAssertEqual(PagerURLBuilder(host: "h", allowRoleChange: false).urlString, "http://h:13390/pager?roles=0")
         XCTAssertEqual(PagerURLBuilder(host: "h", showSettings: false, showMessages: false).urlString, "http://h:13390/pager?settings=0&messages=0")
     }
 

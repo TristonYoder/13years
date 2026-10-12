@@ -45,6 +45,7 @@ public struct PagerURLBuilder: Equatable, Sendable {
     public var cue: CueDisplay
     public var showSettings: Bool
     public var showMessages: Bool
+    public var allowRoleChange: Bool
 
     public init(
         host: String,
@@ -53,7 +54,8 @@ public struct PagerURLBuilder: Equatable, Sendable {
         layout: Layout = .auto,
         cue: CueDisplay = .viewerChoice,
         showSettings: Bool = true,
-        showMessages: Bool = true
+        showMessages: Bool = true,
+        allowRoleChange: Bool = true
     ) {
         self.host = host
         self.port = port
@@ -62,6 +64,7 @@ public struct PagerURLBuilder: Equatable, Sendable {
         self.cue = cue
         self.showSettings = showSettings
         self.showMessages = showMessages
+        self.allowRoleChange = allowRoleChange
     }
 
     public var urlString: String {
@@ -75,6 +78,7 @@ public struct PagerURLBuilder: Equatable, Sendable {
         }
         if !showSettings { items.append("settings=0") }
         if !showMessages { items.append("messages=0") }
+        if !allowRoleChange { items.append("roles=0") }
         let query = items.isEmpty ? "" : "?" + items.joined(separator: "&")
         return base + WebPager.path + query
     }

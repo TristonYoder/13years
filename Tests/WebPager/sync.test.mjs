@@ -1100,3 +1100,9 @@ test("settings=0 and messages=0 flags reach the page script", () => {
   const def = loadPage("", 390, 844);
   assert.equal(vm.runInContext("[SHOW_SETTINGS, SHOW_MESSAGES]", def.context).join(), "true,true");
 });
+
+test("roles=0 locks the role chooser", () => {
+  const locked = loadPage("?roles=0", 390, 844);
+  assert.equal(vm.runInContext("ALLOW_ROLE_CHANGE", locked.context), false);
+  assert.equal(vm.runInContext("ALLOW_ROLE_CHANGE", loadPage("", 390, 844).context), true);
+});
