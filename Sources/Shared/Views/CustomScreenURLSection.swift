@@ -112,10 +112,6 @@ struct CustomScreenURLSection: View {
             Toggle("Show messages button", isOn: $showMessages)
             Toggle("Allow role selection", isOn: $allowRoleChange)
 
-            Text("Turn the buttons and role selection off for a confidence monitor nobody can click.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             Picker("Address", selection: Binding(get: { effectiveChoice }, set: { addressChoice = $0 })) {
                 ForEach(options) { option in
                     Text(optionLabel(option)).tag(option.host)
