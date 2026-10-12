@@ -9,6 +9,7 @@
 #include "storage/nvs_store.h"
 #include "hw/touch_xpt2046.h"
 #include "hw/rgb_led.h"
+#include "net/lan_client.h"
 #include <TFT_eSPI.h>
 #include <lvgl.h>
 #include <WiFi.h>
@@ -200,7 +201,7 @@ static lv_obj_t *pagerScreen = nullptr, *groundBox = nullptr;
 static lv_obj_t *clockLabel = nullptr, *clockCaption = nullptr;
 static lv_obj_t *cuePill = nullptr, *cueLabel = nullptr;
 static lv_obj_t *roleBtn = nullptr, *roleBtnLabel = nullptr, *roleBtnChevron = nullptr;
-static lv_obj_t *connRow = nullptr, *connDot = nullptr, *connLabel = nullptr;
+static lv_obj_t *noConnLabel = nullptr;
 static lv_obj_t *itemCard = nullptr, *itemTitleLabel = nullptr, *timerLabel = nullptr, *projActualLabel = nullptr;
 static lv_obj_t *itemDivider = nullptr, *itemDividerLine = nullptr, *itemNotes = nullptr;
 static lv_obj_t *bottomStack = nullptr;
@@ -301,24 +302,11 @@ static void buildPagerScreen() {
   lv_obj_set_style_text_color(cueLabel, lv_color_hex(kGroundHex), 0);
   lv_obj_center(cueLabel);
 
-  connRow = lv_obj_create(pagerScreen);
-  lv_obj_remove_style_all(connRow);
-  lv_obj_set_size(connRow, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_style_pad_column(connRow, 4, 0);
-  lv_obj_set_flex_flow(connRow, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(connRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(connRow, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(connRow, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY);
-
-  connDot = lv_obj_create(connRow);
-  lv_obj_remove_style_all(connDot);
-  lv_obj_set_size(connDot, 8, 8);
-  lv_obj_set_style_radius(connDot, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_opa(connDot, LV_OPA_COVER, 0);
-  lv_obj_clear_flag(connDot, LV_OBJ_FLAG_SCROLLABLE);
-
-  connLabel = lv_label_create(connRow);
-  lv_obj_set_style_text_font(connLabel, &inter_regular_14, 0);
+  noConnLabel = lv_label_create(pagerScreen);
+  lv_obj_set_style_text_font(noConnLabel, &inter_regular_14, 0);
+  lv_label_set_text(noConnLabel, "No connection");
+  lv_obj_align(noConnLabel, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY + 31);
+  lv_obj_add_flag(noConnLabel, LV_OBJ_FLAG_HIDDEN);
 
   roleBtn = lv_obj_create(pagerScreen);
   lv_obj_remove_style_all(roleBtn);
@@ -332,7 +320,7 @@ static void buildPagerScreen() {
   lv_obj_set_flex_align(roleBtn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_add_flag(roleBtn, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_clear_flag(roleBtn, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(roleBtn, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY + 20);
+  lv_obj_align(roleBtn, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY);
   lv_obj_add_event_cb(roleBtn, onRoleBtnClicked, LV_EVENT_CLICKED, nullptr);
 
   roleBtnLabel = lv_label_create(roleBtn);
@@ -487,7 +475,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
   lv_label_set_text(cueLabel, cueStateDisplayName(state));
   lv_obj_center(cueLabel);
 
-  lv_obj_t *labels[] = {clockLabel, clockCaption, connLabel, roleBtnLabel, itemTitleLabel, timerLabel,
+  lv_obj_t *labels[] = {clockLabel, clockCaption, noConnLabel, roleBtnLabel, itemTitleLabel, timerLabel,
                         projActualLabel, nextTitleLabel, nextLenLabel};
   for (lv_obj_t *l : labels) lv_obj_set_style_text_color(l, ink, 0);
   lv_obj_set_style_bg_color(itemDividerLine, ink, 0);
@@ -573,7 +561,7 @@ static void relayoutPager(bool timerShown, bool header, bool stackShown) {
   lv_obj_set_pos(itemCard, kMargin, y);
 }
 
-static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lanConnected) {
+static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   const cue::RoleView *role = engine.activeRoleRef();
   CueState state = role ? role->state : CueState::Off;
 
@@ -589,12 +577,10 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
     lv_label_set_text(roleBtnLabel, pc.role.c_str());
   }
 
-  bool isLive = wifiConnected && lanConnected && engine.isProducerLive();
-  int link = !wifiConnected ? 0 : !lanConnected ? 1 : isLive ? 2 : 3;
+  int link = linkLost ? 1 : 0;
   if (!pc.valid || link != pc.link) {
     pc.link = link;
-    lv_obj_set_style_bg_color(connDot, isLive ? lv_palette_main(LV_PALETTE_GREEN) : lv_palette_main(LV_PALETTE_RED), 0);
-    lv_label_set_text(connLabel, link == 0 ? "No WiFi" : link == 1 ? "Connecting..." : link == 2 ? "Live" : "Disconnected");
+    setHidden(noConnLabel, !linkLost);
   }
 
   int64_t wallMs = 0;
@@ -772,6 +758,8 @@ const char *cueDisplayName() {
 static const int kMaxRolePickerRows = 8;
 static lv_obj_t *rolePickerScreen = nullptr;
 static String rolePickerIds[kMaxRolePickerRows];
+static lv_obj_t *pickerStatusLabel = nullptr;
+static String pickerStatusShown;
 
 static void onRoleRowClicked(lv_event_t *e) {
   const char *roleId = (const char *)lv_event_get_user_data(e);
@@ -816,6 +804,24 @@ static void addRoleRow(lv_obj_t *parent, const char *roleId, const char *display
   lv_obj_center(label);
 }
 
+static void updatePickerStatus(cue::Engine &engine, bool wifiConnected, bool lanConnected, pagersync::LinkPhase phase) {
+  if (!pickerStatusLabel) return;
+  String text = pagersync::linkStatusText(wifiConnected, lanConnected, phase);
+  String host = lan::producerLabel();
+  if (host.length() > 0) text += "\n" + host;
+  if (engine.hasClockOffset()) {
+    char buf[40];
+    snprintf(buf, sizeof(buf), "\nClock offset %+ld ms", (long)lround(engine.clockOffsetMs()));
+    text += buf;
+  } else {
+    text += "\nClock not synced";
+  }
+  if (!pickerStatusShown.equals(text.c_str())) {
+    pickerStatusShown = text;
+    lv_label_set_text(pickerStatusLabel, text.c_str());
+  }
+}
+
 static void buildRolePickerScreen(cue::Engine &engine) {
   if (rolePickerScreen) {
     lv_obj_del(rolePickerScreen);
@@ -828,6 +834,14 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   lv_obj_set_flex_align(rolePickerScreen, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(rolePickerScreen, 6, 0);
   lv_obj_set_style_pad_all(rolePickerScreen, 8, 0);
+
+  pickerStatusLabel = lv_label_create(rolePickerScreen);
+  lv_label_set_long_mode(pickerStatusLabel, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(pickerStatusLabel, 210);
+  lv_obj_set_style_text_align(pickerStatusLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(pickerStatusLabel, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(pickerStatusLabel, &inter_regular_14, 0);
+  pickerStatusShown = "";
 
   lv_obj_t *title = lv_label_create(rolePickerScreen);
   lv_label_set_text(title, "Select this pager's role");
@@ -924,17 +938,19 @@ void update(Phase phase, cue::Engine &engine, bool wifiConnected, bool lanConnec
       break;
   }
 
-  bool connectedToProducer = wifiConnected && lanConnected && engine.isProducerLive();
-  if (!engine.hasSyncedWithProducer() || !connectedToProducer) {
+  pagersync::LinkPhase lp = pagersync::linkPhase((int64_t)engine.silenceMs());
+  if (!engine.hasSyncedWithProducer() || lp == pagersync::LinkPhase::Extended) {
     showWaitingForDataScreen(wifiConnected);
     return;
   }
+  bool linkLost = !wifiConnected || !lanConnected || lp != pagersync::LinkPhase::Live;
 
   if (showingRolePicker) {
     if (rolePickerNeedsBuild) {
       buildRolePickerScreen(engine);
       rolePickerNeedsBuild = false;
     }
+    updatePickerStatus(engine, wifiConnected, lanConnected, lp);
     if (lv_scr_act() != rolePickerScreen) lv_scr_load(rolePickerScreen);
     return;
   }
@@ -944,7 +960,7 @@ void update(Phase phase, cue::Engine &engine, bool wifiConnected, bool lanConnec
     lv_scr_load(pagerScreen);
     pc.valid = false;
   }
-  refreshPagerScreen(engine, wifiConnected, lanConnected);
+  refreshPagerScreen(engine, linkLost);
 }
 
 void runTouchCalibration() {

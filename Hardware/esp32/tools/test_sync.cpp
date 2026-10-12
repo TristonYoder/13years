@@ -529,6 +529,20 @@ static void testCueDisplay() {
   CHECK_STR(pagersync::cueDisplayName(pagersync::CueDisplay::Fullscreen), "fullscreen");
 }
 
+static void testLinkPhase() {
+  using pagersync::LinkPhase;
+  CHECK(pagersync::linkPhase(0) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(11999) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(12000) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(19999) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(20000) == LinkPhase::Extended);
+  CHECK(pagersync::linkPhase(600000) == LinkPhase::Extended);
+  CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Live), "Live");
+  CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Stale), "Disconnected - retrying");
+  CHECK_STR(pagersync::linkStatusText(true, false, LinkPhase::Live), "Disconnected - retrying");
+  CHECK_STR(pagersync::linkStatusText(false, true, LinkPhase::Live), "Not connected");
+}
+
 static void testUtcOffsetFilter() {
 #ifdef HAVE_ARDUINOJSON
   JsonDocument filter;
@@ -565,6 +579,7 @@ int main() {
   testTimeOfDay();
   testFormatLength();
   testCueDisplay();
+  testLinkPhase();
   testUtcOffsetFilter();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;

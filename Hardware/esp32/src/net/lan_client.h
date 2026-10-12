@@ -14,6 +14,8 @@ bool isConnected();
 
 bool isStaticFallbackActive();
 
+String producerLabel();
+
 void resetStaticFallback();
 
 }

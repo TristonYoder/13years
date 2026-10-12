@@ -426,9 +426,15 @@ fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
   a small `LOCAL TIME` caption) while there is no cue, replaced by the cue
   word (`GO!`, `STANDBY`) while a cue is active; the slot reserves the widest
   word. The cue word uses black 32 only when `STANDBY` fits next to the right
-  column, otherwise bold 18. Right column: connection status above the role
-  chooser (a chip with a chevron that opens the role picker). There is no
-  `FOR: person`.
+  column, otherwise bold 18. Right column: the role chooser (a chip with a
+  chevron that opens the role picker) with a small `No connection` marker
+  under it while the link is lost. There is no `FOR: person`.
+- **Connection state.** The connection state (`Live`, `Disconnected - retrying`,
+  `Not connected`), the producer name or address and the clock offset are shown
+  at the top of the role picker screen. After 12 s without a packet the pager
+  screen shows the marker; after 20 s without any packet it shows the
+  `Waiting for Producer...` logo screen until packets resume
+  (`pagersync::linkPhase` in `src/sync/sync_core.h`, host-tested).
 - **Local time of day.** The producer's epoch time (synced offset applied to
   `esp_timer`) plus the optional integer `utcOffsetSeconds` the producer sends
   in `TIMER_ANCHOR`, `PONG` and `TIMER_UPDATE` (bounded to one day either way).

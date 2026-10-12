@@ -141,6 +141,7 @@ static bool targetIsStatic = false;
 static int staticFailureCount = 0;
 static const int kStaticFailureThreshold = 3;
 static bool staticFallbackActive = false;
+static String targetLabel;
 
 static bool discoverViaStaticIp() {
   if (staticFallbackActive) return false;
@@ -155,6 +156,7 @@ static bool discoverViaStaticIp() {
   targetPort = kServerPort;
   targetIsStatic = true;
   haveTarget = true;
+  targetLabel = host;
   return true;
 }
 
@@ -168,6 +170,8 @@ static bool discoverViaMdns() {
   targetPort = MDNS.port(0);
   targetIsStatic = false;
   haveTarget = true;
+  targetLabel = MDNS.hostname(0);
+  if (targetLabel.length() == 0) targetLabel = targetIp.toString();
   Serial.printf("[lan] discovered producer via mDNS: %s (%s:%u)\n",
                 MDNS.hostname(0).c_str(), targetIp.toString().c_str(), targetPort);
   return true;
@@ -363,4 +367,8 @@ void lan::resetStaticFallback() {
   haveTarget = false;
   lastDiscoveryAttemptAt = 0;
   if (client.connected()) client.stop();
+}
+
+String lan::producerLabel() {
+  return targetLabel;
 }

@@ -380,4 +380,22 @@ inline const char *cueDisplayName(CueDisplay d) {
   return d == CueDisplay::Fullscreen ? "fullscreen" : "outline";
 }
 
+
+enum class LinkPhase { Live, Stale, Extended };
+
+static const int64_t kLinkStaleAfterMs = 12000;
+static const int64_t kLinkExtendedAfterMs = 20000;
+
+inline LinkPhase linkPhase(int64_t silenceMs) {
+  if (silenceMs >= kLinkExtendedAfterMs) return LinkPhase::Extended;
+  if (silenceMs >= kLinkStaleAfterMs) return LinkPhase::Stale;
+  return LinkPhase::Live;
+}
+
+inline const char *linkStatusText(bool wifiUp, bool lanUp, LinkPhase phase) {
+  if (!wifiUp) return "Not connected";
+  if (!lanUp || phase != LinkPhase::Live) return "Disconnected - retrying";
+  return "Live";
+}
+
 }
