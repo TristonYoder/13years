@@ -43,7 +43,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 
 **Limits.** Request bodies are capped at 1 MiB and WebSocket frames at 1 MiB. The listener holds at most 32 connections in total and 8 per remote IP; further connections are refused. An HTTP request (head and body) must arrive within 10 seconds of its first byte, and a connection that has not upgraded to a WebSocket is closed after 30 seconds without traffic.
 
-**Value limits.** Timer lengths are `0...604800` seconds and timer adjustments `-604800...604800`; values outside answer `400`. Names (roles, waypoints, person names) are at most 100 characters, titles 200, message text 2000 and note values 4000. At most 64 roles, 500 plan items, 200 waypoints and 100 schedules; creating more answers `409`, and over-long text answers `400`. `POST /v1/network/ping` only accepts private, link-local or loopback IPv4 addresses and `.local` names.
+**Value limits.** Timer lengths are `0...604800` seconds and timer adjustments `-604800...604800`; values outside answer `400`. Names (roles, waypoints, person names) are at most 100 characters, titles 200, message text 2000 and note values 4000. At most 64 roles, 500 plan items, 200 waypoints and 100 schedules; creating more answers `409`, and over-long text answers `400`.
 
 ## The State Snapshot
 

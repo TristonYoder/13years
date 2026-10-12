@@ -471,9 +471,6 @@ public final class ControlAPIRouter {
             guard let request = decode(ControlAPIRequests.PingBody.self, body) else { return badBody() }
             let ip = request.ip.trimmingCharacters(in: .whitespaces)
             guard !ip.isEmpty else { return Self.error(400, "Provide an IP address") }
-            guard AssignedHostPolicy.isAcceptable(ip) else {
-                return Self.error(400, "Not a local address", detail: "Use a private, link-local or loopback IPv4 address, or a .local name.")
-            }
             guard engine.pingDevice(atIP: ip) else {
                 return Self.error(503, "Could not determine this device's own LAN address")
             }

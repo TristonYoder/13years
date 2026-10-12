@@ -32,6 +32,7 @@ public enum AssignedHostPolicy {
         case (172, 16...31): return true
         case (192, 168): return true
         case (169, 254): return true
+        case (100, 64...127): return true
         default: return false
         }
     }
