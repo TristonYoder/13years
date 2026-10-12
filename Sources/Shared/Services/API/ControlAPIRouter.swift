@@ -10,6 +10,7 @@ import UIKit
 public final class ControlAPIRouter {
     private unowned let engine: CueEngine
     private let connectedClientCount: @MainActor () -> Int
+    private var revision = 0
 
     public init(engine: CueEngine, connectedClientCount: @escaping @MainActor () -> Int = { 0 }) {
         self.engine = engine
@@ -68,6 +69,10 @@ public final class ControlAPIRouter {
         case "health":
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(health())
+
+        case "timer":
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            return json(timerSnapshot())
 
         case "state":
             guard allows(method, "GET") else { return methodNotAllowed() }
@@ -285,12 +290,12 @@ public final class ControlAPIRouter {
 
         case ("plan", "next"):
             guard allows(method, "POST") else { return methodNotAllowed() }
-            engine.nextPlanItem()
+            engine.nextPlanItem(startTimer: decode(ControlAPIRequests.PlanStepBody.self, body)?.startTimer ?? true)
             return json(snapshot())
 
         case ("plan", "previous"):
             guard allows(method, "POST") else { return methodNotAllowed() }
-            engine.previousPlanItem()
+            engine.previousPlanItem(startTimer: decode(ControlAPIRequests.PlanStepBody.self, body)?.startTimer ?? true)
             return json(snapshot())
 
         case ("plan", "next-service"):
@@ -442,6 +447,13 @@ public final class ControlAPIRouter {
             guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.RoleUpdateBody.self, body) else { return badBody() }
             return updateRole(id: roleId, with: request)
+
+        case ("waypoints", "next") where method == "POST":
+            let startTimer = decode(ControlAPIRequests.WaypointFireBody.self, body)?.startTimer ?? true
+            guard engine.fireNextWaypoint(startTimer: startTimer) != nil else {
+                return Self.error(409, "No waypoint ahead of the active item")
+            }
+            return json(snapshot())
 
         case ("waypoints", let waypointRef):
             guard let waypoint = engine.waypoint(matching: waypointRef) else {
@@ -718,8 +730,20 @@ public final class ControlAPIRouter {
         return json(planStatus())
     }
 
+    public func timerSnapshot() -> ControlAPITimerState {
+        revision += 1
+        return ControlAPITimerState(rev: revision, serverNowMs: Self.nowMs(), timer: activeTimer())
+    }
+
+    private static func nowMs() -> Int {
+        Int((Date().timeIntervalSince1970 * 1000).rounded())
+    }
+
     public func snapshot() -> ControlAPIState {
-        ControlAPIState(
+        revision += 1
+        return ControlAPIState(
+            rev: revision,
+            serverNowMs: Self.nowMs(),
             appMode: engine.appMode.rawValue,
             network: ControlAPIState.NetworkStatus(
                 isMasterServer: engine.isMasterServer,

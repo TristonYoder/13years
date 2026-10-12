@@ -42,6 +42,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 
 ```json
 {
+  "rev": 128,
+  "serverNowMs": 1760000000000,
   "appMode": "producerControl",
   "network": {
     "isMasterServer": true,
@@ -72,6 +74,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
       "lengthInSeconds": 300,
       "isDurationActual": false,
       "remainingSeconds": 45,
+      "elapsedSeconds": 255,
       "isRunning": true,
       "isOvertime": false,
       "servicePlanTitle": "Sunday Morning Service",
@@ -83,7 +86,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     "isRunning": true,
     "remainingSeconds": 45,
     "isOvertime": false,
-    "formattedRemaining": "0:45",
+    "formattedRemaining": "00:45",
     "isDurationActualForDisplay": false
   },
   "plan": {
@@ -197,6 +200,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 - **`waypoints`** is the whole waypoint library plus this week's resolution — `itemId`/`itemTitle`/`itemIndex` are `null` on an entry nothing in the current plan carries, same "not wired up yet" meaning as `timer` being `null`. See [Waypoints](#service-waypoints).
 - **`schedules.nextId`** is the id (or `null`) of whichever entry in `schedules.entries` is the next one that will actually fire, so a client can render "next: Sunday 10am, live at 9:30" without reasoning about every entry itself. See [Service Schedules](#service-schedules).
 
+**`rev`** is a counter that increases every time the server builds a snapshot, so a client that receives snapshots from several paths (REST replies, `state` and `timer` events) keeps only the highest `rev` it has seen and ignores anything older. **`serverNowMs`** is the server clock in epoch milliseconds when the snapshot was built; a client counting down locally compares it with its own clock to correct for transit time and skew.
+
 ## Routes
 
 Grouped by function. Dates in requests and responses are ISO-8601. Every request body field is optional unless the route description says otherwise (a route that requires a name will reject an empty request or a null name).
@@ -242,13 +247,15 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/timer/remaining` | POST | Set or adjust remaining time. Body: either `{"seconds": number}` (absolute) or `{"input": "string"}` (relative/absolute command text). Input uses the same GrandMA-style grammar the producer types: `"4350"` (absolute seconds), `"+30s"`, `"-5m"`, `"1h30m"`. Parsed by the same parser the app's UI uses so a macro pad and a keyboard agree on meaning. Returns the full state snapshot. |
 | `POST /v1/timer/actual-override` | POST | Set whether the active timer displays as Projected or Actual. Body: `{"isActual": boolean}`. This is a transient visual override; the plan item's own `isDurationActual` flag is unchanged. Returns the full state snapshot. |
 
+`GET /v1/timer` returns just the timer: `{"rev": number, "serverNowMs": number, "timer": ActiveTimer | null}`, with `timer` shaped exactly as in the snapshot.
+
 ### Plan
 
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/plan` | GET | The plan structure, metadata, and current position. |
-| `POST /v1/plan/next` | POST | Advance to the next item (or mark end-of-plan if already at the last). Returns the full state snapshot. |
-| `POST /v1/plan/previous` | POST | Go back to the previous item. Returns the full state snapshot. |
+| `POST /v1/plan/next` | POST | Advance to the next item (or mark end-of-plan if already at the last). Starts the countdown by default. Body: `{"startTimer": boolean?}`, optional; absent means `true`, `false` moves without running the clock. Returns the full state snapshot. |
+| `POST /v1/plan/previous` | POST | Go back to the previous item. Starts the countdown by default; same optional `{"startTimer": boolean}` body as `plan/next`. Returns the full state snapshot. |
 | `POST /v1/plan/next-service` | POST | Load the next service from Planning Center (202). Only works if a PCO flow is synced. Returns the current state snapshot and marks the operation as in-progress; watch for a later `state` event showing the new plan. |
 | `GET /v1/plan/active` | GET | Just the active timer item (shorthand for reading it out of the full state). |
 | `POST /v1/plan/active` | POST | Jump to a specific item. Body: `{"itemId": "string"}`. Id must exist. Returns the full state snapshot. |
@@ -277,6 +284,7 @@ One wrinkle worth knowing: PCO *header* items ("Pre Gathering", "Host Moment") a
 | `PATCH /v1/waypoints/{ref}` | PATCH | Rename a waypoint. Body: `{"name": "string"}`. The id never changes, so every existing assignment and every button already pointed at the id keeps working through a rename. Empty name is 400; a new slug colliding with a *different* waypoint is 409 (renaming a waypoint to a different casing of its own name is fine). |
 | `DELETE /v1/waypoints/{ref}` | DELETE | Remove a waypoint from the library and strip it from every plan item's assignment. Returns the remaining waypoint list. |
 | `POST /v1/waypoints/{ref}/assign` | POST | Assign (or unassign) this waypoint for the week. Body: `{"itemId": "string?"}` — a null or absent `itemId` unassigns. Assigning steals the waypoint away from whatever other item held it, since a waypoint is on at most one item at a time. 404 if the waypoint or the item id doesn't exist. Returns the updated waypoint. |
+| `POST /v1/waypoints/next` | POST | Jump to the next item after the active one, in plan order, that carries any waypoint, with the same clock behaviour and optional `{"startTimer": boolean}` body as `/go`. **409** if no waypoint-carrying item is ahead. (A waypoint whose ref is literally `next` is only reachable by id for POST.) Returns the full state snapshot. |
 | `POST /v1/waypoints/{ref}/go` | POST | Fire the waypoint — jump to whatever item currently carries it, identically to tapping that row in Service Flow, **which includes starting its countdown**. Body: `{"startTimer": boolean?}`, optional and normally absent; absent means `true`. Send `{"startTimer": false}` to jump without running the clock, for pre-rolling to a cue ahead of time. Firing the same waypoint twice never pauses a running show. 404 if the waypoint doesn't exist; **409** if it exists but nothing in this week's plan carries it (see above). Returns the full state snapshot. |
 | `POST /v1/plan/items/{id}/waypoints` | POST | Replace one plan item's whole waypoint list in one call (the item editor's waypoint picker). Body: `{"waypoints": ["string"]}`, each entry resolved by id, slug, or name. A full list rather than add/remove ops, so resending the same state is idempotent. Any entry that doesn't resolve to a real waypoint is a 404 naming which one; each kept waypoint is stolen away from whatever other item held it, same as `/assign`. Returns the plan section of state. |
 
@@ -393,7 +401,16 @@ Then, as the show runs:
 }
 ```
 
-`state` events are coalesced; they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync.
+`state` and `timer` events are coalesced; they fire roughly 1 Hz while a timer is counting down, and less frequently when the show is idle. A client that skipped the `hello` event and receives only `state` events will be kept in sync.
+
+```json
+{
+  "event": "timer",
+  "data": { "rev": 129, "serverNowMs": 1760000001000, "timer": { ... ActiveTimer | null ... } }
+}
+```
+
+When the only thing that changed since the last push is the active timer (its remaining time, running flag or item), the server sends this slim `timer` event instead of the full `state`. Anything else changing sends a full `state`. A client should apply `timer` onto its last snapshot and treat `rev` as above. The built-in web pager does this; clients that only understand `state` will no longer see the countdown tick every second and should handle `timer` or poll `GET /v1/timer`.
 
 ```json
 {

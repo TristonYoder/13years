@@ -178,6 +178,7 @@ public struct LiveTimerHeaderView: View {
             .timeEntryPopover(
                 isPresented: $isEditingTimer,
                 previewBaseSeconds: item.remainingSeconds,
+                previewElapsedSeconds: item.elapsedSeconds,
                 hourFormatThreshold: engine.hourFormatThreshold
             ) { action in
                 switch action {

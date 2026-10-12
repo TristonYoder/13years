@@ -19,6 +19,8 @@ public enum ControlAPIJSON {
 }
 
 public struct ControlAPIState: Codable, Sendable {
+    public var rev: Int
+    public var serverNowMs: Int
     public var appMode: String
     public var network: NetworkStatus
     public var roles: [RoleCue]
@@ -345,6 +347,8 @@ public enum ControlAPIRequests {
         public var startTimer: Bool?
     }
 
+    public typealias PlanStepBody = WaypointFireBody
+
     public struct PlanItemWaypointsBody: Decodable, Sendable {
         public var waypoints: [String]
     }
@@ -369,5 +373,25 @@ public enum ControlAPIRequests {
         public var pcoPlanId: String?
         public var recurrence: String?
         public var isEnabled: Bool?
+    }
+}
+
+
+public struct ControlAPITimerState: Codable, Sendable {
+    public var rev: Int
+    public var serverNowMs: Int
+    public var timer: ControlAPIState.ActiveTimer?
+
+    public init(rev: Int, serverNowMs: Int, timer: ControlAPIState.ActiveTimer?) {
+        self.rev = rev
+        self.serverNowMs = serverNowMs
+        self.timer = timer
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rev, forKey: .rev)
+        try container.encode(serverNowMs, forKey: .serverNowMs)
+        try container.encode(timer, forKey: .timer)
     }
 }

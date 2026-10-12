@@ -7,6 +7,7 @@ public extension View {
     func timeEntryPopover(
         isPresented: Binding<Bool>,
         previewBaseSeconds: Int,
+        previewElapsedSeconds: Int = 0,
         arrowEdge: Edge = .bottom,
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
         onCommit: @escaping (TimerInputParser.Action) -> Void
@@ -14,6 +15,7 @@ public extension View {
         modifier(TimeEntryPopoverModifier(
             isPresented: isPresented,
             previewBaseSeconds: previewBaseSeconds,
+            previewElapsedSeconds: previewElapsedSeconds,
             arrowEdge: arrowEdge,
             hourFormatThreshold: hourFormatThreshold,
             onCommit: onCommit
@@ -21,9 +23,21 @@ public extension View {
     }
 }
 
+enum TimeEntryPreview {
+    static func resolvedSeconds(for action: TimerInputParser.Action, base: Int, elapsed: Int) -> Int {
+        switch action {
+        case .setAbsolute(let seconds):
+            return max(0, seconds)
+        case .adjustRelative(let delta):
+            return max(-elapsed, base + delta)
+        }
+    }
+}
+
 private struct TimeEntryPopoverModifier: ViewModifier {
     @Binding var isPresented: Bool
     let previewBaseSeconds: Int
+    let previewElapsedSeconds: Int
     let arrowEdge: Edge
     let hourFormatThreshold: HourFormatThreshold
     let onCommit: (TimerInputParser.Action) -> Void
@@ -102,12 +116,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     }
 
     private func resolvedSeconds(for action: TimerInputParser.Action) -> Int {
-        switch action {
-        case .setAbsolute(let seconds):
-            return max(0, seconds)
-        case .adjustRelative(let delta):
-            return max(0, previewBaseSeconds + delta)
-        }
+        TimeEntryPreview.resolvedSeconds(for: action, base: previewBaseSeconds, elapsed: previewElapsedSeconds)
     }
 
     private func setSign(_ sign: Character) {

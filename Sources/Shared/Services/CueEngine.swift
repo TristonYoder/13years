@@ -764,6 +764,21 @@ public final class CueEngine: ObservableObject {
         return .fired(itemId: itemId)
     }
 
+    public func nextWaypointItemId() -> String? {
+        guard activeItemIndex + 1 < planItems.count else { return nil }
+        return planItems[(activeItemIndex + 1)...].first { !$0.waypointIds.isEmpty }?.id
+    }
+
+    @discardableResult
+    public func fireNextWaypoint(startTimer: Bool = true) -> String? {
+        guard let itemId = nextWaypointItemId() else { return nil }
+        setActivePlanItem(id: itemId)
+        if let item = activeTimerItem, item.isRunning != startTimer {
+            toggleTimerRunning()
+        }
+        return itemId
+    }
+
     private func sortedByStartsAt(_ schedules: [ServiceSchedule]) -> [ServiceSchedule] {
         schedules.sorted { $0.startsAt < $1.startsAt }
     }
@@ -1076,25 +1091,25 @@ public final class CueEngine: ObservableObject {
         return item
     }
 
-    public func nextPlanItem() {
+    public func nextPlanItem(startTimer: Bool = true) {
         guard !planItems.isEmpty, let targetIndex = nextSelectableIndex(after: activeItemIndex) else { return }
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
         item.servicePlanTitle = activeTimerItem?.servicePlanTitle
-        item.isRunning = true
+        item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()
         mirrorToPCOLive(direction: .next, count: steps, targetItemId: item.id)
     }
 
-    public func previousPlanItem() {
+    public func previousPlanItem(startTimer: Bool = true) {
         guard !planItems.isEmpty, let targetIndex = previousSelectableIndex(before: activeItemIndex) else { return }
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
         item.servicePlanTitle = activeTimerItem?.servicePlanTitle
-        item.isRunning = true
+        item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()
         mirrorToPCOLive(direction: .previous, count: steps, targetItemId: item.id)

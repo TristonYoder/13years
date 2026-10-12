@@ -15,6 +15,7 @@ public final class ControlAPIEventHub {
     private var cancellable: AnyCancellable?
     private var isFlushScheduled = false
     private var announcedMessageIds: Set<String> = []
+    private var lastStableState: NSDictionary?
 
     public init(engine: CueEngine, server: ControlAPIServer, router: ControlAPIRouter) {
         self.engine = engine
@@ -35,6 +36,7 @@ public final class ControlAPIEventHub {
         cancellable = nil
         isFlushScheduled = false
         announcedMessageIds = []
+        lastStableState = nil
     }
 
     private func scheduleFlush() {
@@ -57,7 +59,28 @@ public final class ControlAPIEventHub {
         }
         announcedMessageIds.formIntersection(engine.recentMessages.map(\.id))
 
-        send(event: "state", data: router.snapshot())
+        let state = router.snapshot()
+        let stable = Self.stableRepresentation(of: state)
+        let timerOnly = Self.isTimerOnlyChange(previous: lastStableState, current: stable)
+        lastStableState = stable
+        if timerOnly {
+            send(event: "timer", data: ControlAPITimerState(rev: state.rev, serverNowMs: state.serverNowMs, timer: state.timer))
+        } else {
+            send(event: "state", data: state)
+        }
+    }
+
+    nonisolated static func stableRepresentation(of state: ControlAPIState) -> NSDictionary? {
+        guard let data = try? ControlAPIJSON.encoder.encode(state),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        var stripped = object
+        for key in ["timer", "rev", "serverNowMs"] { stripped.removeValue(forKey: key) }
+        return stripped as NSDictionary
+    }
+
+    nonisolated static func isTimerOnlyChange(previous: NSDictionary?, current: NSDictionary?) -> Bool {
+        guard let previous, let current else { return false }
+        return previous.isEqual(current)
     }
 
     private func send<T: Encodable>(event: String, data: T) {

@@ -1145,6 +1145,11 @@ function connect() {
     let payload;
     try { payload = JSON.parse(event.data); } catch (_) { return; }
     if (payload.event === "hello" || payload.event === "state") adopt(payload.data);
+    else if (payload.event === "timer" && snapshot) {
+      snapshot.timer = payload.data.timer;
+      snapshotAt = Date.now();
+      render();
+    }
   };
 
   ws.onclose = () => {
