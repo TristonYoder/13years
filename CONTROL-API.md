@@ -318,7 +318,7 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | `POST /v1/pco/sign-out` | POST | Disconnect from PCO. Returns the PCO section of state. |
 | `GET /v1/pco/service-types` | GET | List available service types (calendar segments in PCO, e.g., Sunday Morning, Wednesday Evening). Returns an array of `{"id": "string", "name": "string"}`. |
 | `POST /v1/pco/service-types/refresh` | POST | Fetch the latest service types from PCO (202). Watch the socket for `pco.serviceTypes` to update. |
-| `POST /v1/pco/service-type` | POST | Select a service type to filter plans. Body: `{"id": "string"}`. Returns 202 (the selection takes effect immediately but plan lists are refreshed asynchronously). |
+| `POST /v1/pco/service-type` | POST | Select a service type to filter plans. Body: `{"id": "string?"}`; a null or empty `id` clears the selection (what the app's plan picker does when you step back to the service-type list). Returns 202 (the selection takes effect immediately but plan lists are refreshed asynchronously). |
 | `POST /v1/pco/default-service-type` | POST | Remember this service type for next time. Body: `{"id": "string?"}` (null clears). Returns the PCO section of state. |
 | `GET /v1/pco/plans` | GET | List available plans for the selected service type. Returns an array of `{"id": "string", "title": "string", "dates": "string?"}`. |
 | `POST /v1/pco/plans/refresh` | POST | Fetch the latest plans from PCO (202). Requires a service type to be selected (409 if not). Watch the socket for `pco.plans` to update. |

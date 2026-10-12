@@ -358,8 +358,12 @@ public final class ControlAPIRouter {
 
         case ("pco", "service-type"):
             guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
-            guard let request = decode(ControlAPIRequests.IdBody.self, body), let id = request.id else { return badBody() }
-            engine.selectPCOServiceType(id)
+            guard let request = decode(ControlAPIRequests.IdBody.self, body) else { return badBody() }
+            if let id = request.id, !id.isEmpty {
+                engine.selectPCOServiceType(id)
+            } else {
+                engine.clearPCOServiceTypeSelection()
+            }
             return accepted(pcoStatus())
 
         case ("pco", "default-service-type"):
