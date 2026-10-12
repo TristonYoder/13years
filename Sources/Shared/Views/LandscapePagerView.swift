@@ -15,14 +15,17 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var badgeFontSize: CGFloat { 0.11 * shorterSide }
     public var countdownFontSize: CGFloat { 0.32 * shorterSide }
     public var titleFontSize: CGFloat { 0.05 * shorterSide }
-    public var timeFontSize: CGFloat { min(0.075 * shorterSide, timeAvailableWidth / 5.6) }
+    public var timeFontSize: CGFloat { min(0.075 * shorterSide, slotWidth / 6.2) }
     public var timeCaptionFontSize: CGFloat { 0.018 * shorterSide }
     public var topRowHeight: CGFloat { badgeFontSize * 1.3 }
     public var centreY: CGFloat { size.height / 2 }
     public var badgeWidthEstimate: CGFloat { badgeFontSize * 5.2 }
-    public var timeAvailableWidth: CGFloat {
-        max(1, size.width - 2 * (frameThickness + margin) - 2 * margin - badgeWidthEstimate - 0.2 * size.width)
-    }
+    public var clockLeading: CGFloat { frameThickness + margin }
+    public var slotWidth: CGFloat { min(badgeWidthEstimate, 0.38 * size.width) }
+    public var frameCornerRadius: CGFloat { max(18, 0.04 * shorterSide) }
+    public var cardWidth: CGFloat { max(1, (size.width - 2 * clockLeading - margin) / 2) }
+    public var cardHeight: CGFloat { 0.22 * shorterSide }
+    public var nextTitleFontSize: CGFloat { 0.035 * shorterSide }
     public static let widestCueWord = "STANDBY"
     public var captionFontSize: CGFloat { 0.02 * shorterSide }
     public var roleFontSize: CGFloat { 0.04 * shorterSide }
@@ -30,8 +33,6 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var noteFontSize: CGFloat { 0.028 * shorterSide }
     public var margin: CGFloat { 0.03 * shorterSide }
     public var cornerRadius: CGFloat { 0.02 * shorterSide }
-    public var nextCardMaxWidth: CGFloat { 0.4 * size.width }
-    public var notesCardMaxWidth: CGFloat { 0.55 * size.width }
 
     public static func isLandscape(_ size: CGSize) -> Bool {
         size.width > size.height
@@ -98,8 +99,8 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
                     .padding(.bottom, m.frameThickness + m.margin)
             }
 
-            Rectangle()
-                .strokeBorder(frameColor, lineWidth: m.frameThickness)
+            FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
+                .fill(frameColor, style: FillStyle(eoFill: true))
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
         }
@@ -107,29 +108,37 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
 
     private func topRow(_ m: LandscapeMetrics) -> some View {
         HStack(alignment: .top, spacing: m.margin) {
-            badge(m)
-
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                VStack(spacing: m.timeCaptionFontSize * 0.2) {
-                    Text(context.date, format: .dateTime.hour().minute().second())
-                        .font(.inter(size: m.timeFontSize, weight: .black))
-                        .monospacedDigit()
-                        .foregroundColor(Color(white: 0.96))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                    Text("LOCAL TIME")
-                        .font(.inter(size: m.timeCaptionFontSize, weight: .bold))
-                        .tracking(m.timeCaptionFontSize * 0.25)
-                        .foregroundColor(.white.opacity(0.5))
-                        .lineLimit(1)
-                }
+            ZStack(alignment: .topLeading) {
+                clock(m).opacity(cueWord.isEmpty ? 1 : 0)
+                badge(m)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: m.slotWidth, alignment: .leading)
+
+            Spacer(minLength: 0)
 
             roleColumn(m)
                 .frame(maxWidth: 0.2 * m.size.width, alignment: .trailing)
         }
         .frame(height: m.topRowHeight, alignment: .top)
+    }
+
+    private func clock(_ m: LandscapeMetrics) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: m.timeCaptionFontSize * 0.2) {
+                Text(context.date, format: .dateTime.hour().minute().second())
+                    .font(.inter(size: m.timeFontSize, weight: .black))
+                    .monospacedDigit()
+                    .foregroundColor(Color(white: 0.96))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text("LOCAL TIME")
+                    .font(.inter(size: m.timeCaptionFontSize, weight: .bold))
+                    .tracking(m.timeCaptionFontSize * 0.25)
+                    .foregroundColor(.white.opacity(0.5))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func badgeLabel(_ word: String, _ m: LandscapeMetrics) -> some View {
@@ -228,61 +237,80 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
     }
 
     private func bottomRow(_ m: LandscapeMetrics) -> some View {
-        HStack(alignment: .bottom, spacing: m.margin) {
-            if !presentation.currentNotes.isEmpty {
-                VStack(alignment: .leading, spacing: m.margin * 0.3) {
-                    ForEach(presentation.currentNotes, id: \.category) { note in
-                        notePanel(
-                            m,
-                            label: presentation.currentNotes.count > 1 ? "CURRENT — \(note.category.uppercased())" : "CURRENT",
-                            text: note.text
-                        )
-                    }
-                }
-                .frame(maxWidth: m.notesCardMaxWidth, alignment: .leading)
-            }
-
-            Spacer(minLength: 0)
-
-            if let next = presentation.nextItem {
-                VStack(alignment: .leading, spacing: m.margin * 0.3) {
-                    Text("NEXT")
+        HStack(alignment: .top, spacing: m.margin) {
+            card(m, filled: !presentation.currentNotes.isEmpty) {
+                if !presentation.currentNotes.isEmpty {
+                    Text("CURRENT")
                         .font(.inter(size: m.captionFontSize, weight: .heavy))
                         .tracking(2)
                         .foregroundColor(.white.opacity(0.5))
-                    Text(next.title.uppercased())
-                        .font(.inter(size: m.noteFontSize, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                    ForEach(presentation.nextNotes, id: \.category) { note in
-                        Text(note.text)
-                            .font(.inter(size: m.noteFontSize * 0.85, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    noteLines(m, presentation.currentNotes, weight: .bold, opacity: 1)
                 }
-                .padding(m.margin * 0.6)
-                .frame(maxWidth: m.nextCardMaxWidth, alignment: .leading)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+            }
+
+            card(m, filled: presentation.nextItem != nil) {
+                if let next = presentation.nextItem {
+                    HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
+                        Text(next.title.uppercased())
+                            .font(.inter(size: m.nextTitleFontSize, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                        Spacer(minLength: 0)
+                        Text(TimeFormatting.string(forSeconds: next.lengthInSeconds, threshold: presentation.hourFormatThreshold))
+                            .font(.inter(size: m.nextTitleFontSize, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundColor(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85)
+                }
+            }
+        }
+        .frame(height: m.cardHeight, alignment: .top)
+    }
+
+    private func noteLines(_ m: LandscapeMetrics, _ notes: [(category: String, text: String)], weight: Font.Weight, opacity: Double) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(notes, id: \.category) { note in
+                PagerNoteText.line(category: note.category, text: note.text)
+                    .font(.inter(size: m.noteFontSize, weight: weight))
+                    .foregroundColor(.white.opacity(opacity))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func notePanel(_ m: LandscapeMetrics, label: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.inter(size: m.captionFontSize, weight: .heavy))
-                .tracking(2)
-                .foregroundColor(.white.opacity(0.5))
-            Text(text)
-                .font(.inter(size: m.noteFontSize, weight: .bold))
-                .foregroundColor(.white)
-                .fixedSize(horizontal: false, vertical: true)
+    private func card<Content: View>(_ m: LandscapeMetrics, filled: Bool, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: m.margin * 0.3) {
+            content()
+            Spacer(minLength: 0)
         }
         .padding(m.margin * 0.6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.1))
+        .frame(width: m.cardWidth, height: m.cardHeight, alignment: .topLeading)
+        .background(Color.white.opacity(filled ? 0.1 : 0.03))
         .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+    }
+}
+
+enum PagerNoteText {
+    static func line(category: String, text: String) -> Text {
+        Text("\(category):").bold() + Text(" \(text)")
+    }
+}
+
+struct FrameShape: Shape {
+    let thickness: CGFloat
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRect(rect)
+        path.addRoundedRect(
+            in: rect.insetBy(dx: thickness, dy: thickness),
+            cornerSize: CGSize(width: radius, height: radius),
+            style: .continuous
+        )
+        return path
     }
 }

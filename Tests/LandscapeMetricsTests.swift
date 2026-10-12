@@ -15,7 +15,8 @@ final class LandscapeMetricsTests: XCTestCase {
         XCTAssertEqual(m.timeFontSize, 0.075 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.captionFontSize, 0.02 * 1080, accuracy: 0.001)
         XCTAssertEqual(m.timeCaptionFontSize, 0.018 * 1080, accuracy: 0.001)
-        XCTAssertEqual(m.nextCardMaxWidth, 768, accuracy: 0.001)
+        XCTAssertEqual(m.nextTitleFontSize, 0.035 * 1080, accuracy: 0.001)
+        XCTAssertEqual(m.frameCornerRadius, 0.04 * 1080, accuracy: 0.001)
     }
 
     func testFrameThicknessHasFloor() {
@@ -62,5 +63,23 @@ final class LandscapeMetricsTests: XCTestCase {
         let narrow = LandscapeMetrics(size: CGSize(width: 700, height: 600))
         XCTAssertLessThan(narrow.timeFontSize, 0.075 * 600)
         XCTAssertGreaterThan(narrow.timeFontSize, 0)
+    }
+
+    func testClockSitsAtFarLeftAndSlotFitsWidestWord() {
+        let m = LandscapeMetrics(size: CGSize(width: 1920, height: 1080))
+        XCTAssertEqual(m.clockLeading, m.frameThickness + m.margin, accuracy: 0.001)
+        XCTAssertEqual(m.slotWidth, m.badgeWidthEstimate, accuracy: 0.001)
+        XCTAssertLessThan(m.slotWidth, 0.38 * m.size.width + 0.001)
+    }
+
+    func testFrameCornerRadiusHasFloor() {
+        XCTAssertEqual(LandscapeMetrics(size: CGSize(width: 500, height: 300)).frameCornerRadius, 18)
+    }
+
+    func testCardsAreEqualWidthAndFillRow() {
+        let m = LandscapeMetrics(size: CGSize(width: 1180, height: 820))
+        XCTAssertEqual(2 * m.cardWidth + m.margin, m.size.width - 2 * m.clockLeading, accuracy: 0.001)
+        XCTAssertEqual(m.cardHeight, 0.22 * 820, accuracy: 0.001)
+        XCTAssertGreaterThan(m.nextTitleFontSize, m.noteFontSize)
     }
 }

@@ -295,7 +295,7 @@ public struct HostPagerView: View {
                 if !currentNotes.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(currentNotes, id: \.category) { note in
-                            notePanel(label: currentNotes.count > 1 ? "CURRENT — \(note.category.uppercased())" : "CURRENT", text: note.text, emphasized: true)
+                            notePanel(category: note.category, text: note.text, emphasized: true)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -315,7 +315,7 @@ public struct HostPagerView: View {
                                 .lineLimit(2)
                         }
                         ForEach(nextNotes, id: \.category) { note in
-                            notePanel(label: nextNotes.count > 1 ? note.category.uppercased() : "NOTES", text: note.text, emphasized: false)
+                            notePanel(category: note.category, text: note.text, emphasized: false)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -345,17 +345,11 @@ public struct HostPagerView: View {
         }
     }
 
-    private func notePanel(label: String, text: String, emphasized: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.inter(size: 11, weight: .heavy))
-                .tracking(1.5)
-                .foregroundColor(currentState.textColor.opacity(0.7))
-            Text(text)
-                .font(.inter(size: emphasized ? 18 : 15, weight: emphasized ? .bold : .medium))
-                .foregroundColor(currentState.textColor)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+    private func notePanel(category: String, text: String, emphasized: Bool) -> some View {
+        PagerNoteText.line(category: category, text: text)
+            .font(.inter(size: emphasized ? 18 : 15, weight: emphasized ? .bold : .medium))
+            .foregroundColor(currentState.textColor)
+            .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
