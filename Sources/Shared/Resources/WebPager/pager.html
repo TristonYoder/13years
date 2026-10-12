@@ -785,7 +785,7 @@
     flex-direction: column;
     gap: calc(var(--u) * 0.01);
     width: 100%;
-    max-height: calc(var(--u) * 0.3);
+    max-height: calc(var(--u) * 0.25);
     overflow: hidden;
     border: 0;
     font-family: inherit;
@@ -2126,7 +2126,7 @@ function fitLandscapeBottom(mode) {
       const lines = Math.round(text.scrollHeight / lineHeight);
       return lines > 3 ? Infinity : panel.scrollHeight;
     };
-    panel.style.setProperty("--k", String(fitScale(measure, u * 0.3, 0.25)));
+    panel.style.setProperty("--k", String(fitScale(measure, u * 0.25, 0.25)));
     return;
   }
   for (const card of [el.lsNotes, el.lsNext]) {
