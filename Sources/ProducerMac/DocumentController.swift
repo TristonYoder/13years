@@ -16,11 +16,11 @@ final class DocumentController: ObservableObject {
     private static let maxRecents = 10
 
     private var contentType: UTType {
-        UTType(filenameExtension: ProducerDocument.fileExtension) ?? .json
+        .thirteenYearsShow
     }
 
     private var templateType: UTType {
-        UTType(filenameExtension: ProducerDocument.templateExtension) ?? .json
+        .thirteenYearsTemplate
     }
 
     init() {
@@ -154,6 +154,14 @@ final class DocumentController: ObservableObject {
             } else {
                 open(url, in: engine)
             }
+        }
+    }
+
+    func handleOpenURL(_ url: URL, in engine: CueEngine) {
+        if url.pathExtension.lowercased() == ProducerDocument.templateExtension {
+            openTemplate(url, in: engine)
+        } else {
+            open(url, in: engine)
         }
     }
 

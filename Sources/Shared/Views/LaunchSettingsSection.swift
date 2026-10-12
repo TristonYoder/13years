@@ -10,8 +10,7 @@ struct LaunchSettingsSection: View {
     @State private var isChoosingFile = false
 
     private var fileTypes: [UTType] {
-        [ProducerDocument.fileExtension, ProducerDocument.templateExtension]
-            .map { UTType(filenameExtension: $0) ?? .json }
+        [.thirteenYearsShow, .thirteenYearsTemplate]
     }
 
     var body: some View {

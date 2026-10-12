@@ -84,18 +84,26 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         }
     }
 
-    public func write(to url: URL) throws {
+    public func encoded() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(self).write(to: url, options: .atomic)
+        return try encoder.encode(self)
+    }
+
+    public static func decoded(from data: Data) throws -> ProducerDocument {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(ProducerDocument.self, from: data)
+        guard document.version <= currentVersion else { throw LoadError.newerVersion(document.version) }
+        return document
+    }
+
+    public func write(to url: URL) throws {
+        try encoded().write(to: url, options: .atomic)
     }
 
     public static func read(from url: URL) throws -> ProducerDocument {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let document = try decoder.decode(ProducerDocument.self, from: Data(contentsOf: url))
-        guard document.version <= currentVersion else { throw LoadError.newerVersion(document.version) }
-        return document
+        try decoded(from: Data(contentsOf: url))
     }
 }

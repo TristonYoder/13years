@@ -31,6 +31,7 @@ struct ProducerMacApp: App {
                 }
                 .animation(.easeInOut(duration: 0.25), value: documents.isLauncherPresented)
                 .splashScreen(isPresented: splash.isPresented)
+                .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .task {
                     splash.markReady()
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
