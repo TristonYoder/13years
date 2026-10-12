@@ -5,6 +5,8 @@ import SwiftUI
 
 public struct PlotipharPairingSection: View {
     @EnvironmentObject var engine: CueEngine
+    @State private var hostDraft = ""
+    @State private var hostRejected = false
 
     public init() {}
 
@@ -77,17 +79,42 @@ public struct PlotipharPairingSection: View {
     }
 
     private var relayHostField: some View {
-        HStack {
-            Text("Relay Host")
-            Spacer()
-            TextField("relay.example.com", text: $engine.plotipharRelayHost)
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(.secondary)
-                #if os(iOS)
-                .autocapitalization(.none)
-                .keyboardType(.URL)
-                #endif
-                .disableAutocorrection(true)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Relay Host")
+                Spacer()
+                TextField("relay.example.com", text: $hostDraft)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    #if os(iOS)
+                    .autocapitalization(.none)
+                    .keyboardType(.URL)
+                    #endif
+                    .disableAutocorrection(true)
+                    .onSubmit(commitHost)
+                if hostDraft != engine.plotipharRelayHost {
+                    Button("Apply", action: commitHost)
+                }
+            }
+            if hostRejected {
+                Text("Use a hostname or a wss:// or https:// address. Plain ws:// and http:// are not allowed.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else if hostDraft != engine.plotipharRelayHost {
+                Text("Changing the relay host disconnects from Plotiphar so the pairing token is never sent to a new host.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { hostDraft = engine.plotipharRelayHost }
+    }
+
+    private func commitHost() {
+        if engine.setRelayHost(hostDraft) {
+            hostRejected = false
+            hostDraft = engine.plotipharRelayHost
+        } else {
+            hostRejected = true
         }
     }
 }

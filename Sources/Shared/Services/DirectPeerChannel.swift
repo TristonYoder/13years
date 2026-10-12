@@ -88,7 +88,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
             for (_, connection) in verifiedConnections {
                 connection.send(content: framed, completion: .contentProcessed { error in
                     if let error {
-                        print("[DirectPeerChannel] Send error: \(error)")
+                        AppLog.networking.error("DirectPeerChannel: Send error: \(String(describing: error), privacy: .private)")
                     }
                 })
             }
@@ -112,9 +112,9 @@ public final class DirectPeerChannel: @unchecked Sendable {
                     if let port = listener.port?.rawValue {
                         self?.queue.async { self?.localPort = port }
                     }
-                    print("[DirectPeerChannel] Listening")
+                    AppLog.networking.info("DirectPeerChannel: Listening")
                 case .failed(let error):
-                    print("[DirectPeerChannel] Listener failed: \(error)")
+                    AppLog.networking.error("DirectPeerChannel: Listener failed: \(String(describing: error), privacy: .private)")
                 default:
                     break
                 }
@@ -125,7 +125,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            print("[DirectPeerChannel] Failed to start listener: \(error)")
+            AppLog.networking.error("DirectPeerChannel: Failed to start listener: \(String(describing: error), privacy: .private)")
         }
     }
 
@@ -147,7 +147,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
         receiveFrame(on: connection) { [weak self] data in
             guard let self else { return }
             guard let data, let receivedToken = String(data: data, encoding: .utf8), receivedToken == self.localToken else {
-                print("[DirectPeerChannel] Inbound connection presented invalid token — closing")
+                AppLog.networking.error("DirectPeerChannel: Inbound connection presented invalid token — closing")
                 connection.cancel()
                 self.pendingInboundConnections.removeValue(forKey: key)
                 return
@@ -197,7 +197,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
                 connection.send(content: framed, completion: .contentProcessed { [weak self] error in
                     guard let self else { return }
                     if let error {
-                        print("[DirectPeerChannel] Failed to send token to peer: \(error)")
+                        AppLog.networking.error("DirectPeerChannel: Failed to send token to peer: \(String(describing: error), privacy: .private)")
                         connection.cancel()
                         return
                     }
@@ -250,7 +250,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
             guard let self else { return }
             self.queue.async {
                 if let error {
-                    print("[DirectPeerChannel] Receive error (length prefix): \(error)")
+                    AppLog.networking.error("DirectPeerChannel: Receive error (length prefix): \(String(describing: error), privacy: .private)")
                     completion(nil)
                     return
                 }
@@ -267,7 +267,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
                     guard let self else { return }
                     self.queue.async {
                         if let error {
-                            print("[DirectPeerChannel] Receive error (payload): \(error)")
+                            AppLog.networking.error("DirectPeerChannel: Receive error (payload): \(String(describing: error), privacy: .private)")
                             completion(nil)
                             return
                         }

@@ -3,11 +3,21 @@
 
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
-import { resolveOrgIdForToken } from './auth.js';
-import { joinRoom, relay, roomSize, roomCount } from './rooms.js';
+import { resolveOrgIdForToken, revalidateToken } from './auth.js';
+import { joinRoom, relay, roomSize, roomCount, isRoomFull } from './rooms.js';
+import {
+  MAX_PAYLOAD_BYTES,
+  REVALIDATE_INTERVAL_MS,
+  clientAddress,
+  createRateLimiter,
+  revalidateConnections,
+} from './limits.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+
+const upgradeLimiter = createRateLimiter();
 
 const httpServer = createServer((req, res) => {
   if (req.url === '/healthz') {
@@ -19,11 +29,24 @@ const httpServer = createServer((req, res) => {
   res.end('Not found. This server only speaks WebSocket on /relay.');
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({
+  noServer: true,
+  maxPayload: MAX_PAYLOAD_BYTES,
+  perMessageDeflate: false,
+});
 
 httpServer.on('upgrade', async (req, socket, head) => {
+  socket.on('error', (err) => {
+    console.error('[relay] raw socket error:', err.code || err.message);
+  });
+
   if (req.url !== '/relay') {
     socket.destroy();
+    return;
+  }
+
+  if (!upgradeLimiter.allow(clientAddress(req, TRUST_PROXY))) {
+    rejectUpgrade(socket, 429, 'Too many connection attempts');
     return;
   }
 
@@ -37,7 +60,7 @@ httpServer.on('upgrade', async (req, socket, head) => {
   try {
     orgId = await resolveOrgIdForToken(token);
   } catch (err) {
-    console.error('[relay] auth check failed:', err);
+    console.error('[relay] auth check failed:', err.name || err.message);
     rejectUpgrade(socket, 502, 'Auth check failed');
     return;
   }
@@ -47,14 +70,27 @@ httpServer.on('upgrade', async (req, socket, head) => {
     return;
   }
 
+  if (isRoomFull(orgId)) {
+    rejectUpgrade(socket, 503, 'Too many connections for this organization');
+    return;
+  }
+
+  if (socket.destroyed) return;
+
   wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit('connection', ws, req, orgId);
+    wss.emit('connection', ws, req, orgId, token);
   });
 });
 
-wss.on('connection', (ws, req, orgId) => {
+wss.on('connection', (ws, req, orgId, token) => {
   const leave = joinRoom(orgId, ws);
+  if (!leave) {
+    ws.close(1013, 'Too many connections');
+    return;
+  }
   ws.isAlive = true;
+  ws.orgId = orgId;
+  ws.token = token;
   console.log(`[relay] joined org ${orgId} (${roomSize(orgId)} connected)`);
 
   ws.on('pong', () => {
@@ -76,6 +112,7 @@ wss.on('connection', (ws, req, orgId) => {
 });
 
 const heartbeat = setInterval(() => {
+  upgradeLimiter.sweep();
   for (const ws of wss.clients) {
     if (ws.isAlive === false) {
       ws.terminate();
@@ -86,7 +123,19 @@ const heartbeat = setInterval(() => {
   }
 }, HEARTBEAT_INTERVAL_MS);
 
-wss.on('close', () => clearInterval(heartbeat));
+const revalidation = setInterval(() => {
+  revalidateConnections(wss.clients, (token) => revalidateToken(token)).then(
+    (closed) => {
+      if (closed > 0) console.log(`[relay] closed ${closed} connection(s) with revoked tokens`);
+    },
+    (err) => console.error('[relay] revalidation failed:', err.message)
+  );
+}, REVALIDATE_INTERVAL_MS);
+
+wss.on('close', () => {
+  clearInterval(heartbeat);
+  clearInterval(revalidation);
+});
 
 function bearerToken(req) {
   const header = req.headers['authorization'];
@@ -95,13 +144,17 @@ function bearerToken(req) {
 }
 
 function rejectUpgrade(socket, statusCode, message) {
-  const statusText = { 401: 'Unauthorized', 502: 'Bad Gateway' }[statusCode] || 'Error';
-  socket.write(
-    `HTTP/1.1 ${statusCode} ${statusText}\r\n` +
-      'Content-Type: text/plain\r\n' +
-      'Connection: close\r\n\r\n' +
-      message
-  );
+  const statusText =
+    { 401: 'Unauthorized', 429: 'Too Many Requests', 502: 'Bad Gateway', 503: 'Service Unavailable' }[statusCode] ||
+    'Error';
+  if (!socket.destroyed) {
+    socket.write(
+      `HTTP/1.1 ${statusCode} ${statusText}\r\n` +
+        'Content-Type: text/plain\r\n' +
+        'Connection: close\r\n\r\n' +
+        message
+    );
+  }
   socket.destroy();
 }
 

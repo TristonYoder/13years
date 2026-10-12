@@ -58,7 +58,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
             guard isRunning, let task, let data = packet.encode() else { return }
             task.send(.data(data)) { error in
                 if let error {
-                    print("[PlotipharRelayClient] Send error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Send error: \(String(describing: error), privacy: .private)")
                 }
             }
         }
@@ -69,7 +69,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
             guard isRunning, let task, let string = String(data: data, encoding: .utf8) else { return }
             task.send(.string(string)) { error in
                 if let error {
-                    print("[PlotipharRelayClient] Text send error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Text send error: \(String(describing: error), privacy: .private)")
                 }
             }
         }
@@ -85,7 +85,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
     private func connect() {
         guard isRunning else { return }
         guard let url = relayURL() else {
-            print("[PlotipharRelayClient] Invalid relay host: \(relayHost)")
+            AppLog.networking.error("PlotipharRelayClient: Invalid relay host: \(self.relayHost, privacy: .private)")
             scheduleReconnect()
             return
         }
@@ -105,21 +105,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
     }
 
     private func relayURL() -> URL? {
-        var host = relayHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { return nil }
-
-        if !host.contains("://") {
-            host = "wss://\(host)"
-        }
-        guard var components = URLComponents(string: host) else { return nil }
-        if components.scheme == "http" { components.scheme = "ws" }
-        if components.scheme == "https" { components.scheme = "wss" }
-        if components.scheme == nil { components.scheme = "wss" }
-
-        if components.path.isEmpty || components.path == "/" {
-            components.path = "/relay"
-        }
-        return components.url
+        RelayHostPolicy.websocketURL(for: relayHost)
     }
 
     private func receiveLoop(task: URLSessionWebSocketTask, generation: Int) {
@@ -130,7 +116,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
 
                 switch result {
                 case .failure(let error):
-                    print("[PlotipharRelayClient] Receive error: \(error)")
+                    AppLog.networking.error("PlotipharRelayClient: Receive error: \(String(describing: error), privacy: .private)")
                     self.handleDisconnect(generation: generation)
                 case .success(let message):
                     self.handle(message: message)

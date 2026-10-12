@@ -34,7 +34,16 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
 
 **Projected/Actual exists at two levels, and they are not the same control.** `POST /v1/plan/items/{id}/duration-actual` sets the plan item's own persisted `isDurationActual` — the item's real duration type, which survives into the next time that plan loads. `POST /v1/timer/actual-override` sets a transient override for whatever item is live, deliberately never written into the plan, and it goes stale the moment a different item becomes active. Use the first for "this song is genuinely 4:32"; use the second for "the stream is on a five-minute delay today." Read the displayed result from `timer.isDurationActualForDisplay`, which already folds the override over the plan's value — a client toggling against the plan item's raw flag will look like it does nothing on the first press whenever an override is in force.
 
-**CORS is open** (`Access-Control-Allow-Origin: *`, full method and header list) so a browser-based dashboard works without a proxy.
+**Web hardening.** There is no CORS: the server never sends `Access-Control-Allow-Origin`, so another website's script cannot read or drive the API from a browser on the LAN.
+
+- A request that carries an `Origin` header is accepted only when that origin is the Producer's own (same host and port as the `Host` header, which is how the built-in web pager talks to it). Any other origin gets `403`, and a WebSocket upgrade with a foreign `Origin` is refused with `403`. Requests with no `Origin` header (Bitfocus Companion, curl, the Swift remote client, native apps) are unaffected.
+- The `Host` header must be an IP literal, `localhost`, a `*.local` name or this machine's own hostname; anything else gets `403`. This stops DNS-rebinding pages from reaching the API through a hostname they control.
+- `POST`, `PUT` and `PATCH` requests that carry a body must send `Content-Type: application/json`; otherwise the answer is `415`. Bodyless requests (`POST /v1/timer/start`) need no content type.
+- Every response carries `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
+
+**Limits.** Request bodies are capped at 1 MiB and WebSocket frames at 1 MiB. The listener holds at most 32 connections in total and 8 per remote IP; further connections are refused. An HTTP request (head and body) must arrive within 10 seconds of its first byte, and a connection that has not upgraded to a WebSocket is closed after 30 seconds without traffic.
+
+**Value limits.** Timer lengths are `0...604800` seconds and timer adjustments `-604800...604800`; values outside answer `400`. Names (roles, waypoints, person names) are at most 100 characters, titles 200, message text 2000 and note values 4000. At most 64 roles, 500 plan items, 200 waypoints and 100 schedules; creating more answers `409`, and over-long text answers `400`. `POST /v1/network/ping` only accepts private, link-local or loopback IPv4 addresses and `.local` names.
 
 ## The State Snapshot
 
@@ -380,7 +389,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `PUT /v1/relay` | PUT | Configure the off-LAN relay. Body: `{"enabled": boolean?, "host": "string?"}`. Both fields optional. Setting `host` changes the relay address; setting `enabled: true` without an existing pairing returns 409. `proxyToken` is deliberately absent in both directions — it's a Keychain-held session credential, and handing it out over an unauthenticated LAN endpoint would make the relay's own auth boundary meaningless. Pairing happens on the device via `POST /v1/plotiphar/pair/start`. Returns the full state snapshot. |
+| `PUT /v1/relay` | PUT | Configure the off-LAN relay. Body: `{"enabled": boolean?, "host": "string?"}`. Both fields optional. Setting `host` changes the relay address: it must be a bare hostname (optionally with a port) or a `wss://` / `https://` address, and plain `ws://` or `http://` hosts are rejected with `400`. Changing to a different host clears the stored proxy token, turns the relay off and returns pairing to idle, so the new host can never receive the old token; pair again afterwards. A loaded `.13years` document never changes the relay host. setting `enabled: true` without an existing pairing returns 409. `proxyToken` is deliberately absent in both directions — it's a Keychain-held session credential, and handing it out over an unauthenticated LAN endpoint would make the relay's own auth boundary meaningless. Pairing happens on the device via `POST /v1/plotiphar/pair/start`. Returns the full state snapshot. |
 
 ## The WebSocket
 

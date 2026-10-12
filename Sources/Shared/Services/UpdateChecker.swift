@@ -102,7 +102,7 @@ public final class UpdateChecker: ObservableObject {
             }
         } catch {
             lastCheckFailed = true
-            AppLog.networking.error("Update check failed: \(String(describing: error), privacy: .public)")
+            AppLog.networking.error("Update check failed: \(String(describing: error), privacy: .private)")
         }
     }
 

@@ -24,14 +24,26 @@ public enum ServiceFlowImporter {
         if trimmed.contains(":") {
             let components = trimmed.split(separator: ":").compactMap { Int($0) }
             switch components.count {
-            case 2: return components[0] * 60 + components[1]
-            case 3: return components[0] * 3600 + components[1] * 60 + components[2]
+            case 2: return clamped(components[0], 60, components[1], 1, 0)
+            case 3: return clamped(components[0], 3600, components[1], 60, components[2])
             default: return 300
             }
         }
         if let minutes = Int(trimmed) {
-            return max(0, minutes) * 60
+            return clamped(max(0, minutes), 60, 0, 1, 0)
         }
         return 300
+    }
+
+    private static func clamped(_ a: Int, _ am: Int, _ b: Int, _ bm: Int, _ c: Int) -> Int {
+        guard a >= 0, b >= 0, c >= 0 else { return 0 }
+        let (ap, ao) = a.multipliedReportingOverflow(by: am)
+        let (bp, bo) = b.multipliedReportingOverflow(by: bm)
+        guard !ao, !bo else { return TimerLimits.maxSeconds }
+        let (s1, o1) = ap.addingReportingOverflow(bp)
+        guard !o1 else { return TimerLimits.maxSeconds }
+        let (s2, o2) = s1.addingReportingOverflow(c)
+        guard !o2 else { return TimerLimits.maxSeconds }
+        return TimerLimits.clampLength(s2)
     }
 }

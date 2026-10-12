@@ -26,7 +26,7 @@ public enum TimerInputParser {
         }
         text = text.trimmingCharacters(in: .whitespaces)
 
-        guard let magnitude = parseMagnitude(text) else { return nil }
+        guard let magnitude = parseMagnitude(text), magnitude <= TimerLimits.maxSeconds else { return nil }
         return isRelative ? .adjustRelative(bySeconds: sign * magnitude) : .setAbsolute(seconds: magnitude)
     }
 
@@ -45,16 +45,23 @@ public enum TimerInputParser {
             guard !(minutesText.isEmpty && secondsText.isEmpty),
                   let minutes = Int(minutesText.isEmpty ? "0" : minutesText),
                   let seconds = Int(secondsText.isEmpty ? "0" : secondsText) else { return nil }
-            return max(0, minutes) * 60 + max(0, seconds)
+            return combine(max(0, minutes), 60, max(0, seconds))
         }
 
         guard text.allSatisfy(\.isNumber) else { return nil }
         let padded = text.count < 2 ? String(repeating: "0", count: 2 - text.count) + text : text
         let secondsPart = padded.suffix(2)
         let minutesPart = padded.dropLast(2)
-        let minutes = minutesPart.isEmpty ? 0 : (Int(minutesPart) ?? 0)
-        let seconds = Int(secondsPart) ?? 0
-        return minutes * 60 + seconds
+        guard let minutes = minutesPart.isEmpty ? 0 : Int(minutesPart),
+              let seconds = Int(secondsPart) else { return nil }
+        return combine(minutes, 60, seconds)
+    }
+
+    private static func combine(_ units: Int, _ multiplier: Int, _ extra: Int) -> Int? {
+        let (product, overflowed) = units.multipliedReportingOverflow(by: multiplier)
+        guard !overflowed else { return nil }
+        let (sum, sumOverflowed) = product.addingReportingOverflow(extra)
+        return sumOverflowed ? nil : sum
     }
 
     private static func parseCombinedUnits(_ lowercasedText: String) -> Int? {
@@ -68,11 +75,11 @@ public enum TimerInputParser {
                 digits.append(char)
             } else if char == "h" || char == "m" || char == "s" {
                 guard !digits.isEmpty, let value = Int(digits), seenUnits.insert(char).inserted else { return nil }
-                switch char {
-                case "h": total += value * 3600
-                case "m": total += value * 60
-                default: total += value
-                }
+                let multiplier = char == "h" ? 3600 : (char == "m" ? 60 : 1)
+                guard let part = combine(value, multiplier, 0) else { return nil }
+                let (sum, overflowed) = total.addingReportingOverflow(part)
+                guard !overflowed else { return nil }
+                total = sum
                 digits = ""
                 matchedAny = true
             } else {

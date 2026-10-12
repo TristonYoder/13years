@@ -25,7 +25,7 @@ public enum AppFonts {
             }
             var error: Unmanaged<CFError>?
             if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
-                AppLog.cue.error("AppFonts: failed to register \(name, privacy: .public): \(String(describing: error), privacy: .public)")
+                AppLog.cue.error("AppFonts: failed to register \(name, privacy: .public): \(String(describing: error), privacy: .private)")
             }
         }
     }

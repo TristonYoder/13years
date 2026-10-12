@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { joinRoom, relay, roomSize, roomCount } from './rooms.js';
+import { joinRoom, relay, roomSize, roomCount, isRoomFull, MAX_CONNECTIONS_PER_ORG } from './rooms.js';
 
 function fakeSocket() {
   const sent = [];
@@ -103,4 +103,38 @@ test('v2 sync packets pass through byte-for-byte, as binary frames', () => {
     assert.equal(entry.binary, true);
     assert.deepEqual(JSON.parse(entry.data.toString()), packets[index]);
   });
+});
+
+test('refuses connections beyond the per-org cap', () => {
+  const orgId = 'org_test_cap';
+  const leaves = [];
+  for (let i = 0; i < MAX_CONNECTIONS_PER_ORG; i++) leaves.push(joinRoom(orgId, fakeSocket()));
+  assert.ok(leaves.every((leave) => typeof leave === 'function'));
+  assert.equal(isRoomFull(orgId), true);
+  assert.equal(joinRoom(orgId, fakeSocket()), null);
+  leaves[0]();
+  assert.equal(isRoomFull(orgId), false);
+  leaves.slice(1).forEach((leave) => leave());
+});
+
+test('drops slow consumers whose send buffer is too large', () => {
+  const orgId = 'org_test_slow';
+  const sender = fakeSocket();
+  const slow = fakeSocket();
+  slow.bufferedAmount = 3 * 1024 * 1024;
+  let terminated = false;
+  slow.terminate = () => {
+    terminated = true;
+  };
+  const fast = fakeSocket();
+  fast.bufferedAmount = 10;
+  const leaves = [joinRoom(orgId, sender), joinRoom(orgId, slow), joinRoom(orgId, fast)];
+
+  const delivered = relay(orgId, sender, Buffer.from('x'), true);
+
+  assert.equal(delivered, 1);
+  assert.equal(terminated, true);
+  assert.equal(slow.sent.length, 0);
+  assert.equal(fast.sent.length, 1);
+  leaves.forEach((leave) => leave());
 });
