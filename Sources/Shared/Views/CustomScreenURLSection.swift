@@ -22,30 +22,49 @@ struct CustomScreenURLSection: View {
     @State private var cue: PagerURLBuilder.CueDisplay = .viewerChoice
     @State private var showSettings = true
     @State private var showMessages = true
-    @State private var addressIndex = 0
+    @AppStorage("pagerURLAddressChoice") private var addressChoice = ""
+    @AppStorage("pagerURLCustomAddress") private var customAddress = ""
 
-    private struct Address: Hashable {
-        let host: String
-        let port: Int
-        var label: String { (host.contains(":") ? "[\(host)]" : host) + ":" + String(port) }
-    }
+    private static let customTag = "custom"
 
-    private var addresses: [Address] {
+    private var options: [PagerAddress] {
         if engine.isRemoteMirror {
             #if os(tvOS)
             return []
             #else
             guard let session = engine.remoteCommands as? RemoteProducerSession else { return [] }
-            return [Address(host: session.endpoint.host, port: session.endpoint.port)]
+            return [PagerAddress(host: session.endpoint.host, kind: .other, interface: nil)]
             #endif
         }
-        return (["127.0.0.1"] + ControlAPIServer.localAddresses())
-            .map { Address(host: $0, port: engine.controlAPIPort) }
+        return PagerAddressOptions.localAddresses()
     }
 
-    private var selectedAddress: Address? {
-        let list = addresses
-        return list.indices.contains(addressIndex) ? list[addressIndex] : list.first
+    private var producerPort: Int {
+        #if !os(tvOS)
+        if engine.isRemoteMirror, let session = engine.remoteCommands as? RemoteProducerSession {
+            return session.endpoint.port
+        }
+        #endif
+        return engine.controlAPIPort
+    }
+
+    private func optionLabel(_ option: PagerAddress) -> String {
+        engine.isRemoteMirror ? "\(option.host) — This Producer" : option.label
+    }
+
+    private var effectiveChoice: String {
+        if addressChoice == Self.customTag { return Self.customTag }
+        if options.contains(where: { $0.host == addressChoice }) { return addressChoice }
+        return PagerAddressOptions.defaultChoice(options)?.host ?? Self.customTag
+    }
+
+    private var customParsed: (host: String, port: Int)? {
+        PagerAddressOptions.parseCustom(customAddress, defaultPort: producerPort)
+    }
+
+    private var selectedAddress: (host: String, port: Int)? {
+        if effectiveChoice == Self.customTag { return customParsed }
+        return (effectiveChoice, producerPort)
     }
 
     private var builder: PagerURLBuilder? {
@@ -94,18 +113,31 @@ struct CustomScreenURLSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if addresses.count > 1 {
-                Picker("Address", selection: $addressIndex) {
-                    ForEach(Array(addresses.enumerated()), id: \.offset) { index, address in
-                        Text(address.label).tag(index)
-                    }
+            Picker("Address", selection: Binding(get: { effectiveChoice }, set: { addressChoice = $0 })) {
+                ForEach(options) { option in
+                    Text(optionLabel(option)).tag(option.host)
                 }
-            } else if let only = addresses.first {
-                LabeledContent("Address") {
-                    Text(only.label)
-                        .font(.system(.footnote, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                Text("Custom…").tag(Self.customTag)
+            }
+
+            if effectiveChoice == Self.customTag {
+                TextField("Host or IP, optionally :port", text: $customAddress)
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
+                if customParsed == nil {
+                    Label("Enter a host or IP address, like studio.local, 192.168.1.20:13390 or [fe80::1]:13390", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
+            }
+
+            if engine.isRemoteMirror {
+                Text("The remote Producer's own address list isn't available over the API, so only the address you connected with is offered. Choose Custom… for another.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if let builder {
