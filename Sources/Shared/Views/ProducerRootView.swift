@@ -39,7 +39,7 @@ public struct ProducerRootView: View {
 
     private var adaptiveNavigation: some View {
         GeometryReader { proxy in
-            if proxy.size.height > proxy.size.width {
+            if proxy.size.height > proxy.size.width || proxy.size.width < 640 {
                 tabLayout
             } else {
                 splitLayout
