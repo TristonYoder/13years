@@ -206,6 +206,34 @@ final class SyncV2ProducerTests: SyncV2TestCase {
         XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, 10)
     }
 
+    func testProducerStampsUtcOffsetOnAnchorPongAndLegacyTimerUpdate() {
+        let engine = makeProducer()
+        var offset = -14400
+        engine.timeZoneProvider = { TimeZone(secondsFromGMT: offset)! }
+        engine.toggleTimerRunning()
+        XCTAssertEqual(outbox.packets(.timerAnchor).first?.utcOffsetSeconds, -14400)
+        XCTAssertEqual(outbox.packets(.timerUpdate).first?.utcOffsetSeconds, -14400)
+        offset = 19800
+        outbox.clear()
+        engine.handlePacket(ping(version: 2), origin: .lanServer(connection))
+        XCTAssertEqual(outbox.packets(.pong).first?.utcOffsetSeconds, 19800)
+        XCTAssertEqual(outbox.packets(.timerAnchor).first?.utcOffsetSeconds, 19800)
+        outbox.clear()
+        engine.handlePacket(ping(version: nil), origin: .lanServer(connection))
+        XCTAssertEqual(outbox.packets(.pong).first?.utcOffsetSeconds, 19800)
+    }
+
+    func testUtcOffsetCodableIsBackwardCompatible() throws {
+        var packet = CuePacket(type: .pong, senderId: "x")
+        let without = try JSONSerialization.jsonObject(with: try XCTUnwrap(packet.encode())) as! [String: Any]
+        XCTAssertNil(without["utcOffsetSeconds"])
+        XCTAssertNil(CuePacket.decode(from: try XCTUnwrap(packet.encode()))?.utcOffsetSeconds)
+        packet.utcOffsetSeconds = -14400
+        let with = try JSONSerialization.jsonObject(with: try XCTUnwrap(packet.encode())) as! [String: Any]
+        XCTAssertEqual(with["utcOffsetSeconds"] as? Int, -14400)
+        XCTAssertEqual(CuePacket.decode(from: try XCTUnwrap(packet.encode()))?.utcOffsetSeconds, -14400)
+    }
+
     func testDigestContentEqualsSyncHashOfTheState() {
         let engine = makeProducer()
         engine.addMessages([InterTeamMessage(id: "m1", text: "hi", timestamp: Date(timeIntervalSince1970: 5))])

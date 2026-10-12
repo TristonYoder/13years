@@ -140,6 +140,11 @@ public final class CueEngine: ObservableObject {
 
     nonisolated private static let deviceIdDefaultsKey = "cueEngineDeviceId"
     let deviceId: String
+    var timeZoneProvider: () -> TimeZone = { TimeZone.current }
+
+    func stampUtcOffset(_ packet: inout CuePacket) {
+        packet.utcOffsetSeconds = timeZoneProvider().secondsFromGMT()
+    }
 
     nonisolated public static func persistentDeviceId() -> String {
         if let existing = UserDefaults.standard.string(forKey: CueEngine.deviceIdDefaultsKey) {
@@ -1976,6 +1981,7 @@ public final class CueEngine: ObservableObject {
         if isMasterServer, activeTimerItem?.isRunning == true, heartbeatTickCount % 5 == 0 {
             var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
             packet.nextItem = nextItemForBroadcast
+            stampUtcOffset(&packet)
             emit(packet, .lan(.legacy))
             emit(packet, .relay)
         }
@@ -2024,6 +2030,7 @@ public final class CueEngine: ObservableObject {
     func broadcastCatchUp() {
         var packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
         packet.nextItem = nextItemForBroadcast
+        stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastCatchUp() — isMasterServer=\(self.isMasterServer, privacy: .public) messages=\(self.recentMessages.count, privacy: .public)")
 
         if isMasterServer {
@@ -2039,6 +2046,7 @@ public final class CueEngine: ObservableObject {
         guard let item = activeTimerItemForBroadcast else { return }
         var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
         packet.nextItem = nextItemForBroadcast
+        stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .private)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
             emit(packet, .lan(.legacy))

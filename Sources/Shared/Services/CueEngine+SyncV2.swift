@@ -145,6 +145,7 @@ extension CueEngine {
         guard isMasterServer, !isRemoteMirror else { return }
         var packet = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
         packet.nextItem = syncV2.anchor == nil ? nil : nextItemForBroadcast
+        stampUtcOffset(&packet)
         syncV2.lastNextItem = packet.nextItem
         packet.rev = nextRev()
         packet.epoch = syncV2.epoch
@@ -260,6 +261,7 @@ extension CueEngine {
         pong.rev = syncV2.rev
         pong.epoch = syncV2.epoch
         pong.to = requester
+        stampUtcOffset(&pong)
         while !messages.isEmpty, (pong.encode()?.count ?? 0) > Self.maxCatchUpPongBytes {
             messages.removeLast()
             pong.messages = messages
@@ -282,6 +284,7 @@ extension CueEngine {
         anchorPacket.epoch = syncV2.epoch
         anchorPacket.to = requester
         anchorPacket.anchor = syncV2.anchor
+        stampUtcOffset(&anchorPacket)
         let digest = makeDigestPacket(to: requester)
         switch origin {
         case .lanServer(let id):
