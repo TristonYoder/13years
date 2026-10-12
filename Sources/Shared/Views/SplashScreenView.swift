@@ -80,18 +80,27 @@ public final class SplashCoordinator: ObservableObject {
     private var isReady = false
     private var minimumElapsed = false
 
+    private let autoStart: Bool
+    private var hasStartedClock = false
+
     public init(autoStart: Bool = true) {
-        guard autoStart else { return }
+        self.autoStart = autoStart
+    }
+
+    public func markReady() {
+        isReady = true
+        startClockIfNeeded()
+        dismissIfDone()
+    }
+
+    private func startClockIfNeeded() {
+        guard autoStart, !hasStartedClock else { return }
+        hasStartedClock = true
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.minimumDisplay * 1_000_000_000))
             self?.minimumElapsed = true
             self?.dismissIfDone()
         }
-    }
-
-    public func markReady() {
-        isReady = true
-        dismissIfDone()
     }
 
     private func dismissIfDone() {

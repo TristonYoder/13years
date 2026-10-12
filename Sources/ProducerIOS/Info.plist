@@ -30,7 +30,10 @@
 	<key>PCOOAuthClientID</key>
 	<string>$(PCO_OAUTH_CLIENT_ID)</string>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchGround</string>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
