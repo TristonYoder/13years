@@ -23,7 +23,7 @@ struct LauncherView: View {
             launcherGround
                 .overlay(
                     RadialGradient(
-                        colors: [Color.purple.opacity(colorScheme == .dark ? 0.28 : 0.14), .clear],
+                        colors: [Color.accentColor.opacity(colorScheme == .dark ? 0.28 : 0.14), .clear],
                         center: .top,
                         startRadius: 40,
                         endRadius: 620
