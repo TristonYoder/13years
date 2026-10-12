@@ -32,6 +32,8 @@ struct PagerMacApp: App {
 private struct EdgelessWindow: NSViewRepresentable {
     let keepOnTop: Bool
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async { [weak view] in
@@ -42,14 +44,37 @@ private struct EdgelessWindow: NSViewRepresentable {
             window.isMovableByWindowBackground = true
             window.backgroundColor = .black
             window.level = keepOnTop ? .floating : .normal
-            for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                window.standardWindowButton(button)?.isHidden = true
-            }
+            context.coordinator.attach(to: window)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         nsView.window?.level = keepOnTop ? .floating : .normal
+    }
+
+    final class Coordinator {
+        private var observers: [NSObjectProtocol] = []
+
+        func attach(to window: NSWindow) {
+            setButtons(visible: window.isKeyWindow, in: window)
+            let center = NotificationCenter.default
+            for (name, visible) in [(NSWindow.didBecomeKeyNotification, true), (NSWindow.didResignKeyNotification, false)] {
+                observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self, weak window] _ in
+                    guard let window else { return }
+                    self?.setButtons(visible: visible, in: window)
+                })
+            }
+        }
+
+        private func setButtons(visible: Bool, in window: NSWindow) {
+            for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(button)?.isHidden = !visible
+            }
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
     }
 }
