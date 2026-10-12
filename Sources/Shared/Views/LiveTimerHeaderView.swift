@@ -3,8 +3,39 @@
 
 import SwiftUI
 
+private struct DocumentSaveIndicatorKey: EnvironmentKey {
+    static let defaultValue: DocumentSaveIndicator? = nil
+}
+
+public extension EnvironmentValues {
+    var documentSaveIndicator: DocumentSaveIndicator? {
+        get { self[DocumentSaveIndicatorKey.self] }
+        set { self[DocumentSaveIndicatorKey.self] = newValue }
+    }
+}
+
+private struct DocumentSaveStatusLabel: View {
+    @ObservedObject var indicator: DocumentSaveIndicator
+
+    var body: some View {
+        let status = indicator.status
+        let label = Text(status.text)
+            .font(.system(size: 10))
+            .foregroundStyle(status == .failed ? Color.orange : Color.secondary.opacity(0.8))
+            .lineLimit(1)
+        if status.isActionable {
+            Button(action: { indicator.onActivate?() }) { label }
+                .buttonStyle(.plain)
+                .accessibilityLabel(status.text)
+        } else {
+            label.accessibilityLabel("Document \(status.text)")
+        }
+    }
+}
+
 public struct LiveTimerHeaderView: View {
     @EnvironmentObject var engine: CueEngine
+    @Environment(\.documentSaveIndicator) private var saveIndicator
     @State private var isEditingTimer: Bool = false
 
     public init() {}
@@ -40,6 +71,9 @@ public struct LiveTimerHeaderView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     #endif
+                    if !engine.isRemoteMirror, let saveIndicator {
+                        DocumentSaveStatusLabel(indicator: saveIndicator)
+                    }
                     Text(engine.activeTimerItem?.title ?? "No Item Selected")
                         .font(.system(size: 20, weight: .heavy))
                         .textCase(.uppercase)

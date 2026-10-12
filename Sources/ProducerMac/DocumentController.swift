@@ -8,16 +8,19 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class DocumentController: ObservableObject {
-    @Published private(set) var recentURLs: [URL] = []
+    @Published private(set) var recents: [RecentEntry] = []
     @Published var isLauncherPresented = true
     @Published private(set) var canRevert = false
-    private var revertObserver: AnyCancellable?
+    let saveIndicator = DocumentSaveIndicator()
+    private var observers: [AnyCancellable] = []
 
     private var discardedOnClose = false
     private var autosaver: DocumentAutosaver?
+    private var hasScheduledLaunchBehavior = false
+    private var openedByURL = false
+    private let defaults: UserDefaults
 
-    private static let recentsDefaultsKey = "recentDocumentBookmarks"
-    private static let maxRecents = 10
+    var recentURLs: [URL] { recents.map(\.url) }
 
     private var contentType: UTType {
         .thirteenYearsDocument
@@ -27,29 +30,29 @@ final class DocumentController: ObservableObject {
         .thirteenYearsTemplate
     }
 
-    init() {
-        let bookmarks = UserDefaults.standard.array(forKey: Self.recentsDefaultsKey) as? [Data] ?? []
-        recentURLs = bookmarks.compactMap { data in
-            var stale = false
-            guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
-                  FileManager.default.fileExists(atPath: url.path) else { return nil }
-            return url
-        }
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let loaded = RecentDocuments.load(defaults: defaults)
+        recents = loaded.entries
+        if loaded.changed { RecentDocuments.persist(recents, defaults: defaults) }
     }
 
     func attach(_ engine: CueEngine) {
         guard autosaver == nil else { return }
+        DocumentAutosaver.purgeLegacyBaselines()
         let saver = DocumentAutosaver(
             engine: engine,
-            write: { [weak self] document, url in
-                if let error = self?.attemptWrite(document, to: url) { throw error }
-            },
-            onFailure: { [weak self] error, url in
-                self?.present(error, action: "save", url: url)
-            }
+            write: { document, url in try DocumentController.performWrite(document, to: url) }
         )
         autosaver = saver
-        revertObserver = saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 }
+        observers = [
+            saver.$canRevert.removeDuplicates().sink { [weak self] in self?.canRevert = $0 },
+            saver.$status.removeDuplicates().sink { [weak self] in self?.saveIndicator.status = $0 }
+        ]
+        saveIndicator.onActivate = { [weak self, weak engine] in
+            guard let self, let engine else { return }
+            self.saveAs(engine)
+        }
     }
 
     func revert(_ engine: CueEngine) {
@@ -57,7 +60,7 @@ final class DocumentController: ObservableObject {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Revert to Last Save?"
-        alert.informativeText = "Changes since the last save will be lost."
+        alert.informativeText = "This restores the version from when the document was opened or last saved by hand in this session. Changes since then will be lost."
         let revert = alert.addButton(withTitle: "Revert")
         revert.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
@@ -80,30 +83,64 @@ final class DocumentController: ObservableObject {
     }
 
     func saveOnClose(_ engine: CueEngine) {
-        guard let url = engine.currentDocumentURL, !discardedOnClose else { return }
-        var failure: Error? = attemptWrite(engine.makeDocument(), to: url)
+        guard !discardedOnClose else { return }
+        if engine.currentDocumentURL == nil {
+            confirmUntitledClose(engine)
+        } else {
+            _ = settle(engine, closing: true)
+        }
+    }
+
+    private func confirmUntitledClose(_ engine: CueEngine) {
+        guard !isLauncherPresented, autosaver?.hasUnsavedUntitledChanges == true else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Do you want to save this document?"
+        alert.informativeText = "This document hasn’t been saved. If you don’t save it, your changes will be lost."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Don’t Save")
+        if alert.runModal() == .alertFirstButtonReturn {
+            if !saveAs(engine) { discardedOnClose = true }
+        } else {
+            discardedOnClose = true
+        }
+    }
+
+    private func settle(_ engine: CueEngine, closing: Bool) -> Bool {
+        guard let saver = autosaver, let url = engine.currentDocumentURL else { return true }
+        var failure = saver.flush(force: true)
         while let error = failure {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Couldn’t save “\(url.lastPathComponent)”"
-            alert.informativeText = "\(error.localizedDescription)\n\nSave a copy somewhere else, or close and lose the changes since the last save."
+            alert.informativeText = "\(error.localizedDescription)\n\nSave a copy somewhere else, or discard the changes since the last save."
             alert.addButton(withTitle: "Save As…")
-            alert.addButton(withTitle: "Close Without Saving")
-            if alert.runModal() == .alertFirstButtonReturn {
-                if saveAs(engine) { return }
-            } else {
-                discardedOnClose = true
-                return
+            let discard = alert.addButton(withTitle: closing ? "Close Without Saving" : "Discard Changes")
+            discard.hasDestructiveAction = true
+            if !closing { alert.addButton(withTitle: "Cancel") }
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                if saveAs(engine) { return true }
+                failure = saver.flush(force: true)
+            case .alertSecondButtonReturn:
+                if closing { discardedOnClose = true }
+                return true
+            default:
+                return false
             }
-            failure = attemptWrite(engine.makeDocument(), to: url)
         }
+        return true
+    }
+
+    nonisolated static func performWrite(_ document: ProducerDocument, to url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        try document.write(to: url)
     }
 
     private func attemptWrite(_ document: ProducerDocument, to url: URL) -> Error? {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            try document.write(to: url)
+            try Self.performWrite(document, to: url)
             return nil
         } catch {
             return error
@@ -122,15 +159,36 @@ final class DocumentController: ObservableObject {
     }
 
     func newDocument(_ engine: CueEngine) {
+        guard settle(engine, closing: false) else { return }
+        guard let url = chooseNewDocumentLocation(name: "Untitled") else { return }
+        create(engine, content: nil, at: url)
+    }
+
+    private func chooseNewDocumentLocation(name: String) -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [contentType]
         panel.canCreateDirectories = true
         panel.title = "New Document"
         panel.prompt = "Create"
-        panel.nameFieldStringValue = "Untitled.\(ProducerDocument.fileExtension)"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        engine.resetToNewDocument()
-        write(engine, to: url)
+        panel.nameFieldStringValue = "\(name).\(ProducerDocument.fileExtension)"
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
+    }
+
+    @discardableResult
+    private func create(_ engine: CueEngine, content: ProducerDocument?, at url: URL) -> Bool {
+        let previous = engine.makeDocument()
+        let previousURL = engine.currentDocumentURL
+        if let content {
+            engine.apply(content)
+        } else {
+            engine.resetToNewDocument()
+        }
+        engine.currentDocumentURL = nil
+        if write(engine, to: url) { return true }
+        engine.apply(previous)
+        engine.currentDocumentURL = previousURL
+        return false
     }
 
     func saveAsTemplate(_ engine: CueEngine) {
@@ -152,6 +210,7 @@ final class DocumentController: ObservableObject {
     }
 
     func newFromTemplate(_ engine: CueEngine) {
+        guard settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [templateType]
         panel.allowsMultipleSelection = false
@@ -164,23 +223,31 @@ final class DocumentController: ObservableObject {
 
     @discardableResult
     func openTemplate(_ url: URL, in engine: CueEngine, reportErrors: Bool = true) -> Bool {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard settle(engine, closing: false) else { return false }
+        let document: ProducerDocument
         do {
-            engine.apply(try ProducerDocument.read(from: url))
-            engine.currentDocumentURL = nil
-            autosaver?.reseed()
-            autosaver?.markOpened()
-            discardedOnClose = false
-            isLauncherPresented = false
-            return true
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            document = try ProducerDocument.read(from: url)
         } catch {
             if reportErrors { present(error, action: "open", url: url) }
             return false
         }
+        guard let destination = chooseNewDocumentLocation(name: RecentDocuments.title(for: url)) else { return false }
+        return create(engine, content: document, at: destination)
     }
 
     func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+        guard !hasScheduledLaunchBehavior else { return }
+        hasScheduledLaunchBehavior = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !self.openedByURL, self.isLauncherPresented else { return }
+            self.runLaunchBehavior(preferences, engine: engine)
+        }
+    }
+
+    private func runLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
         switch preferences.behavior {
         case .showLauncher:
             return
@@ -198,6 +265,7 @@ final class DocumentController: ObservableObject {
     }
 
     func handleOpenURL(_ url: URL, in engine: CueEngine) {
+        openedByURL = true
         if url.pathExtension.lowercased() == ProducerDocument.templateExtension {
             openTemplate(url, in: engine)
         } else {
@@ -206,6 +274,7 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ engine: CueEngine) {
+        guard settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [contentType]
         panel.allowsMultipleSelection = false
@@ -215,10 +284,12 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ url: URL, in engine: CueEngine) {
+        guard settle(engine, closing: false) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            engine.apply(try ProducerDocument.read(from: url))
+            let document = try ProducerDocument.read(from: url)
+            engine.apply(document)
             engine.currentDocumentURL = url
             autosaver?.reseed()
             autosaver?.markOpened()
@@ -226,14 +297,27 @@ final class DocumentController: ObservableObject {
             isLauncherPresented = false
             noteRecent(url)
         } catch {
-            forget(url)
+            if RecentDocuments.isFileNotFound(error) { forget(url) }
             present(error, action: "open", url: url)
         }
     }
 
+    func openRecent(_ url: URL, in engine: CueEngine) {
+        let target = recents.first { $0.url == url }
+            .flatMap { try? DocumentBookmark.resolved($0.bookmark).url } ?? url
+        open(target, in: engine)
+    }
+
+    func pruneRecents() {
+        let kept = RecentDocuments.pruned(recents)
+        guard kept.count != recents.count else { return }
+        recents = kept
+        RecentDocuments.persist(recents, defaults: defaults)
+    }
+
     func clearRecents() {
-        recentURLs = []
-        persistRecents()
+        recents = []
+        RecentDocuments.persist(recents, defaults: defaults)
     }
 
     @discardableResult
@@ -252,22 +336,22 @@ final class DocumentController: ObservableObject {
     }
 
     private func noteRecent(_ url: URL) {
-        recentURLs.removeAll { $0 == url }
-        recentURLs.insert(url, at: 0)
-        if recentURLs.count > Self.maxRecents { recentURLs.removeLast(recentURLs.count - Self.maxRecents) }
-        persistRecents()
+        do {
+            let bookmark = try DocumentBookmark.make(for: url)
+            recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: bookmark))
+            RecentDocuments.persist(recents, defaults: defaults)
+        } catch {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Couldn’t add “\(url.lastPathComponent)” to Open Recent"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     private func forget(_ url: URL) {
-        recentURLs.removeAll { $0 == url }
-        persistRecents()
-    }
-
-    private func persistRecents() {
-        let bookmarks = recentURLs.compactMap {
-            try? $0.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-        }
-        UserDefaults.standard.set(bookmarks, forKey: Self.recentsDefaultsKey)
+        recents.removeAll { $0.url == url }
+        RecentDocuments.persist(recents, defaults: defaults)
     }
 
     private func present(_ error: Error, action: String, url: URL) {

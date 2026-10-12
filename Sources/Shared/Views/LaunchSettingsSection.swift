@@ -14,8 +14,7 @@ struct LaunchSettingsSection: View {
             .thirteenYearsDocument,
             .thirteenYearsTemplate,
             UTType(filenameExtension: ProducerDocument.fileExtension),
-            UTType(filenameExtension: ProducerDocument.templateExtension),
-            .json
+            UTType(filenameExtension: ProducerDocument.templateExtension)
         ].compactMap { $0 }
     }
 
@@ -38,7 +37,7 @@ struct LaunchSettingsSection: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("No file chosen")
+                    Text("No document chosen")
                         .foregroundStyle(.secondary)
                 }
 
@@ -51,6 +50,12 @@ struct LaunchSettingsSection: View {
             }
             .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: fileTypes) { result in
                 if case .success(let url) = result { preferences.setFile(url) }
+            }
+
+            if let error = preferences.bookmarkError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
     }

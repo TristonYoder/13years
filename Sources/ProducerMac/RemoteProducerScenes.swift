@@ -77,6 +77,7 @@ struct MacFileCommands: Commands {
     @FocusedValue(\.isRemoteProducerWindow) private var isRemoteFrontmost
 
     private var isLocalDisabled: Bool { isRemoteFrontmost == true }
+    private var isDocumentActionsEnabled: Bool { !documents.isLauncherPresented && !isLocalDisabled }
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -90,27 +91,27 @@ struct MacFileCommands: Commands {
                 .disabled(isLocalDisabled)
             Menu("Open Recent") {
                 ForEach(documents.recentURLs, id: \.self) { url in
-                    Button(url.lastPathComponent) { documents.open(url, in: engine) }
+                    Button(RecentDocuments.title(for: url)) { documents.openRecent(url, in: engine) }
                 }
                 if !documents.recentURLs.isEmpty { Divider() }
                 Button("Clear Menu") { documents.clearRecents() }
                     .disabled(documents.recentURLs.isEmpty)
             }
-            .disabled(isLocalDisabled)
+            .disabled(!isDocumentActionsEnabled)
             Button(RemoteWindowIDs.connectTitle) { openWindow(id: RemoteWindowIDs.connect) }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save") { documents.save(engine) }
                 .keyboardShortcut("s")
-                .disabled(isLocalDisabled)
+                .disabled(!isDocumentActionsEnabled)
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                .disabled(isLocalDisabled)
+                .disabled(!isDocumentActionsEnabled)
             Button("Revert to Last Save") { documents.revert(engine) }
-                .disabled(!documents.canRevert || isLocalDisabled)
+                .disabled(!documents.canRevert || !isDocumentActionsEnabled)
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
-                .disabled(isLocalDisabled)
+                .disabled(!isDocumentActionsEnabled)
         }
         CommandGroup(after: .newItem) {
             Button("Flash a Pager…") {

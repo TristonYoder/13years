@@ -2,56 +2,64 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Combine
-import CryptoKit
 import Foundation
 
-public struct DocumentBaselineStore {
-    public let directory: URL
+public enum DocumentSaveStatus: Equatable, Sendable {
+    case untitled
+    case saved
+    case saving
+    case failed
 
-    public init(directory: URL? = nil) {
-        self.directory = directory ?? FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("DocumentBaselines", isDirectory: true)
+    public var text: String {
+        switch self {
+        case .untitled: return "Untitled — not saved"
+        case .saved: return "Saved"
+        case .saving: return "Saving…"
+        case .failed: return "Not saved — click to Save As…"
+        }
     }
 
-    private func fileURL(for url: URL) -> URL {
-        let digest = SHA256.hash(data: Data(url.standardizedFileURL.path.utf8))
-        let name = digest.map { String(format: "%02x", $0) }.joined()
-        return directory.appendingPathComponent("\(name).json")
+    public var isActionable: Bool {
+        self == .failed || self == .untitled
     }
+}
 
-    public func load(for url: URL) -> ProducerDocument? {
-        try? ProducerDocument.read(from: fileURL(for: url))
-    }
+@MainActor
+public final class DocumentSaveIndicator: ObservableObject {
+    @Published public var status: DocumentSaveStatus = .untitled
+    public var onActivate: (() -> Void)?
 
-    public func save(_ document: ProducerDocument, for url: URL) {
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? document.write(to: fileURL(for: url))
-    }
+    public init() {}
 }
 
 @MainActor
 public final class DocumentAutosaver: ObservableObject {
     @Published public private(set) var canRevert = false
-    private let store: DocumentBaselineStore
-    private var manualBaseline: ProducerDocument?
+    @Published public private(set) var status: DocumentSaveStatus = .untitled
 
     private weak var engine: CueEngine?
-    private let writeDocument: (ProducerDocument, URL) throws -> Void
+    private let writeDocument: @Sendable (ProducerDocument, URL) throws -> Void
     private let onFailure: (Error, URL) -> Void
+    private let indexThrottle: TimeInterval
+    private let queue = DispatchQueue(label: "dev.7co.13years.autosave")
     private var baseline: ProducerDocument
-    private var failed: ProducerDocument?
+    private var manualBaseline: ProducerDocument?
+    private var isSuspended = false
+    private var inFlight = 0
+    private var generation = 0
+    private var lastWrite: Date?
+    private var throttleItem: DispatchWorkItem?
     private var cancellable: AnyCancellable?
 
     public init(
         engine: CueEngine,
         debounce: TimeInterval = 1.5,
-        store: DocumentBaselineStore = DocumentBaselineStore(),
-        write: @escaping (ProducerDocument, URL) throws -> Void,
-        onFailure: @escaping (Error, URL) -> Void
+        indexThrottle: TimeInterval = 10,
+        write: @escaping @Sendable (ProducerDocument, URL) throws -> Void,
+        onFailure: @escaping (Error, URL) -> Void = { _, _ in }
     ) {
         self.engine = engine
-        self.store = store
+        self.indexThrottle = indexThrottle
         self.writeDocument = write
         self.onFailure = onFailure
         baseline = engine.makeDocument().normalizedForComparison()
@@ -70,35 +78,140 @@ public final class DocumentAutosaver: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { [weak self] in self?.engine?.makeDocument().normalizedForComparison() }
             .removeDuplicates()
-            .handleEvents(receiveOutput: { [weak self] _ in self?.refreshRevert() })
+            .handleEvents(receiveOutput: { [weak self] _ in
+                self?.refreshRevert()
+                self?.refreshStatus()
+            })
             .debounce(for: .seconds(debounce), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in self?.flush() }
+            .sink { [weak self] _ in self?.autosave() }
+    }
+
+    public static func purgeLegacyBaselines() {
+        let directory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DocumentBaselines", isDirectory: true)
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private var current: ProducerDocument? {
+        engine?.makeDocument().normalizedForComparison()
+    }
+
+    public var isDirty: Bool {
+        guard let engine, engine.currentDocumentURL != nil else { return false }
+        return engine.makeDocument().normalizedForComparison() != baseline
     }
 
     public var hasUnsavedChanges: Bool {
-        guard let engine, engine.currentDocumentURL != nil else { return false }
-        let current = engine.makeDocument().normalizedForComparison()
-        return current != baseline && current != failed
+        isDirty && !isSuspended
     }
+
+    public var hasUnsavedUntitledChanges: Bool {
+        guard let engine, engine.currentDocumentURL == nil else { return false }
+        return engine.makeDocument().normalizedForComparison() != baseline
+    }
+
+    public var isAutosaveSuspended: Bool { isSuspended }
 
     public func reseed() {
         guard let engine else { return }
         baseline = engine.makeDocument().normalizedForComparison()
-        failed = nil
+        isSuspended = false
+        generation += 1
+        throttleItem?.cancel()
+        refreshStatus()
     }
 
-    public func flush() {
-        guard let engine, let url = engine.currentDocumentURL, hasUnsavedChanges else { return }
+    private func autosave() {
+        guard hasUnsavedChanges else {
+            refreshStatus()
+            return
+        }
+        if deferIfIndexOnly() { return }
+        writeInBackground(completion: nil)
+    }
+
+    private func deferIfIndexOnly() -> Bool {
+        guard let engine, let last = lastWrite, engine.planItems.contains(where: \.isRunning) else { return false }
+        let remaining = indexThrottle - Date().timeIntervalSince(last)
+        guard remaining > 0, var probe = current else { return false }
+        probe.activeItemIndex = baseline.activeItemIndex
+        guard probe == baseline else { return false }
+        throttleItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.autosave() }
+        }
+        throttleItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: item)
+        return true
+    }
+
+    public func writeInBackground(force: Bool = false, completion: (() -> Void)?) {
+        guard let engine, let url = engine.currentDocumentURL, force ? isDirty : hasUnsavedChanges else {
+            completion?()
+            return
+        }
         let document = engine.makeDocument()
         let normalized = document.normalizedForComparison()
-        do {
-            try writeDocument(document, url)
-            baseline = normalized
-            failed = nil
-        } catch {
-            failed = normalized
-            onFailure(error, url)
+        let token = generation
+        let write = writeDocument
+        inFlight += 1
+        refreshStatus()
+        queue.async { [weak self] in
+            var failure: Error?
+            do { try write(document, url) } catch { failure = error }
+            let outcome = failure
+            Task { @MainActor [weak self] in
+                guard let self else { completion?(); return }
+                self.inFlight -= 1
+                if token == self.generation {
+                    self.settle(outcome, normalized: normalized, url: url)
+                } else {
+                    self.refreshStatus()
+                }
+                completion?()
+            }
         }
+    }
+
+    @discardableResult
+    public func flush(force: Bool = false) -> Error? {
+        guard let engine, let url = engine.currentDocumentURL, force ? isDirty : hasUnsavedChanges else { return nil }
+        let document = engine.makeDocument()
+        let normalized = document.normalizedForComparison()
+        let write = writeDocument
+        var failure: Error?
+        do { try queue.sync { try write(document, url) } } catch { failure = error }
+        settle(failure, normalized: normalized, url: url)
+        return failure
+    }
+
+    private func settle(_ error: Error?, normalized: ProducerDocument, url: URL) {
+        if let error {
+            isSuspended = true
+            refreshStatus()
+            onFailure(error, url)
+        } else {
+            baseline = normalized
+            isSuspended = false
+            lastWrite = Date()
+            refreshStatus()
+        }
+    }
+
+    public func refreshStatus() {
+        guard let engine else { return }
+        let next: DocumentSaveStatus
+        if engine.currentDocumentURL == nil {
+            next = .untitled
+        } else if isSuspended {
+            next = .failed
+        } else if inFlight > 0 || isDirty {
+            next = .saving
+        } else {
+            next = .saved
+        }
+        if status != next { status = next }
     }
 
     public func refreshRevert() {
@@ -110,30 +223,20 @@ public final class DocumentAutosaver: ObservableObject {
     }
 
     public func markManualSave() {
-        guard let engine, let url = engine.currentDocumentURL else {
+        guard let engine, engine.currentDocumentURL != nil else {
             manualBaseline = nil
             refreshRevert()
+            refreshStatus()
             return
         }
-        let document = engine.makeDocument()
-        manualBaseline = document
-        store.save(document, for: url)
+        manualBaseline = engine.makeDocument()
+        isSuspended = false
         refreshRevert()
+        refreshStatus()
     }
 
     public func markOpened() {
-        guard let engine, let url = engine.currentDocumentURL else {
-            manualBaseline = nil
-            refreshRevert()
-            return
-        }
-        if let saved = store.load(for: url) {
-            manualBaseline = saved
-        } else {
-            manualBaseline = engine.makeDocument()
-            store.save(engine.makeDocument(), for: url)
-        }
-        refreshRevert()
+        markManualSave()
     }
 
     public func revertDocument() -> ProducerDocument? {

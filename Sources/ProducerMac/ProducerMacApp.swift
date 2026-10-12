@@ -21,6 +21,7 @@ struct ProducerMacApp: App {
             ProducerRootView()
                 .environmentObject(cueEngine)
                 .environmentObject(launchPreferences)
+                .environment(\.documentSaveIndicator, documents.saveIndicator)
                 .frame(minWidth: 800, minHeight: 600)
                 .disabled(documents.isLauncherPresented)
                 .overlay {
@@ -31,8 +32,9 @@ struct ProducerMacApp: App {
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.newFromTemplate(cueEngine) },
                                 open: { documents.open(cueEngine) },
-                                openRecent: { documents.open($0, in: cueEngine) },
-                                connect: { remoteHub.isConnectPresented = true }
+                                openRecent: { documents.openRecent($0, in: cueEngine) },
+                                connect: { remoteHub.isConnectPresented = true },
+                                refreshRecents: { documents.pruneRecents() }
                             )
                         )
                             .transition(.opacity)

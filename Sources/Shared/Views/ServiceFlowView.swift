@@ -184,8 +184,8 @@ public struct ServiceFlowView: View {
                 engine.movePlanItems(fromOffsets: offsets, toOffset: destination)
             }
             .onDelete { offsets in
-                for index in offsets {
-                    engine.removePlanItem(id: engine.planItems[index].id)
+                if let index = offsets.first, engine.planItems.indices.contains(index) {
+                    pendingDeleteItem = engine.planItems[index]
                 }
             }
         } header: {
