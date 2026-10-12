@@ -61,7 +61,7 @@ FNV-1a 64-bit over the UTF-8 bytes of a canonical string, rendered as exactly 16
 | --- | --- |
 | `roles` | for each role in array order: `id` US `name` US `state` RS, where `state` is the wire string `OFF`, `STANDBY` or `GO` |
 | `timer` | no active item: `none`. Otherwise `itemId` US `lengthInSeconds` US `isRunning` (1 or 0) US `isDurationActual` (1 or 0) US `elapsedMs` US `anchorMs`, taken from the last anchor |
-| `messages` | message ids, newest first, joined with RS (no trailing RS) |
+| `messages` | message ids ordered by `timestamp` descending, ties broken by `id` ascending (byte order), joined with RS (no trailing RS) |
 | `plan` (Control API only) | for each item in order: `id` US `title` US `lengthInSeconds` US `isDurationActual` (1 or 0) RS, then the decimal `activeItemIndex` |
 
 Integers are base-10 with no padding or sign for non-negative values.
@@ -77,8 +77,37 @@ Integers are base-10 with no padding or sign for non-negative values.
 | timer: `item-1` US `300` US `1` US `0` US `120000` US `1760000000000` | `20a9d930a0849518` |
 | timer: `none` | `3c0d17bad169557b` |
 | messages: `m2` RS `m1` | `dddb4a3dc4d94432` |
+| messages with equal timestamps, ids `a` and `b`: `a` RS `b` | `e5e7b9190438f91c` |
 | plan: `i1` US `Song` US `300` US `0` RS `i2` US `Sermon` US `2700` US `1` RS `1` | `218cc3247b5ee3f9` |
 
 ## Compatibility
 
 All new keys are optional. Old pagers ignore unknown types and keys. A producer sends legacy packets to connections without the capability and v2 packets to those with it. Companion and the web pager upgrade by sending the `proto` op.
+
+## Amendments (v2.1)
+
+These resolve findings from the first review pass. They are additive; a v2.0 peer ignores the new keys.
+
+### Producer epoch
+
+The producer picks a random positive 31-bit integer `epoch` when it starts and puts it in every v2 packet it sends (`PONG`, `TIMER_ANCHOR`, `CUE_DELTA`, `DIGEST`, `SYNC_REPLY`) and in the Control API v2 events `hello`, `timer` and `digest` (inside `data`). A client remembers the last `epoch`. A different `epoch` means the producer restarted: the client discards its held anchor, `rev` gate and clock samples, bursts a sync, and sends one catch-up PING. A v2 client that receives a legacy `CUE_UPDATE` or `TIMER_UPDATE` that has no `rev` from a producer it believes is v2 sends one catch-up PING (at most one per 5 s).
+
+### Capability detection
+
+A client marks the producer as v2 only after receiving a `PONG` with `rev`, a `TIMER_ANCHOR`, `CUE_DELTA`, `DIGEST`, or a `SYNC_REPLY` addressed to it. A `PING`, `SYNC` or `proto` field seen on a packet from another peer never marks the producer as v2.
+
+### Addressing
+
+`SYNC_REPLY` and the catch-up `PONG` (and the `TIMER_ANCHOR` and `DIGEST` sent with it) carry `"to": "<requester senderId>"`. A pager ignores a packet whose `to` is present and not its own `senderId`. Packets without `to` are for everyone.
+
+### Catch-up PONG
+
+A v2 `PONG` carries `rev`, `proto: 2`, `epoch`, and at most the 20 newest messages (the ordering rule above). A v2 client replaces its message list with the PONG's list. Producers must not send more than 4096 bytes of JSON in a PONG to a v2 peer; drop the oldest messages first.
+
+### Clock samples
+
+Each sample stores its local monotonic receive time. Samples older than 90 s are ignored. On a system clock change, wake from sleep, reconnect, or producer epoch change, all samples are cleared and a burst is sent. If a fresh sample's offset differs from the held best offset by more than `max(50 ms, 2 * rtt)`, all older samples are discarded. A computed `rtt` below 0 (millisecond rounding) is treated as 0. A reply with `rtt` above 10 s, or an offset beyond one day, is ignored. A client sends the first burst on connect over any path, and when it receives its first v2 packet while it has no offset; it does not discard samples because the LAN link dropped while a relay link is up.
+
+### Ordering and bounds
+
+Non-PONG v2 packets are accepted only when `rev` is strictly greater than the held `rev`. A `PONG` rebases the gate. A packet whose `rev` exceeds the held `rev` by more than 1,000,000 is ignored unless its `epoch` changed or it is a `PONG`. Anchor values outside these ranges are ignored: `lengthInSeconds` 0 to 604800, `elapsedMs` 0 to 604800000.
