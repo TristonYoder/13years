@@ -69,6 +69,7 @@ void Engine::resetForEpochChange() {
   anchor_ = pagersync::Anchor();
   anchored_ = false;
   anchorKnown_ = false;
+  next_.found = false;
   rev_.reset();
   clock_.reset();
   messageMismatchStreak_ = 0;
@@ -192,6 +193,7 @@ static JsonDocument &packetFilter() {
     filter["roleCues"] = true;
     filter["timerItem"] = true;
     filter["anchor"] = true;
+    filter["nextItem"] = true;
     filter["hashes"] = true;
     filter["cueDeltas"] = true;
     filter["message"] = true;
@@ -299,6 +301,7 @@ void Engine::handlePacketJson(const char *json, size_t len) {
         applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), hasAnchor || !(anchored_ && producerV2_));
       }
       if (hasAnchor) applyAnchor(doc["anchor"]);
+      if (hasAnchor || doc["timerItem"].is<JsonObjectConst>() || !doc["nextItem"].isNull()) applyNextItem(doc["nextItem"]);
     } else {
       Serial.println("[cue] anchor out of bounds — timer ignored");
     }
@@ -316,10 +319,12 @@ void Engine::handlePacketJson(const char *json, size_t len) {
     }
     if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), false);
     applyAnchor(doc["anchor"]);
+    applyNextItem(doc["nextItem"]);
   } else if (isDelta) {
     if (doc["cueDeltas"].is<JsonArrayConst>()) applyCueDeltas(doc["cueDeltas"].as<JsonArrayConst>());
   } else if (isTimerUpdate) {
     if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>());
+    applyNextItem(doc["nextItem"]);
   } else if (strcmp(type, "MESSAGE") == 0) {
     if (doc["message"].is<JsonObjectConst>()) addOneMessage(doc["message"].as<JsonObjectConst>());
   } else if (strcmp(type, "CLEAR_MESSAGES") == 0) {
@@ -386,6 +391,37 @@ void Engine::applyTimerItem(JsonObjectConst t, bool timing) {
       notes_[noteCount_].category = kv.key().c_str();
       notes_[noteCount_].text = kv.value().as<const char *>();
       noteCount_++;
+    }
+  }
+}
+
+bool Engine::categoryAssignedToAnyRole(const char *category) const {
+  if (roleCount_ == 0) return true;
+  for (int i = 0; i < roleCount_; i++) {
+    if (roles_[i].hasNoteCategory(category)) return true;
+  }
+  return false;
+}
+
+void Engine::applyNextItem(JsonVariantConst v) {
+  if (!v.is<JsonObjectConst>()) {
+    next_.found = false;
+    return;
+  }
+  JsonObjectConst o = v.as<JsonObjectConst>();
+  next_.found = true;
+  pagersync::copyTruncated(next_.id, sizeof(next_.id), o["id"] | "");
+  pagersync::copyTruncated(next_.title, sizeof(next_.title), o["title"] | "");
+  next_.lengthInSeconds = o["lengthInSeconds"] | 0;
+  next_.noteCount = 0;
+  if (o["notes"].is<JsonObjectConst>()) {
+    for (JsonPairConst kv : o["notes"].as<JsonObjectConst>()) {
+      if (next_.noteCount >= NextItemView::kMaxNotes) break;
+      const char *category = kv.key().c_str();
+      if (!categoryAssignedToAnyRole(category)) continue;
+      NextItemView::Note &n = next_.notes[next_.noteCount++];
+      pagersync::copyTruncated(n.category, sizeof(n.category), category);
+      pagersync::copyTruncated(n.text, sizeof(n.text), kv.value().as<const char *>() ? kv.value().as<const char *>() : "");
     }
   }
 }
@@ -508,4 +544,14 @@ int Engine::timerRemainingSeconds() const {
   int elapsed = timer_.elapsedSecondsAtSync;
   if (timer_.isRunning) elapsed += (int)((millis() - timer_.syncedAtMillis) / 1000UL);
   return timer_.lengthInSeconds - elapsed;
+}
+
+
+const char *Engine::nextNoteText() const {
+  const RoleView *role = activeRoleRef();
+  if (!next_.found || !role) return "";
+  for (int i = 0; i < next_.noteCount; i++) {
+    if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) return next_.notes[i].text;
+  }
+  return "";
 }

@@ -416,6 +416,43 @@ static void testFilteredLargeFrame() {
 #endif
 }
 
+static void testTruncation() {
+  char buf[8];
+  CHECK(!pagersync::copyTruncated(buf, sizeof(buf), "abc"));
+  CHECK_STR(buf, "abc");
+  CHECK(pagersync::copyTruncated(buf, sizeof(buf), "abcdefghij"));
+  CHECK_STR(buf, "abcdefg");
+  CHECK(!pagersync::copyTruncated(buf, sizeof(buf), "abcdefg"));
+  CHECK(pagersync::copyTruncated(buf, sizeof(buf), "abcdef\xC3\xA9"));
+  CHECK_STR(buf, "abcdef");
+  CHECK(pagersync::copyTruncated(buf, sizeof(buf), "abcd\xC3\xA9\xC3\xA9"));
+  CHECK_STR(buf, "abcd\xC3\xA9");
+  CHECK(pagersync::utf8TruncatedLength("\xE2\x82\xAC\xE2\x82\xAC", 4) == 3);
+  CHECK(pagersync::utf8TruncatedLength("", 4) == 0);
+  CHECK(!pagersync::copyTruncated(buf, 0, "x"));
+}
+
+static void testNextItemFilter() {
+#ifdef HAVE_ARDUINOJSON
+  JsonDocument filter;
+  filter["type"] = true;
+  filter["nextItem"] = true;
+  filter["timerItem"] = true;
+  const char *src = "{\"type\":\"TIMER_ANCHOR\",\"junk\":1,\"nextItem\":{\"id\":\"n1\",\"title\":\"Sermon\",\"itemType\":\"Item\",\"lengthInSeconds\":1800,\"notes\":{\"Audio\":\"Lav mic\",\"Video\":\"\"}}}";
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, src, strlen(src), DeserializationOption::Filter(filter)));
+  CHECK(doc["junk"].isNull());
+  CHECK(doc["nextItem"].is<JsonObjectConst>());
+  CHECK_STR(doc["nextItem"]["title"].as<const char *>(), "Sermon");
+  CHECK(doc["nextItem"]["lengthInSeconds"].as<int>() == 1800);
+  CHECK_STR(doc["nextItem"]["notes"]["Audio"].as<const char *>(), "Lav mic");
+  const char *nul = "{\"type\":\"PONG\",\"nextItem\":null}";
+  JsonDocument d2;
+  CHECK(!deserializeJson(d2, nul, strlen(nul), DeserializationOption::Filter(filter)));
+  CHECK(!d2["nextItem"].is<JsonObjectConst>());
+#endif
+}
+
 static void testJson64() {
 #ifdef HAVE_ARDUINOJSON
   JsonDocument doc;
@@ -450,6 +487,8 @@ int main() {
   testSampleAging();
   testFrameAssembler();
   testFilteredLargeFrame();
+  testTruncation();
+  testNextItemFilter();
   testJson64();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;

@@ -16,7 +16,7 @@ static cue::Engine engine;
 static String serialLineBuf;
 
 static void onCueTransition(CueState newState) {
-  Serial.printf("[cue] role \"%s\" transitioned -> %s\n", engine.selectedRoleId().c_str(), cueStateDisplayName(newState));
+  Serial.printf("[cue] role \"%s\" transitioned -> %s\n", engine.selectedRoleId().c_str(), cueStateLogName(newState));
   led::setForCueState(newState);
   buzzer::playCueTransition(newState);
 }
@@ -220,7 +220,7 @@ static void handleSerialLine(String line) {
                   wifinet::isConnected() ? "connected" : "disconnected",
                   lan::isConnected() ? "connected" : "not connected",
                   producerDisplay.c_str(),
-                  role.found ? cueStateDisplayName(role.state) : "(no role data yet)");
+                  role.found ? cueStateLogName(role.state) : "(no role data yet)");
     if (timer.found) {
       Serial.printf("[serial]   timer: \"%s\" remaining=%ds running=%d actual=%d note=\"%s\"\n",
                     timer.title.c_str(), timer.remainingSeconds(), timer.isRunning, timer.isDurationActual,

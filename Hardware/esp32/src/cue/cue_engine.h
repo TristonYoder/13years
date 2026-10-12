@@ -66,6 +66,26 @@ struct MessageView {
   bool isHighPriority = false;
 };
 
+struct NextItemView {
+  static const int kMaxNotes = 6;
+  static const size_t kIdCap = 48;
+  static const size_t kTitleCap = 96;
+  static const size_t kCategoryCap = 32;
+  static const size_t kNoteCap = 160;
+
+  struct Note {
+    char category[kCategoryCap];
+    char text[kNoteCap];
+  };
+
+  bool found = false;
+  char id[kIdCap] = {0};
+  char title[kTitleCap] = {0};
+  int lengthInSeconds = 0;
+  Note notes[kMaxNotes];
+  int noteCount = 0;
+};
+
 class Engine {
 public:
   void begin();
@@ -105,6 +125,11 @@ public:
   const String &timerTitle() const { return timer_.title; }
   int timerRemainingSeconds() const;
 
+  bool nextFound() const { return next_.found; }
+  const char *nextTitle() const { return next_.title; }
+  const char *nextId() const { return next_.id; }
+  const char *nextNoteText() const;
+
   String currentNote() const;
   MessageView latestRelevantMessage() const;
 
@@ -143,6 +168,7 @@ private:
   TimerView timer_;
   NoteEntry notes_[kMaxNoteCategories];
   int noteCount_ = 0;
+  NextItemView next_;
   MessageView messages_[kMaxMessages];
   int messageCount_ = 0;
 
@@ -169,6 +195,8 @@ private:
   void applyRoleCues(JsonArrayConst roles);
   void applyTimerItem(JsonObjectConst timer, bool timing = true);
   bool applyAnchor(JsonVariantConst anchor);
+  void applyNextItem(JsonVariantConst next);
+  bool categoryAssignedToAnyRole(const char *category) const;
   void resetForEpochChange();
   void applyCueDeltas(JsonArrayConst deltas);
   void handleSyncReply(JsonObjectConst doc);

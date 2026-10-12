@@ -29,7 +29,13 @@ inline bool cueStateIsGo(CueState s) {
 inline const char *cueStateDisplayName(CueState s) {
   if (cueStateIsStandby(s)) return "STANDBY";
   if (cueStateIsGo(s)) return "GO!";
-  return "CLEAR";
+  return "";
+}
+
+inline const char *cueStateLogName(CueState s) {
+  if (cueStateIsStandby(s)) return "STANDBY";
+  if (cueStateIsGo(s)) return "GO";
+  return "OFF";
 }
 
 inline uint32_t cueStateBgColor(CueState s) {

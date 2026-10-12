@@ -409,6 +409,19 @@ content (role pill, big state text, item/timer card, note, message banner)
 is stacked vertically. **Confirmed right-side-up against a photo of the
 real physical unit**.
 
+## Next item card
+
+The producer adds an optional `nextItem` to `TIMER_ANCHOR`, `PONG`,
+`CUE_UPDATE` and `TIMER_UPDATE` (see `Server/PROTOCOL-V2.md`). The engine
+keeps it in fixed buffers (title 95 bytes, notes 159 bytes each, only the
+categories assigned to some role), clears it on null/absent and on a producer
+epoch change. The screen shows a compact "NEXT" card under the timer card:
+the title (uppercase, one line, ellipsised) and the first non-empty note for
+the active role's categories; no card without a next item. The cue word is
+empty while the role's cue is OFF (the layout keeps its place); STANDBY and
+GO are unchanged. Serial logs name the state `OFF`/`STANDBY`/`GO`. Layout fit
+on the real panel is unverified.
+
 ## Colors — two deliberate deviations from the iPhone app
 
 Both found and fixed against real hardware photos, not guessed at:

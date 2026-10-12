@@ -103,6 +103,22 @@ inline bool anchorInBounds(int64_t lengthInSeconds, int64_t elapsedMs) {
          elapsedMs >= 0 && elapsedMs <= 604800000LL;
 }
 
+inline size_t utf8TruncatedLength(const char *s, size_t maxBytes) {
+  size_t n = strlen(s);
+  if (n <= maxBytes) return n;
+  size_t cut = maxBytes;
+  while (cut > 0 && (((uint8_t)s[cut]) & 0xC0) == 0x80) cut--;
+  return cut;
+}
+
+inline bool copyTruncated(char *dst, size_t dstCap, const char *src) {
+  if (dstCap == 0) return false;
+  size_t n = utf8TruncatedLength(src, dstCap - 1);
+  memcpy(dst, src, n);
+  dst[n] = '\0';
+  return src[n] != '\0';
+}
+
 enum class RevKind { Strict, NotLower, Rebase };
 
 struct RevGuard {

@@ -179,6 +179,7 @@ static lv_obj_t *connRow = nullptr, *connDot = nullptr, *connLabel = nullptr;
 static lv_obj_t *stateLabel = nullptr;
 static lv_obj_t *personLabel = nullptr;
 static lv_obj_t *itemCard = nullptr, *itemTitleLabel = nullptr, *timerLabel = nullptr, *projActualLabel = nullptr;
+static lv_obj_t *nextCard = nullptr, *nextCaption = nullptr, *nextTitleLabel = nullptr, *nextNoteLabel = nullptr;
 static lv_obj_t *noteLabel = nullptr;
 static lv_obj_t *msgBanner = nullptr, *msgBannerIcon = nullptr, *msgBannerLabel = nullptr;
 
@@ -253,8 +254,8 @@ static void buildPagerScreen() {
   lv_obj_set_style_border_width(itemCard, 0, 0);
   lv_obj_set_style_pad_all(itemCard, 4, 0);
   lv_obj_clear_flag(itemCard, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_size(itemCard, 220, 100);
-  lv_obj_align(itemCard, LV_ALIGN_TOP_MID, 0, 118);
+  lv_obj_set_size(itemCard, 220, 92);
+  lv_obj_align(itemCard, LV_ALIGN_TOP_MID, 0, 104);
 
   itemTitleLabel = lv_label_create(itemCard);
   lv_obj_set_style_text_font(itemTitleLabel, &inter_bold_14, 0);
@@ -265,18 +266,46 @@ static void buildPagerScreen() {
 
   timerLabel = lv_label_create(itemCard);
   lv_obj_set_style_text_font(timerLabel, &inter_black_32, 0);
-  lv_obj_align(timerLabel, LV_ALIGN_CENTER, 0, 10);
+  lv_obj_align(timerLabel, LV_ALIGN_CENTER, 0, 6);
 
   projActualLabel = lv_label_create(itemCard);
   lv_obj_set_style_text_font(projActualLabel, &inter_bold_14, 0);
   lv_obj_align(projActualLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
 
+  nextCard = lv_obj_create(pagerScreen);
+  lv_obj_set_style_bg_color(nextCard, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(nextCard, LV_OPA_20, 0);
+  lv_obj_set_style_radius(nextCard, 10, 0);
+  lv_obj_set_style_border_width(nextCard, 0, 0);
+  lv_obj_set_style_pad_all(nextCard, 4, 0);
+  lv_obj_clear_flag(nextCard, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(nextCard, 220, 44);
+  lv_obj_align(nextCard, LV_ALIGN_TOP_MID, 0, 200);
+
+  nextCaption = lv_label_create(nextCard);
+  lv_obj_set_style_text_font(nextCaption, &inter_regular_14, 0);
+  lv_obj_set_style_text_opa(nextCaption, LV_OPA_70, 0);
+  lv_label_set_text(nextCaption, "NEXT");
+  lv_obj_align(nextCaption, LV_ALIGN_TOP_LEFT, 2, 0);
+
+  nextTitleLabel = lv_label_create(nextCard);
+  lv_obj_set_style_text_font(nextTitleLabel, &inter_bold_14, 0);
+  lv_label_set_long_mode(nextTitleLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(nextTitleLabel, 160);
+  lv_obj_align(nextTitleLabel, LV_ALIGN_TOP_LEFT, 46, 0);
+
+  nextNoteLabel = lv_label_create(nextCard);
+  lv_obj_set_style_text_font(nextNoteLabel, &inter_regular_14, 0);
+  lv_label_set_long_mode(nextNoteLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(nextNoteLabel, 208);
+  lv_obj_align(nextNoteLabel, LV_ALIGN_TOP_LEFT, 2, 19);
+
   noteLabel = lv_label_create(pagerScreen);
   lv_obj_set_style_text_font(noteLabel, &inter_bold_14, 0);
-  lv_label_set_long_mode(noteLabel, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(noteLabel, 220);
+  lv_label_set_long_mode(noteLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(noteLabel, 220, 34);
   lv_obj_set_style_text_align(noteLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(noteLabel, LV_ALIGN_TOP_MID, 0, 232);
+  lv_obj_align(noteLabel, LV_ALIGN_TOP_MID, 0, 247);
 
   msgBanner = lv_obj_create(pagerScreen);
   lv_obj_set_style_bg_color(msgBanner, lv_color_hex(0xFFD400), 0);
@@ -289,7 +318,7 @@ static void buildPagerScreen() {
   lv_obj_set_flex_align(msgBanner, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_clear_flag(msgBanner, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_size(msgBanner, 220, 32);
-  lv_obj_align(msgBanner, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_align(msgBanner, LV_ALIGN_BOTTOM_MID, 0, -4);
 
   msgBannerIcon = lv_img_create(msgBanner);
   lv_img_set_src(msgBannerIcon, &message_square_text);
@@ -320,6 +349,9 @@ struct PagerCache {
   bool actualValid = false;
   bool noteShown = false;
   String note;
+  bool nextShown = false;
+  String nextTitle;
+  String nextNote;
   bool msgShown = false;
   String msgId;
   String msgText;
@@ -338,6 +370,9 @@ static void applyStateColors(CueState state) {
   lv_obj_set_style_text_color(timerLabel, textColor, 0);
   lv_obj_set_style_text_color(projActualLabel, textColor, 0);
   lv_obj_set_style_text_color(noteLabel, textColor, 0);
+  lv_obj_set_style_text_color(nextCaption, textColor, 0);
+  lv_obj_set_style_text_color(nextTitleLabel, textColor, 0);
+  lv_obj_set_style_text_color(nextNoteLabel, textColor, 0);
   lv_obj_set_style_img_recolor(roleBtnChevron, textColor, 0);
   lv_obj_set_style_img_recolor_opa(roleBtnChevron, LV_OPA_COVER, 0);
 }
@@ -432,6 +467,29 @@ static void refreshPagerScreen(cue::Engine &engine, bool wifiConnected, bool lan
       lv_label_set_text(noteLabel, note);
     }
     setHidden(noteLabel, !noteShown);
+  }
+
+  bool nextShown = timerShown && engine.nextFound();
+  if (!pc.valid || nextShown != pc.nextShown) {
+    pc.nextShown = nextShown;
+    setHidden(nextCard, !nextShown);
+    pc.nextTitle = "";
+    pc.nextTitle.concat('\1');
+    pc.nextNote = pc.nextTitle;
+  }
+  if (nextShown) {
+    const char *nextTitleSrc = engine.nextTitle();
+    if (!pc.nextTitle.equals(nextTitleSrc)) {
+      pc.nextTitle = nextTitleSrc;
+      String upper = pc.nextTitle;
+      upper.toUpperCase();
+      lv_label_set_text(nextTitleLabel, upper.c_str());
+    }
+    const char *nextNoteSrc = engine.nextNoteText();
+    if (!pc.nextNote.equals(nextNoteSrc)) {
+      pc.nextNote = nextNoteSrc;
+      lv_label_set_text(nextNoteLabel, nextNoteSrc);
+    }
   }
 
   const cue::MessageView *msg = engine.latestRelevantMessageRef();
