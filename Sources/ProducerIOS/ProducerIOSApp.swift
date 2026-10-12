@@ -21,7 +21,6 @@ struct ProducerIOSApp: App {
                 .environmentObject(cueEngine)
                 .environmentObject(launchPreferences)
                 .disabled(documents.isLauncherPresented)
-                .overlay(alignment: .topTrailing) { DocumentMenu(documents: documents) }
                 .overlay {
                     if documents.isLauncherPresented {
                         LauncherView(
@@ -44,6 +43,15 @@ struct ProducerIOSApp: App {
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
                 .onOpenURL { documents.open($0, in: cueEngine) }
+                .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
+                    documents.beginImport(template: false)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .producerOpenRecent)) { note in
+                    if let url = note.object as? URL { documents.open(url, in: cueEngine) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .producerClearRecents)) { _ in
+                    documents.clearRecents()
+                }
                 .fileImporter(isPresented: $documents.isImporting, allowedContentTypes: documents.importTypes) {
                     documents.handleImport($0.map { [$0] }, into: cueEngine)
                 }

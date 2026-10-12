@@ -15,7 +15,9 @@ final class IOSDocumentController: ObservableObject {
     ))
     @Published var errorMessage: String?
     @Published var isLauncherPresented = true
-    @Published private(set) var recents: [RecentEntry] = []
+    @Published private(set) var recents: [RecentEntry] = [] {
+        didSet { DocumentMenuBridge.recentURLs = recents.map(\.url) }
+    }
 
     struct RecentEntry: Equatable {
         let url: URL
@@ -40,6 +42,7 @@ final class IOSDocumentController: ObservableObject {
             let fresh = stale ? (try? url.bookmarkData(options: DocumentBookmark.create, includingResourceValuesForKeys: nil, relativeTo: nil)) : nil
             return RecentEntry(url: url, bookmark: fresh ?? data)
         }
+        DocumentMenuBridge.recentURLs = recents.map(\.url)
     }
 
     func dismissLauncher() {
@@ -147,41 +150,10 @@ struct DocumentCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Open…") { documents.beginImport(template: false) }
-                .keyboardShortcut("o")
-            Menu("Open Recent") {
-                ForEach(documents.recentURLs, id: \.self) { url in
-                    Button(url.deletingPathExtension().lastPathComponent) { documents.open(url, in: engine) }
-                }
-                Divider()
-                Button("Clear Menu") { documents.clearRecents() }
-                    .disabled(documents.recentURLs.isEmpty)
-            }
             Button("New from Template…") { documents.beginImport(template: true) }
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s")
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
         }
-    }
-}
-
-struct DocumentMenu: View {
-    @ObservedObject var documents: IOSDocumentController
-    @EnvironmentObject var engine: CueEngine
-
-    var body: some View {
-        Menu {
-            Button("Open…", systemImage: "folder") { documents.beginImport(template: false) }
-            Button("New from Template…", systemImage: "doc.on.doc") { documents.beginImport(template: true) }
-            Divider()
-            Button("Save As…", systemImage: "square.and.arrow.up") { documents.saveAs(engine) }
-            Button("Save as Template…", systemImage: "doc.badge.plus") { documents.saveAsTemplate(engine) }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.title3)
-                .padding(10)
-                .background(.regularMaterial, in: Circle())
-        }
-        .padding(8)
     }
 }
