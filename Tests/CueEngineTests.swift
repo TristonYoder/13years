@@ -219,6 +219,20 @@ final class CueEngineTests: XCTestCase {
         XCTAssertTrue(engine.isAtEndOfPlan)
     }
 
+    func testIsAtStartOfPlanFollowsTheActiveItem() {
+        let engine = CueEngine(startsNetworking: false)
+        XCTAssertTrue(engine.isAtStartOfPlan)
+        engine.importFlow(title: "Plan", items: [
+            PCOTimerItem(title: "Welcome", itemType: "item", sequence: 1, lengthInSeconds: 60),
+            PCOTimerItem(title: "Song", itemType: "item", sequence: 2, lengthInSeconds: 60),
+        ])
+        XCTAssertTrue(engine.isAtStartOfPlan)
+        engine.nextPlanItem()
+        XCTAssertFalse(engine.isAtStartOfPlan)
+        engine.previousPlanItem()
+        XCTAssertTrue(engine.isAtStartOfPlan)
+    }
+
     func testCanLoadNextServiceRequiresAPCOPlan() {
         let engine = CueEngine()
         engine.importFlow(title: "Manual Flow", items: makeFlow())

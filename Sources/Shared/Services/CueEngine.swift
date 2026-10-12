@@ -1413,6 +1413,10 @@ public final class CueEngine: ObservableObject {
         !planItems.isEmpty && nextSelectableIndex(after: activeItemIndex) == nil
     }
 
+    public var isAtStartOfPlan: Bool {
+        planItems.isEmpty || previousSelectableIndex(before: activeItemIndex) == nil
+    }
+
     public var canLoadNextService: Bool {
         currentPCOServiceTypeId != nil && currentPCOPlanId != nil
     }

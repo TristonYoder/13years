@@ -914,6 +914,7 @@ public final class ControlAPIRouter {
             items: engine.planItems,
             activeItemIndex: engine.activeItemIndex,
             isAtEndOfPlan: engine.isAtEndOfPlan,
+            isAtStartOfPlan: engine.isAtStartOfPlan,
             canLoadNextService: engine.canLoadNextService,
             pcoServiceTypeId: engine.activeTimerItem?.pcoServiceTypeId ?? engine.planItems.first?.pcoServiceTypeId,
             pcoPlanId: engine.activeTimerItem?.pcoPlanId ?? engine.planItems.first?.pcoPlanId

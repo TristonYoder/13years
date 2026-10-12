@@ -63,6 +63,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var items: [PCOTimerItem]
         public var activeItemIndex: Int
         public var isAtEndOfPlan: Bool
+        public var isAtStartOfPlan: Bool?
         public var canLoadNextService: Bool
         public var pcoServiceTypeId: String?
         public var pcoPlanId: String?

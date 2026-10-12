@@ -118,6 +118,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     ],
     "activeItemIndex": 2,
     "isAtEndOfPlan": false,
+    "isAtStartOfPlan": true,
     "canLoadNextService": false,
     "pcoServiceTypeId": null,
     "pcoPlanId": null

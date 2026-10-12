@@ -91,6 +91,7 @@ public struct LiveTimerHeaderView: View {
                                 Image(systemName: "chevron.left").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                             .producerSecondaryButton()
+                            .disabled(engine.isAtStartOfPlan)
                             .help("Previous item")
 
                             if let item = engine.activeTimerItem {

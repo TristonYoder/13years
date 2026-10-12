@@ -5,9 +5,7 @@ import SwiftUI
 
 public struct ProducerRootView: View {
     @EnvironmentObject var engine: CueEngine
-    #if os(macOS)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    #endif
 
     public init() {}
 
@@ -28,11 +26,7 @@ public struct ProducerRootView: View {
 
             Divider()
 
-            #if os(macOS)
-            macOSNavigationSplitView
-            #else
-            iPadNavigationLayout
-            #endif
+            adaptiveNavigation
         }
         #if os(macOS)
         .ignoresSafeArea(.container, edges: .top)
@@ -43,8 +37,17 @@ public struct ProducerRootView: View {
         }
     }
 
-    #if os(macOS)
-    private var macOSNavigationSplitView: some View {
+    private var adaptiveNavigation: some View {
+        GeometryReader { proxy in
+            if proxy.size.height > proxy.size.width {
+                tabLayout
+            } else {
+                splitLayout
+            }
+        }
+    }
+
+    private var splitLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(AppMode.sidebarCases, id: \.self, selection: Binding(
                 get: { engine.appMode },
@@ -71,9 +74,8 @@ public struct ProducerRootView: View {
             }
         }
     }
-    #endif
 
-    private var iPadNavigationLayout: some View {
+    private var tabLayout: some View {
         TabView(selection: $engine.appMode) {
             ForEach(AppMode.sidebarCases, id: \.self) { mode in
                 NavigationStack { detailView(for: mode) }

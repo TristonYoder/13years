@@ -54,14 +54,22 @@ extension EnvironmentValues {
     }
 }
 
-#if os(macOS)
 public struct HideNativeSidebarToggle: ViewModifier {
     public func body(content: Content) -> some View {
+        #if os(macOS)
         if #available(macOS 14.4, *) {
             content.toolbar(removing: .sidebarToggle)
         } else {
             content
         }
+        #elseif os(iOS)
+        if #available(iOS 17.4, *) {
+            content.toolbar(removing: .sidebarToggle)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
     }
 }
-#endif
