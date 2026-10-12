@@ -8,7 +8,7 @@ public extension View {
         isPresented: Binding<Bool>,
         previewBaseSeconds: Int,
         previewElapsedSeconds: Int = 0,
-        arrowEdge: Edge = .bottom,
+        arrowEdge: Edge = TimeEntryPopoverDefaults.arrowEdge,
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
         onCommit: @escaping (TimerInputParser.Action) -> Void
     ) -> some View {
@@ -21,6 +21,14 @@ public extension View {
             onCommit: onCommit
         ))
     }
+}
+
+public enum TimeEntryPopoverDefaults {
+    #if os(iOS)
+    public static let arrowEdge: Edge = .top
+    #else
+    public static let arrowEdge: Edge = .bottom
+    #endif
 }
 
 enum TimeEntryPreview {
