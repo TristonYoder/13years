@@ -825,10 +825,10 @@ test("timer.nextItem wins over the plan and null hides the card", () => {
 test("next item notes are filtered by the role's categories", () => {
   const item = { notes: { audio: "mute", lights: "dim", video: "" } };
   const role = { assignedNoteCategories: ["lights", "video", "audio"] };
-  assert.deepEqual(core.notesForRole(item, role).map((n) => n.category), ["lights", "audio"]);
-  assert.deepEqual(core.notesForRole(item, { assignedNoteCategories: [] }), []);
-  assert.deepEqual(core.notesForRole(item, null), []);
-  assert.deepEqual(core.notesForRole(null, role), []);
+  assert.equal(core.notesForRole(item, role).map((n) => n.category).join(","), "lights,audio");
+  assert.equal(core.notesForRole(item, { assignedNoteCategories: [] }).length, 0);
+  assert.equal(core.notesForRole(item, null).length, 0);
+  assert.equal(core.notesForRole(null, role).length, 0);
 });
 
 test("cue word is empty for OFF and unknown states", () => {
