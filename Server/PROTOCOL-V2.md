@@ -144,7 +144,7 @@ Used by the Swift pager (iPad, Apple TV, any window wider than tall) and the web
 
 - Ground and frame: near-black ground (`#111114`) inside a frame in the cue colour (STANDBY yellow, GO green) of thickness `max(14 px, 0.022 s)`. The frame's INNER corners are rounded with radius `max(18 px, 0.04 s)`; the outer edge follows the window. With no cue the frame stays at the same thickness in a barely visible neutral so the layout never shifts.
 - Top-left slot (far left, inside the frame): shows the local time while there is no cue and is REPLACED by the cue badge while the cue is `STANDBY` or `GO`. The clock is styled like the web pager's lower-third clock: the device's local time of day with seconds (`h:mm:ss`, locale AM/PM style), heavy weight at about `0.075 s`, near white, left aligned, with a small letter-spaced `LOCAL TIME` caption beneath, updating on the second boundary. The badge is a filled rounded rectangle in the cue colour with dark text and the cue word (`GO!`, `STANDBY`) about `0.11 s` high, heaviest weight. The slot reserves the height of the badge and the width of the widest word (`STANDBY`) so nothing moves when it switches.
-- Role, top right: the role name, with `FOR: PERSON` beneath when a person is assigned, and the connection state (dot and short text).
+- Top right: the connection state (dot and short text) above the role chooser, which is a visible dropdown chip with a chevron. The person's name (`FOR: PERSON`) is not shown.
 - Centre: the current item title in uppercase (about `0.05 s`, up to two lines), the countdown (about `0.32 s`, heaviest weight; negative values keep the `+` prefix), then `PROJECTED` or `ACTUAL` (about `0.02 s`, dimmed). It is positioned from the window alone and must not move between cue states.
 - Bottom row: two cards of equal width (half the width minus the gap) that size to their content: no reserved or minimum height, so nothing takes more space than its text needs. The two cards share the taller card's height. A card is capped at `0.28 s` tall and its text scales down to fit that cap, never overflowing or clipping. Left, the current item's notes; right, the next item. The next-item card's first row holds the item title in uppercase at about `0.035 s` with the item's projected length (`m:ss`, or `h:mm:ss` over the hour threshold) right aligned in the same row; then its notes. A card with nothing to show is omitted and the other takes the full width (no placeholder, no empty space).
 - Standing message: while a message is standing, it REPLACES the bottom row. It is a full-width yellow panel with dark text, sized for a distant screen like the lower third: the message at about `0.06 s` to `0.07 s` (scaling down to fit at most three lines within `0.25 s` of height, so it never covers the `PROJECTED`/`ACTUAL` tag under the countdown), with the sender in a small caption, until it is dismissed or expires; then the cards return. It never overlays or covers the cards.
@@ -156,3 +156,21 @@ In every layout that shows a local-time clock (landscape, and the lower third), 
 ## Note format
 
 Everywhere notes are shown (every layout), each note is one entry: the category name in bold followed by a colon, then the text on the same line, wrapping as needed, e.g. **Lighting:** warm wash, slow fade. One entry per category assigned to the pager's role; nothing for empty notes.
+
+## Portrait layout ("framed")
+
+Used by the Swift pager and the web pager when the window is taller than wide (the web pager's standard layout). Sizes are fractions of the window width `w`.
+
+- Ground and frame: same as the landscape layout (near-black ground, a frame in the cue colour of thickness `max(10 px, 0.022 w)` with rounded inner corners, a barely visible neutral frame with no cue so nothing shifts).
+- Top row (fixed height): left slot is the local-time clock (lower-third style, `LOCAL TIME` caption) while there is no cue and is replaced by the cue badge (`GO!`, `STANDBY`) while the cue is active, reserving the widest word so nothing moves; right column is the connection state above the role chooser (dropdown chip with chevron). No `FOR: PERSON`.
+- Current item card, vertically centred in the space between the top row and the bottom stack: the item title in uppercase, the countdown (about `0.2 w`, heaviest weight, `+` prefix in overtime), the `PROJECTED`/`ACTUAL` tag, then the current item's notes inside the same card below a hairline divider (one entry per assigned category in the note format). Heading items show the title only.
+- Bottom stack, aligned to the bottom edge: the Next card (item title in uppercase with its projected length right aligned in the same row, then its notes; omitted when there is no next item), and below it, when a message is standing, the message panel (full width, yellow, dark text, about `0.055 w` scaling down to fit at most four lines within `0.34 w`, sender caption). The message pushes the Next card up; it never overlays or replaces it.
+
+## Cue display setting
+
+A setting chooses how the cue is shown, in portrait and landscape:
+
+- `outline` (default): the framed look above.
+- `fullscreen`: no frame; the whole window is filled with the cue colour (STANDBY yellow, GO green) and the cards become dark translucent panels (`rgba(0,0,0,0.28)`). The top-left cue word is plain large text in the dark cue-contrast colour, without the pill. With no cue the ground is the near-black ground.
+
+The Swift pager stores it in app settings (`pagerCueDisplay`: `outline` or `fullscreen`) with a control in its settings screen. The web pager reads `?cue=outline|full`, remembers the last choice in `localStorage` (`pagerCueDisplay`), and exposes a control in its settings sheet (the gear). The ESP32 panel is unchanged.
