@@ -7,13 +7,24 @@ import UniformTypeIdentifiers
 @MainActor
 final class IOSDocumentController: ObservableObject {
     @Published var isImporting = false
-    @Published var isImportingTemplate = false
+    @Published var importsTemplate = false
     @Published var isExporting = false
     @Published var exportFile = ProducerDocumentFile(ProducerDocument(
         roles: [], waypoints: [], serviceSchedules: [], planItems: [], activeItemIndex: 0,
         settings: .init(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
     ))
     @Published var errorMessage: String?
+
+    var importTypes: [UTType] {
+        let base: UTType = importsTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument
+        let ext = importsTemplate ? ProducerDocument.templateExtension : ProducerDocument.fileExtension
+        return [base, UTType(filenameExtension: ext), .json].compactMap { $0 }
+    }
+
+    func beginImport(template: Bool) {
+        importsTemplate = template
+        isImporting = true
+    }
 
     var exportType: UTType { exportFile.isTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument }
 
@@ -64,9 +75,9 @@ struct DocumentCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Open…") { documents.isImporting = true }
+            Button("Open…") { documents.beginImport(template: false) }
                 .keyboardShortcut("o")
-            Button("New from Template…") { documents.isImportingTemplate = true }
+            Button("New from Template…") { documents.beginImport(template: true) }
             Button("Save As…") { documents.saveAs(engine) }
                 .keyboardShortcut("s")
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
@@ -80,8 +91,8 @@ struct DocumentMenu: View {
 
     var body: some View {
         Menu {
-            Button("Open…", systemImage: "folder") { documents.isImporting = true }
-            Button("New from Template…", systemImage: "doc.on.doc") { documents.isImportingTemplate = true }
+            Button("Open…", systemImage: "folder") { documents.beginImport(template: false) }
+            Button("New from Template…", systemImage: "doc.on.doc") { documents.beginImport(template: true) }
             Divider()
             Button("Save As…", systemImage: "square.and.arrow.up") { documents.saveAs(engine) }
             Button("Save as Template…", systemImage: "doc.badge.plus") { documents.saveAsTemplate(engine) }
