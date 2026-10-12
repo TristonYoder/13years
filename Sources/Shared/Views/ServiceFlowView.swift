@@ -73,8 +73,8 @@ public struct ServiceFlowView: View {
             Button("Cancel", role: .cancel) { newWaypointTargetItemId = nil; newWaypointName = "" }
             Button("Create") {
                 let trimmed = newWaypointName.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty, let itemId = newWaypointTargetItemId, let waypoint = engine.addWaypoint(name: trimmed) {
-                    engine.assignWaypoint(waypoint.id, toItemId: itemId)
+                if !trimmed.isEmpty, let itemId = newWaypointTargetItemId {
+                    engine.createWaypointAndAssign(name: trimmed, toItemId: itemId)
                 }
                 newWaypointTargetItemId = nil
                 newWaypointName = ""

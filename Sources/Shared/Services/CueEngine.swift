@@ -33,22 +33,22 @@ public final class CueEngine: ObservableObject {
         didSet { persistCurrentFlow() }
     }
     @Published public var activeTimerItem: PCOTimerItem?
-    @Published private var isActiveTimerActualOverride: Bool = false
-    private var actualOverrideItemId: String?
+    @Published var isActiveTimerActualOverride: Bool = false
+    var actualOverrideItemId: String?
     @Published public var isPCOConnected: Bool = false
     @Published public var pcoUserName: String? {
-        didSet { UserDefaults.standard.set(pcoUserName, forKey: Self.pcoUserNameDefaultsKey) }
+        didSet { write(pcoUserName, forKey: Self.pcoUserNameDefaultsKey) }
     }
     private static let pcoUserNameDefaultsKey = "pcoUserName"
     @Published public var pcoLastError: String?
     @Published public var pcoNoteCategories: [PCOClient.PCONoteCategory] = []
     @Published public var isPCOLiveSyncEnabled: Bool = false {
-        didSet { UserDefaults.standard.set(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
+        didSet { write(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
     }
     private static let pcoLiveSyncDefaultsKey = "isPCOLiveSyncEnabled"
 
     @Published public var hourFormatThreshold: HourFormatThreshold = .over90Minutes {
-        didSet { UserDefaults.standard.set(hourFormatThreshold.rawValue, forKey: Self.hourFormatThresholdDefaultsKey) }
+        didSet { write(hourFormatThreshold.rawValue, forKey: Self.hourFormatThresholdDefaultsKey) }
     }
     private static let hourFormatThresholdDefaultsKey = "hourFormatThreshold"
 
@@ -57,14 +57,14 @@ public final class CueEngine: ObservableObject {
     @Published public var pcoSelectedServiceTypeId: String?
     @Published public var pcoPlanFilter: PCOClient.PCOPlanFilter = .future
     @Published public var pcoDefaultServiceTypeId: String? {
-        didSet { UserDefaults.standard.set(pcoDefaultServiceTypeId, forKey: Self.defaultServiceTypeDefaultsKey) }
+        didSet { write(pcoDefaultServiceTypeId, forKey: Self.defaultServiceTypeDefaultsKey) }
     }
     private static let defaultServiceTypeDefaultsKey = "pcoDefaultServiceTypeId"
 
     @Published public var pcoOAuthTokens: OAuthTokens? {
         didSet {
             pcoClient.tokens = pcoOAuthTokens
-            KeychainStore.setCodable(pcoOAuthTokens, forKey: Self.pcoTokensKeychainKey)
+            if !isRemoteMirror { KeychainStore.setCodable(pcoOAuthTokens, forKey: Self.pcoTokensKeychainKey) }
         }
     }
     private static let pcoTokensKeychainKey = "pcoOAuthTokens"
@@ -90,19 +90,19 @@ public final class CueEngine: ObservableObject {
     private static let producerStalenessInterval: TimeInterval = 12
     @Published public var isProxyEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(isProxyEnabled, forKey: Self.proxyEnabledDefaultsKey)
+            write(isProxyEnabled, forKey: Self.proxyEnabledDefaultsKey)
             updateRelayConnection()
         }
     }
     @Published public var proxyToken: String = "" {
         didSet {
-            KeychainStore.setString(proxyToken, forKey: Self.proxyTokenKeychainKey)
+            if !isRemoteMirror { KeychainStore.setString(proxyToken, forKey: Self.proxyTokenKeychainKey) }
             updateRelayConnection()
         }
     }
     @Published public var plotipharRelayHost: String = "relay.13years.app" {
         didSet {
-            UserDefaults.standard.set(plotipharRelayHost, forKey: Self.relayHostDefaultsKey)
+            write(plotipharRelayHost, forKey: Self.relayHostDefaultsKey)
             updateRelayConnection()
         }
     }
@@ -112,13 +112,13 @@ public final class CueEngine: ObservableObject {
 
     @Published public var isControlAPIEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(isControlAPIEnabled, forKey: Self.controlAPIEnabledDefaultsKey)
+            write(isControlAPIEnabled, forKey: Self.controlAPIEnabledDefaultsKey)
             updateControlAPI()
         }
     }
     @Published public var controlAPIPort: Int = Int(ControlAPIServer.defaultPort) {
         didSet {
-            UserDefaults.standard.set(controlAPIPort, forKey: Self.controlAPIPortDefaultsKey)
+            write(controlAPIPort, forKey: Self.controlAPIPortDefaultsKey)
             updateControlAPI()
         }
     }
@@ -132,14 +132,21 @@ public final class CueEngine: ObservableObject {
     @Published public var plotipharRoles: [PlotipharClient.PlotipharRole] = []
 
     private static let deviceIdDefaultsKey = "cueEngineDeviceId"
-    private let deviceId: String = {
+    private let deviceId: String
+
+    private static func persistentDeviceId() -> String {
         if let existing = UserDefaults.standard.string(forKey: CueEngine.deviceIdDefaultsKey) {
             return existing
         }
         let id = UUID().uuidString
         UserDefaults.standard.set(id, forKey: CueEngine.deviceIdDefaultsKey)
         return id
-    }()
+    }
+
+    public let isRemoteMirror: Bool
+    public weak var remoteCommands: RemoteProducerCommanding?
+    @Published public var remoteProducerName: String?
+    @Published public var remoteControllerCount: Int = 0
 
     private let server = LocalCueServer()
     private let client = LocalCueClient()
@@ -154,9 +161,21 @@ public final class CueEngine: ObservableObject {
     private var plotipharPollTask: Task<Void, Never>?
     private var timerSubscription: AnyCancellable?
 
+    public init(mirroring commands: RemoteProducerCommanding?) {
+        self.isMasterServer = true
+        self.hostsControlAPI = false
+        self.isRemoteMirror = true
+        self.remoteCommands = commands
+        self.deviceId = UUID().uuidString
+        self.roles = []
+        self.selectedRoleIds = []
+    }
+
     public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false) {
         self.isMasterServer = isMasterServer
         self.hostsControlAPI = hostsControlAPI
+        self.isRemoteMirror = false
+        self.deviceId = Self.persistentDeviceId()
         self.pcoDefaultServiceTypeId = UserDefaults.standard.string(forKey: Self.defaultServiceTypeDefaultsKey)
         self.hourFormatThreshold = UserDefaults.standard.string(forKey: Self.hourFormatThresholdDefaultsKey)
             .flatMap(HourFormatThreshold.init(rawValue:)) ?? .over90Minutes
@@ -206,6 +225,16 @@ public final class CueEngine: ObservableObject {
         updateControlAPI()
     }
 
+    private func write(_ value: Any?, forKey key: String) {
+        guard !isRemoteMirror else { return }
+        UserDefaults.standard.set(value, forKey: key)
+    }
+
+    private func erase(forKey key: String) {
+        guard !isRemoteMirror else { return }
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
     private func refreshPCOTokensIfNeeded() {
         guard let tokens = pcoOAuthTokens, tokens.isExpired else { return }
         Task {
@@ -218,6 +247,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func startNetworking() {
+        guard !isRemoteMirror else { return }
         AppLog.cue.info("startNetworking() — isMasterServer=\(self.isMasterServer, privacy: .public)")
         isProducerLive = false
         hasSyncedWithProducer = false
@@ -263,11 +293,13 @@ public final class CueEngine: ObservableObject {
     }
 
     public func toggleMasterMode() {
+        guard !isRemoteMirror else { return }
         isMasterServer.toggle()
         startNetworking()
     }
 
     public func signInWithPCO() {
+        guard !isRemoteMirror else { return }
         Task {
             do {
                 let signIn = OAuthSignIn()
@@ -289,6 +321,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func signOutOfPCO() {
+        guard !isRemoteMirror else { return }
         isPCOLiveSyncEnabled = false
         pcoOAuthTokens = nil
         pcoUserName = nil
@@ -299,6 +332,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func fetchPCOPlan(serviceTypeId: String, planId: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
+            return
+        }
         if planId != currentPCOPlanId {
             disablePCOLiveSync()
         }
@@ -319,7 +356,19 @@ public final class CueEngine: ObservableObject {
         }
     }
 
+    public func clearPCOServiceTypeSelection() {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoSelectServiceType(id: nil))
+            return
+        }
+        pcoSelectedServiceTypeId = nil
+    }
+
     public func fetchPCOServiceTypes() {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoRefreshServiceTypes)
+            return
+        }
         Task { await fetchPCOServiceTypesAsync() }
     }
 
@@ -334,11 +383,19 @@ public final class CueEngine: ObservableObject {
     }
 
     public func selectPCOServiceType(_ serviceTypeId: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoSelectServiceType(id: serviceTypeId))
+            return
+        }
         pcoSelectedServiceTypeId = serviceTypeId
         fetchPCOPlans()
     }
 
     public func fetchPCOPlans() {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoRefreshPlans)
+            return
+        }
         guard let serviceTypeId = pcoSelectedServiceTypeId else { return }
         Task {
             do {
@@ -352,15 +409,24 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPlanFilter(_ filter: PCOClient.PCOPlanFilter) {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoPlanFilter(filter.rawValue))
+            return
+        }
         pcoPlanFilter = filter
         fetchPCOPlans()
     }
 
     public func setDefaultServiceType(_ serviceTypeId: String?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoDefaultServiceType(id: serviceTypeId))
+            return
+        }
         pcoDefaultServiceTypeId = serviceTypeId
     }
 
     public func startPlotipharPairing() {
+        guard !isRemoteMirror else { return }
         plotipharPollTask?.cancel()
         plotipharPairingState = .starting
 
@@ -377,18 +443,21 @@ public final class CueEngine: ObservableObject {
     }
 
     public func cancelPlotipharPairing() {
+        guard !isRemoteMirror else { return }
         plotipharPollTask?.cancel()
         plotipharPollTask = nil
         plotipharPairingState = .idle
     }
 
     public func disconnectPlotiphar() {
+        guard !isRemoteMirror else { return }
         cancelPlotipharPairing()
         proxyToken = ""
         isProxyEnabled = false
     }
 
     private func updateRelayConnection() {
+        guard !isRemoteMirror else { return }
         relayClient.relayHost = plotipharRelayHost
         relayClient.token = proxyToken
 
@@ -462,6 +531,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func resetToNewDocument() {
+        guard !isRemoteMirror else { return }
         var blank = makeDocument()
         blank.roles = []
         blank.selectedRoleIds = nil
@@ -474,6 +544,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func apply(_ document: ProducerDocument) {
+        guard !isRemoteMirror else { return }
         roles = document.roles.isEmpty
             ? RoleCue.defaultRoles
             : document.roles.map { role in
@@ -506,6 +577,19 @@ public final class CueEngine: ObservableObject {
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
+        if isRemoteMirror {
+            let lines = items.map { item -> String in
+                let total = item.lengthInSeconds
+                let duration = total >= 3600
+                    ? String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
+                    : String(format: "%d:%02d", total / 60, total % 60)
+                let cleanTitle = item.title.replacingOccurrences(of: "|", with: "/").replacingOccurrences(of: "\n", with: " ")
+                let cleanType = item.itemType.replacingOccurrences(of: "|", with: "/")
+                return "\(cleanTitle) | \(cleanType) | \(duration)"
+            }
+            remoteCommands?.send(.planImport(text: lines.joined(separator: "\n"), title: title))
+            return
+        }
         var stamped = items
         for index in stamped.indices {
             stamped[index].sequence = index + 1
@@ -527,6 +611,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planItemAdd(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual))
+            return
+        }
         var item = PCOTimerItem(
             title: title,
             itemType: itemType,
@@ -546,6 +634,13 @@ public final class CueEngine: ObservableObject {
     }
 
     public func updatePlanItem(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]? = nil, isDurationActual: Bool? = nil) {
+        if isRemoteMirror {
+            var fields: [String: Any] = ["title": title, "itemType": itemType, "lengthInSeconds": lengthInSeconds]
+            if let notes { fields["notes"] = notes }
+            if let isDurationActual { fields["isDurationActual"] = isDurationActual }
+            remoteCommands?.send(.planItemUpdate(id: id, body: RemoteCommand.body(fields)))
+            return
+        }
         guard let index = planItems.firstIndex(where: { $0.id == id }) else { return }
         let previousLength = planItems[index].lengthInSeconds
         planItems[index].title = title
@@ -574,6 +669,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func pushItemLengthToPCO(id: String) {
+        guard !isRemoteMirror else { return }
         guard let item = planItems.first(where: { $0.id == id }),
               let serviceTypeId = item.pcoServiceTypeId,
               let planId = item.pcoPlanId else { return }
@@ -588,6 +684,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func pushItemNoteToPCO(id: String, category: String) {
+        guard !isRemoteMirror else { return }
         guard let index = planItems.firstIndex(where: { $0.id == id }),
               let serviceTypeId = planItems[index].pcoServiceTypeId,
               let planId = planItems[index].pcoPlanId,
@@ -619,6 +716,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func removePlanItem(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planItemRemove(id: id))
+            return
+        }
         guard let index = planItems.firstIndex(where: { $0.id == id }) else { return }
         let wasActive = activeTimerItem?.id == id
         planItems.remove(at: index)
@@ -642,6 +743,12 @@ public final class CueEngine: ObservableObject {
     }
 
     public func movePlanItems(fromOffsets: IndexSet, toOffset: Int) {
+        if isRemoteMirror {
+            var reordered = planItems
+            reordered.move(fromOffsets: fromOffsets, toOffset: toOffset)
+            remoteCommands?.send(.planReorder(itemIds: reordered.map(\.id)))
+            return
+        }
         let activeId = activeTimerItem?.id
         planItems.move(fromOffsets: fromOffsets, toOffset: toOffset)
         renumberPlanItems()
@@ -652,6 +759,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setActivePlanItem(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planActivate(itemId: id))
+            return
+        }
         guard let tappedIndex = planItems.firstIndex(where: { $0.id == id }) else { return }
         let index = resolveSelectableIndex(startingAt: tappedIndex)
         let previousIndex = activeItemIndex
@@ -671,6 +782,12 @@ public final class CueEngine: ObservableObject {
 
     @discardableResult
     public func addWaypoint(name: String) -> Waypoint? {
+        if isRemoteMirror {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            remoteCommands?.send(.waypointCreate(name: trimmed))
+            return nil
+        }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let slug = Waypoint.slug(for: trimmed)
@@ -682,6 +799,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func renameWaypoint(id: String, name: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.waypointRename(ref: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines)))
+            return
+        }
         guard let index = waypoints.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -692,6 +813,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func removeWaypoint(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.waypointDelete(ref: id))
+            return
+        }
         guard waypoints.contains(where: { $0.id == id }) else { return }
         waypoints.removeAll { $0.id == id }
         for index in planItems.indices where planItems[index].waypointIds.contains(id) {
@@ -704,6 +829,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func assignWaypoint(_ waypointId: String, toItemId itemId: String?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.waypointAssign(ref: waypointId, itemId: itemId))
+            return
+        }
         guard waypoints.contains(where: { $0.id == waypointId }) else { return }
         for index in planItems.indices where planItems[index].waypointIds.contains(waypointId) {
             planItems[index].waypointIds.removeAll { $0 == waypointId }
@@ -714,6 +843,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setWaypointIds(_ waypointIds: [String], forItemId itemId: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.itemWaypoints(itemId: itemId, waypointIds: waypointIds))
+            return
+        }
         guard let targetIndex = planItems.firstIndex(where: { $0.id == itemId }) else { return }
         let knownIds = Set(waypoints.map(\.id))
         var deduped: [String] = []
@@ -746,8 +879,27 @@ public final class CueEngine: ObservableObject {
         case unassigned(waypointId: String)
     }
 
+    public func createWaypointAndAssign(name: String, toItemId itemId: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if isRemoteMirror {
+            remoteCommands?.send(.waypointCreate(name: trimmed))
+            remoteCommands?.send(.waypointAssign(ref: trimmed, itemId: itemId))
+            return
+        }
+        if let waypoint = addWaypoint(name: trimmed) {
+            assignWaypoint(waypoint.id, toItemId: itemId)
+        }
+    }
+
     @discardableResult
     public func fireWaypoint(_ raw: String, startTimer: Bool = true) -> WaypointFireResult {
+        if isRemoteMirror {
+            guard let waypoint = waypoint(matching: raw) else { return .unknownWaypoint }
+            guard let itemId = itemId(forWaypointId: waypoint.id) else { return .unassigned(waypointId: waypoint.id) }
+            remoteCommands?.send(.waypointGo(ref: waypoint.id, startTimer: startTimer))
+            return .fired(itemId: itemId)
+        }
         guard let waypoint = waypoint(matching: raw) else {
             AppLog.cue.info("fireWaypoint(\"\(raw, privacy: .public)\") -> unknown waypoint")
             return .unknownWaypoint
@@ -771,6 +923,11 @@ public final class CueEngine: ObservableObject {
 
     @discardableResult
     public func fireNextWaypoint(startTimer: Bool = true) -> String? {
+        if isRemoteMirror {
+            guard let itemId = nextWaypointItemId() else { return nil }
+            remoteCommands?.send(.waypointNext(startTimer: startTimer))
+            return itemId
+        }
         guard let itemId = nextWaypointItemId() else { return nil }
         setActivePlanItem(id: itemId)
         if let item = activeTimerItem, item.isRunning != startTimer {
@@ -793,6 +950,21 @@ public final class CueEngine: ObservableObject {
         recurrence: ServiceSchedule.Recurrence = .once,
         isEnabled: Bool = true
     ) -> ServiceSchedule? {
+        if isRemoteMirror {
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty, goLiveOffsetSeconds >= 0 else { return nil }
+            var fields: [String: Any] = [
+                "title": trimmedTitle,
+                "startsAt": ISO8601DateFormatter().string(from: startsAt),
+                "goLiveOffsetSeconds": goLiveOffsetSeconds,
+                "recurrence": recurrence.rawValue,
+                "isEnabled": isEnabled,
+            ]
+            if let pcoServiceTypeId { fields["pcoServiceTypeId"] = pcoServiceTypeId }
+            if let pcoPlanId { fields["pcoPlanId"] = pcoPlanId }
+            remoteCommands?.send(.scheduleCreate(body: RemoteCommand.body(fields)))
+            return nil
+        }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, goLiveOffsetSeconds >= 0 else { return nil }
         let schedule = ServiceSchedule(
@@ -819,6 +991,18 @@ public final class CueEngine: ObservableObject {
         recurrence: ServiceSchedule.Recurrence? = nil,
         isEnabled: Bool? = nil
     ) {
+        if isRemoteMirror {
+            var fields: [String: Any] = [:]
+            if let title { fields["title"] = title }
+            if let startsAt { fields["startsAt"] = ISO8601DateFormatter().string(from: startsAt) }
+            if let goLiveOffsetSeconds { fields["goLiveOffsetSeconds"] = goLiveOffsetSeconds }
+            if let pcoServiceTypeId { fields["pcoServiceTypeId"] = pcoServiceTypeId ?? "" }
+            if let pcoPlanId { fields["pcoPlanId"] = pcoPlanId ?? "" }
+            if let recurrence { fields["recurrence"] = recurrence.rawValue }
+            if let isEnabled { fields["isEnabled"] = isEnabled }
+            remoteCommands?.send(.scheduleUpdate(id: id, body: RemoteCommand.body(fields)))
+            return
+        }
         guard let index = serviceSchedules.firstIndex(where: { $0.id == id }) else { return }
         var schedule = serviceSchedules[index]
         if let title {
@@ -845,6 +1029,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func removeServiceSchedule(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.scheduleDelete(id: id))
+            return
+        }
         serviceSchedules.removeAll { $0.id == id }
     }
 
@@ -858,6 +1046,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func goLiveWithSchedule(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.scheduleGoLive(id: id))
+            return
+        }
         guard let index = serviceSchedules.firstIndex(where: { $0.id == id }) else { return }
         var schedule = serviceSchedules[index]
         let now = Date()
@@ -886,6 +1078,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func checkServiceSchedules() {
+        guard !isRemoteMirror else { return }
         guard isMasterServer else { return }
         let now = Date()
         for schedule in serviceSchedules where schedule.shouldFire(at: now) {
@@ -894,6 +1087,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func enablePCOLiveSync() {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoLiveSync(true))
+            return
+        }
         guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else {
             pcoLastError = "Sync a Planning Center plan before enabling Live sync."
             return
@@ -925,6 +1122,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func disablePCOLiveSync() {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoLiveSync(false))
+            return
+        }
         guard isPCOLiveSyncEnabled else { return }
         isPCOLiveSyncEnabled = false
         guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
@@ -1040,6 +1241,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func adjustTimerRemainingTime(bySeconds delta: Int) {
+        if isRemoteMirror {
+            remoteCommands?.send(.timerAdjust(seconds: delta))
+            return
+        }
         guard var item = activeTimerItem else { return }
         item.adjustRemainingTime(bySeconds: delta)
         self.activeTimerItem = item
@@ -1052,6 +1257,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setTimerRemainingTime(seconds: Int) {
+        if isRemoteMirror {
+            remoteCommands?.send(.timerRemaining(seconds: seconds))
+            return
+        }
         guard var item = activeTimerItem else { return }
         item.setRemainingTime(seconds: seconds)
         self.activeTimerItem = item
@@ -1064,6 +1273,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setDurationIsActual(id: String, isActual: Bool) {
+        if isRemoteMirror {
+            remoteCommands?.send(.itemDurationActual(itemId: id, isActual: isActual))
+            return
+        }
         if let index = planItems.firstIndex(where: { $0.id == id }) {
             planItems[index].isDurationActual = isActual
         }
@@ -1073,6 +1286,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setActiveTimerActualOverride(_ isActual: Bool) {
+        if isRemoteMirror {
+            remoteCommands?.send(.timerActualOverride(isActual))
+            return
+        }
         guard let item = activeTimerItem else { return }
         isActiveTimerActualOverride = isActual
         actualOverrideItemId = isActual ? item.id : nil
@@ -1092,6 +1309,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func nextPlanItem(startTimer: Bool = true) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planNext(startTimer: startTimer))
+            return
+        }
         guard !planItems.isEmpty, let targetIndex = nextSelectableIndex(after: activeItemIndex) else { return }
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
@@ -1104,6 +1325,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func previousPlanItem(startTimer: Bool = true) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planPrevious(startTimer: startTimer))
+            return
+        }
         guard !planItems.isEmpty, let targetIndex = previousSelectableIndex(before: activeItemIndex) else { return }
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
@@ -1156,6 +1381,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func loadNextService() {
+        if isRemoteMirror {
+            remoteCommands?.send(.planNextService)
+            return
+        }
         guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
         Task {
             do {
@@ -1172,6 +1401,11 @@ public final class CueEngine: ObservableObject {
     }
 
     public func toggleTimerRunning() {
+        if isRemoteMirror {
+            guard let item = activeTimerItem, !item.isHeader else { return }
+            remoteCommands?.send(item.isRunning ? .timerPause : .timerStart)
+            return
+        }
         guard var item = activeTimerItem, !item.isHeader else { return }
         item.isRunning.toggle()
         activeTimerItem = item
@@ -1179,6 +1413,11 @@ public final class CueEngine: ObservableObject {
     }
 
     public func resetTimer() {
+        if isRemoteMirror {
+            guard let item = activeTimerItem, !item.isHeader else { return }
+            remoteCommands?.send(.timerReset)
+            return
+        }
         guard var item = activeTimerItem, !item.isHeader else { return }
         item.elapsedSeconds = 0
         activeTimerItem = item
@@ -1202,6 +1441,18 @@ public final class CueEngine: ObservableObject {
     }
 
     public func toggleRoleSelection(_ roleId: String) {
+        if isRemoteMirror {
+            var next = selectedRoleIds
+            if next.contains(roleId) {
+                guard next.count > 1 else { return }
+                next.remove(roleId)
+            } else {
+                next.insert(roleId)
+            }
+            selectedRoleIds = next
+            remoteCommands?.send(.select(roleIds: next.sorted()))
+            return
+        }
         if selectedRoleIds.contains(roleId) {
             if selectedRoleIds.count > 1 {
                 selectedRoleIds.remove(roleId)
@@ -1212,6 +1463,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setCueForSelectedRoles(_ state: CueState) {
+        if isRemoteMirror {
+            remoteCommands?.send(.cueSelected(state))
+            return
+        }
         for index in roles.indices {
             if selectedRoleIds.contains(roles[index].id) {
                 roles[index].state = state
@@ -1222,6 +1477,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setCueForRole(id: String, state: CueState) {
+        if isRemoteMirror {
+            remoteCommands?.send(.cueRole(id: id, state: state))
+            return
+        }
         if let index = roles.firstIndex(where: { $0.id == id }) {
             roles[index].state = state
             roles[index].lastUpdated = Date()
@@ -1230,6 +1489,17 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setNoteCategory(forRoleId roleId: String, category: String, isOn: Bool) {
+        if isRemoteMirror {
+            guard let role = roles.first(where: { $0.id == roleId }) else { return }
+            var categories = role.assignedNoteCategories
+            if isOn {
+                if !categories.contains(category) { categories.append(category) }
+            } else {
+                categories.removeAll { $0 == category }
+            }
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["assignedNoteCategories": categories])))
+            return
+        }
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         if isOn {
             if !roles[index].assignedNoteCategories.contains(category) {
@@ -1242,6 +1512,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPersonName(forRoleId roleId: String, personName: String?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["personName": personName ?? ""])))
+            return
+        }
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         roles[index].personName = personName
         broadcastState()
@@ -1249,6 +1523,10 @@ public final class CueEngine: ObservableObject {
 
     @discardableResult
     public func addRole(name: String) -> RoleCue {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleCreate(name: name))
+            return RoleCue(name: name)
+        }
         let role = RoleCue(name: name)
         roles.append(role)
         broadcastState()
@@ -1256,12 +1534,20 @@ public final class CueEngine: ObservableObject {
     }
 
     public func renameRole(id: String, name: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: id, body: RemoteCommand.body(["name": name])))
+            return
+        }
         guard let index = roles.firstIndex(where: { $0.id == id }) else { return }
         roles[index].name = name
         broadcastState()
     }
 
     public func removeRole(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleDelete(id: id))
+            return
+        }
         guard let index = roles.firstIndex(where: { $0.id == id }) else { return }
         roles.remove(at: index)
         selectedRoleIds.remove(id)
@@ -1269,11 +1555,13 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPlotipharRoleId(forRoleId roleId: String, plotipharRoleId: String?) {
+        guard !isRemoteMirror else { return }
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         roles[index].plotipharRoleId = plotipharRoleId
     }
 
     public func syncPlotipharAssignments() {
+        guard !isRemoteMirror else { return }
         guard isProxyEnabled, !proxyToken.isEmpty else {
             plotipharAssignmentSyncStatus = .notPaired
             return
@@ -1307,6 +1595,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func clearAllCues() {
+        if isRemoteMirror {
+            remoteCommands?.send(.clearCues)
+            return
+        }
         for index in roles.indices {
             roles[index].state = .off
             roles[index].lastUpdated = Date()
@@ -1315,6 +1607,11 @@ public final class CueEngine: ObservableObject {
     }
 
     public func sendMessage(_ text: String, targetRoleId: String? = nil, senderRoleId: String? = nil, isHighPriority: Bool = false) {
+        if isRemoteMirror {
+            guard !text.isEmpty else { return }
+            remoteCommands?.send(.message(text: text, targetRoleId: targetRoleId, senderRoleId: senderRoleId, isHighPriority: isHighPriority))
+            return
+        }
         guard !text.isEmpty else { return }
         let senderName: String
         if let senderRoleId, let role = roles.first(where: { $0.id == senderRoleId }) {
@@ -1357,6 +1654,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func clearActiveNotification() {
+        if isRemoteMirror {
+            remoteCommands?.send(.dismissNotification)
+            return
+        }
         notificationsClearedAt = Date()
     }
 
@@ -1370,6 +1671,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func clearMessageHistory() {
+        if isRemoteMirror {
+            remoteCommands?.send(.clearMessages)
+            return
+        }
         recentMessages = []
         notificationsClearedAt = nil
         let packet = CuePacket(type: .clearMessages, senderId: deviceId)
@@ -1383,6 +1688,7 @@ public final class CueEngine: ObservableObject {
 
     @discardableResult
     public func pingDevice(atIP ipString: String) -> Bool {
+        guard !isRemoteMirror else { return false }
         guard let selfAddress = DirectPeerChannel.localIPv4Addresses().first else {
             AppLog.networking.error("pingDevice: couldn't determine this device's own LAN IP")
             return false
@@ -1415,6 +1721,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func forgetAssignedProducer() {
+        guard !isRemoteMirror else { return }
         client.forgetAssignedHost()
     }
 
@@ -1427,7 +1734,7 @@ public final class CueEngine: ObservableObject {
 
     private func persistRoles() {
         guard let data = try? JSONEncoder().encode(roles) else { return }
-        UserDefaults.standard.set(data, forKey: Self.rolesDefaultsKey)
+        write(data, forKey: Self.rolesDefaultsKey)
     }
 
     private func restoreRoles() {
@@ -1442,7 +1749,7 @@ public final class CueEngine: ObservableObject {
 
     private func persistWaypoints() {
         guard let data = try? JSONEncoder().encode(waypoints) else { return }
-        UserDefaults.standard.set(data, forKey: Self.waypointsDefaultsKey)
+        write(data, forKey: Self.waypointsDefaultsKey)
     }
 
     private func restoreWaypoints() {
@@ -1455,7 +1762,7 @@ public final class CueEngine: ObservableObject {
         guard let legacy = UserDefaults.standard.data(forKey: Self.legacyTagsDefaultsKey),
               let decoded = try? JSONDecoder().decode([Waypoint].self, from: legacy) else { return }
         waypoints = decoded
-        UserDefaults.standard.removeObject(forKey: Self.legacyTagsDefaultsKey)
+        erase(forKey: Self.legacyTagsDefaultsKey)
         AppLog.cue.info("migrated \(decoded.count, privacy: .public) waypoint(s) from the legacy \"serviceTags\" key")
     }
 
@@ -1463,7 +1770,7 @@ public final class CueEngine: ObservableObject {
 
     private func persistServiceSchedules() {
         guard let data = try? JSONEncoder().encode(serviceSchedules) else { return }
-        UserDefaults.standard.set(data, forKey: Self.serviceSchedulesDefaultsKey)
+        write(data, forKey: Self.serviceSchedulesDefaultsKey)
     }
 
     private func restoreServiceSchedules() {
@@ -1474,9 +1781,9 @@ public final class CueEngine: ObservableObject {
 
     private func persistNotificationsClearedAt() {
         if let notificationsClearedAt {
-            UserDefaults.standard.set(notificationsClearedAt, forKey: Self.notificationsClearedDefaultsKey)
+            write(notificationsClearedAt, forKey: Self.notificationsClearedDefaultsKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: Self.notificationsClearedDefaultsKey)
+            erase(forKey: Self.notificationsClearedDefaultsKey)
         }
     }
 
@@ -1486,7 +1793,7 @@ public final class CueEngine: ObservableObject {
 
     private func persistMessages() {
         guard let data = try? JSONEncoder().encode(recentMessages) else { return }
-        UserDefaults.standard.set(data, forKey: Self.messagesDefaultsKey)
+        write(data, forKey: Self.messagesDefaultsKey)
     }
 
     private func restoreMessages() {
@@ -1514,12 +1821,12 @@ public final class CueEngine: ObservableObject {
 
     private func persistCurrentFlow() {
         guard !planItems.isEmpty else {
-            UserDefaults.standard.removeObject(forKey: Self.persistedFlowDefaultsKey)
+            erase(forKey: Self.persistedFlowDefaultsKey)
             return
         }
         let flow = PersistedFlow(items: planItems, activeItemIndex: activeItemIndex)
         guard let data = try? JSONEncoder().encode(flow) else { return }
-        UserDefaults.standard.set(data, forKey: Self.persistedFlowDefaultsKey)
+        write(data, forKey: Self.persistedFlowDefaultsKey)
     }
 
     private func restorePersistedFlow() {
@@ -1555,6 +1862,7 @@ public final class CueEngine: ObservableObject {
     var timerClock: () -> Date = { Date() }
 
     func tickTimer() {
+        guard !isRemoteMirror else { return }
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
             AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .public) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .public)")

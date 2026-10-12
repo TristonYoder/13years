@@ -258,9 +258,7 @@ public struct PlanItemEditorView: View {
                 Button("Add") {
                     let trimmed = newWaypointName.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { return }
-                    if let waypoint = engine.addWaypoint(name: trimmed) {
-                        engine.assignWaypoint(waypoint.id, toItemId: itemId)
-                    }
+                    engine.createWaypointAndAssign(name: trimmed, toItemId: itemId)
                     newWaypointName = ""
                 }
                 .disabled(newWaypointName.trimmingCharacters(in: .whitespaces).isEmpty)

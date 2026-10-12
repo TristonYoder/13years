@@ -28,14 +28,14 @@ public struct LiveTimerHeaderView: View {
             HStack {
                 HStack {
                     #if os(macOS)
-                    Color.clear.frame(width: 64, height: 1)
+                    Color.clear.frame(width: engine.isRemoteMirror ? 1 : 64, height: 1)
                     #endif
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(spacing: 2) {
                     #if os(macOS)
-                    Text(engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+                    Text(engine.isRemoteMirror ? (engine.remoteProducerName ?? "Remote Producer") : (engine.currentDocumentURL?.deletingPathExtension().lastPathComponent ?? "Untitled"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
