@@ -263,7 +263,7 @@ private struct TimeEntryKeypad: View {
                 .foregroundStyle(.white)
         } else {
             Button(action: action) { content }
-                .buttonStyle(.bordered)
+                .producerSecondaryButton()
                 .tint(.secondary)
                 .foregroundStyle(tint)
         }

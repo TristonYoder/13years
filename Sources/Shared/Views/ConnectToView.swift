@@ -127,7 +127,7 @@ struct ConnectToView: View {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
-            .buttonStyle(.bordered)
+            .producerSecondaryButton()
             #else
             Text("System Settings > Privacy & Security > Local Network, then switch on 13 Years Producer.")
                 .font(.caption)
@@ -251,7 +251,7 @@ struct RemoteProducerContainerView: View {
                         .tint(.black)
                 }
                 Button("Disconnect", action: onDisconnect)
-                    .buttonStyle(.bordered)
+                    .producerSecondaryButton()
                     .tint(foreground)
             }
             if !session.recentErrors.isEmpty {

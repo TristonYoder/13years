@@ -273,7 +273,7 @@ public struct ServiceFlowView: View {
                                     .font(.title2.weight(.bold))
                                     .frame(width: 52, height: 52)
                             }
-                            .buttonStyle(.bordered)
+                            .producerSecondaryButton()
                             .buttonBorderShape(.roundedRectangle(radius: 10))
                             .tint(.secondary)
                             .accessibilityLabel("Reset")
@@ -527,7 +527,7 @@ private struct InlineItemEditor: View {
                         .textFieldStyle(.roundedBorder)
                         #endif
                     Button("Set") { commitDuration() }
-                        .buttonStyle(.bordered)
+                        .producerSecondaryButton()
                         .controlSize(.small)
                 }
             }

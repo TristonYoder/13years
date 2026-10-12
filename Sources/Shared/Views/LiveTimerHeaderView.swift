@@ -90,7 +90,7 @@ public struct LiveTimerHeaderView: View {
                             Button(action: { engine.previousPlanItem() }) {
                                 Image(systemName: "chevron.left").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .buttonStyle(.bordered)
+                            .producerSecondaryButton()
                             .help("Previous item")
 
                             if let item = engine.activeTimerItem {
@@ -106,7 +106,7 @@ public struct LiveTimerHeaderView: View {
                                 Button(action: { engine.resetTimer() }) {
                                     Image(systemName: "arrow.counterclockwise").font(.title2).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .buttonStyle(.bordered)
+                                .producerSecondaryButton()
                                 .help("Reset elapsed time")
                             }
 
@@ -120,7 +120,7 @@ public struct LiveTimerHeaderView: View {
                                 Button(action: { engine.nextPlanItem() }) {
                                     Image(systemName: "chevron.right").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .buttonStyle(.bordered)
+                                .producerSecondaryButton()
                                 .disabled(engine.isAtEndOfPlan)
                                 .help("Next item")
                             }
@@ -170,7 +170,7 @@ public struct LiveTimerHeaderView: View {
                     .padding(.vertical, 6)
                     .frame(maxHeight: .infinity)
             }
-            .buttonStyle(.bordered)
+            .producerSecondaryButton()
             .help("Clear the cue for the \(count) selected role(s)")
         }
         .frame(maxHeight: .infinity)

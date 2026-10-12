@@ -98,14 +98,14 @@ public struct ProducerControlView: View {
                 Button(action: { engine.openMessageThread(forRoleId: role.id) }) {
                     Image(systemName: "message.fill")
                 }
-                .buttonStyle(.bordered)
+                .producerSecondaryButton()
                 .controlSize(.small)
                 .help("Open the message thread with \(role.name)")
 
                 Button(action: { engine.clearActiveNotification() }) {
                     Image(systemName: "bell.slash")
                 }
-                .buttonStyle(.bordered)
+                .producerSecondaryButton()
                 .controlSize(.small)
                 .disabled(engine.activeNotification(forRoleId: role.id) == nil)
                 .help("Take the standing message off the web pagers and lower thirds, keeping the history")
@@ -126,7 +126,7 @@ public struct ProducerControlView: View {
                     .frame(maxWidth: .infinity)
 
                 Button("Off") { engine.setCueForRole(id: role.id, state: .off) }
-                    .buttonStyle(.bordered)
+                    .producerSecondaryButton()
                     .controlSize(.small)
             }
         }
