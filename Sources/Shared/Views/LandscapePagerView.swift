@@ -15,7 +15,15 @@ public struct LandscapeMetrics: Equatable, Sendable {
     public var badgeFontSize: CGFloat { 0.11 * shorterSide }
     public var countdownFontSize: CGFloat { 0.32 * shorterSide }
     public var titleFontSize: CGFloat { 0.05 * shorterSide }
-    public var timeFontSize: CGFloat { 0.045 * shorterSide }
+    public var timeFontSize: CGFloat { min(0.075 * shorterSide, timeAvailableWidth / 5.6) }
+    public var timeCaptionFontSize: CGFloat { 0.018 * shorterSide }
+    public var topRowHeight: CGFloat { badgeFontSize * 1.3 }
+    public var centreY: CGFloat { size.height / 2 }
+    public var badgeWidthEstimate: CGFloat { badgeFontSize * 5.2 }
+    public var timeAvailableWidth: CGFloat {
+        max(1, size.width - 2 * (frameThickness + margin) - 2 * margin - badgeWidthEstimate - 0.2 * size.width)
+    }
+    public static let widestCueWord = "STANDBY"
     public var captionFontSize: CGFloat { 0.02 * shorterSide }
     public var roleFontSize: CGFloat { 0.04 * shorterSide }
     public var statusFontSize: CGFloat { 0.022 * shorterSide }
@@ -72,10 +80,12 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
         ZStack {
             Self.ground.ignoresSafeArea()
 
+            centre(m)
+                .padding(.horizontal, m.frameThickness + m.margin)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+
             VStack(spacing: m.margin) {
                 topRow(m)
-                Spacer(minLength: 0)
-                centre(m)
                 Spacer(minLength: 0)
                 bottomRow(m)
             }
@@ -97,35 +107,52 @@ public struct LandscapePagerView<RoleMenu: View, Banner: View>: View {
 
     private func topRow(_ m: LandscapeMetrics) -> some View {
         HStack(alignment: .top, spacing: m.margin) {
-            Group {
-                if !cueWord.isEmpty {
-                    Text(cueWord)
-                        .font(.inter(size: m.badgeFontSize, weight: .black))
-                        .foregroundColor(Self.darkText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .padding(.horizontal, m.badgeFontSize * 0.3)
-                        .padding(.vertical, m.badgeFontSize * 0.08)
-                        .background(state.color)
-                        .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            badge(m)
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(context.date, format: .dateTime.hour().minute())
-                    .font(.inter(size: m.timeFontSize, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundColor(.white.opacity(0.55))
-                    .lineLimit(1)
+                VStack(spacing: m.timeCaptionFontSize * 0.2) {
+                    Text(context.date, format: .dateTime.hour().minute().second())
+                        .font(.inter(size: m.timeFontSize, weight: .black))
+                        .monospacedDigit()
+                        .foregroundColor(Color(white: 0.96))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    Text("LOCAL TIME")
+                        .font(.inter(size: m.timeCaptionFontSize, weight: .bold))
+                        .tracking(m.timeCaptionFontSize * 0.25)
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity)
 
             roleColumn(m)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(maxWidth: 0.2 * m.size.width, alignment: .trailing)
         }
+        .frame(height: m.topRowHeight, alignment: .top)
+    }
+
+    private func badgeLabel(_ word: String, _ m: LandscapeMetrics) -> some View {
+        Text(word)
+            .font(.inter(size: m.badgeFontSize, weight: .black))
+            .foregroundColor(Self.darkText)
+            .lineLimit(1)
+            .padding(.horizontal, m.badgeFontSize * 0.3)
+            .padding(.vertical, m.badgeFontSize * 0.08)
+    }
+
+    private func badge(_ m: LandscapeMetrics) -> some View {
+        ZStack {
+            badgeLabel(LandscapeMetrics.widestCueWord, m).hidden()
+            if !cueWord.isEmpty {
+                badgeLabel(cueWord, m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(state.color)
+                    .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+            }
+        }
+        .fixedSize()
+        .frame(height: m.topRowHeight, alignment: .top)
     }
 
     private func roleColumn(_ m: LandscapeMetrics) -> some View {
