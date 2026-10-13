@@ -2,12 +2,17 @@
 
 Cue lights and pagers for live production teams. A producer runs the show from a Mac or iPad, pulling the plan from Planning Center, and every role on the team (host, tech, band, and so on) gets a pager that shows its cue state, the active item with its countdown, notes, and messages.
 
+## Get the apps
+
+- **Pager (iPhone, iPad, Apple TV, Mac):** join the beta on [TestFlight](https://testflight.apple.com/join/yydaPnPF).
+- **Producer for Mac** and the Mac Pager as disk images: [latest release](https://github.com/TristonYoder/13years/releases/latest).
+
 ## Components
 
 | Path | What it is |
 | --- | --- |
 | `Sources/ProducerMac`, `Sources/ProducerIOS` | Producer apps (macOS, iPadOS/iOS). Run the plan, fire cues, serve the control API. |
-| `Sources/PagerIOS`, `Sources/PagerTV`, `Sources/ProducerWatch` | Pager apps (iOS, tvOS, watchOS). |
+| `Sources/PagerIOS`, `Sources/PagerTV`, `Sources/PagerMac`, `Sources/ProducerWatch` | Pager apps (iOS/iPadOS, tvOS, macOS, watchOS). |
 | `Sources/Shared` | Models, services and views shared across every app target. |
 | `Hardware/esp32` | Firmware for a hardware pager on an ESP32 "Cheap Yellow Display" board. See its [README](Hardware/esp32/README.md). |
 | `Server` | Small WebSocket relay for pagers that are not on the producer's LAN. See its [README](Server/README.md) and [PROTOCOL](Server/PROTOCOL.md). |
