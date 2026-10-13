@@ -285,6 +285,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     private static let reconnectInterval: TimeInterval = 3
     private static let assignedHostFailureThreshold = 3
     private static let assignedHostDefaultsKey = "lanUnicastAssignedProducerHost"
+    private static let manualHostDefaultsKey = "lanUnicastManualProducerHost"
 
     public var onPacketReceived: ((CuePacket) -> Void)?
     public var onStatusChanged: ((Bool) -> Void)?
@@ -292,6 +293,7 @@ public final class LANUnicastClient: @unchecked Sendable {
 
     public var onConnectedHost: ((String) -> Void)?
     public var onConnectedAPIPort: ((Int) -> Void)?
+    public var onLinkStatusChanged: ((ProducerLinkStatus) -> Void)?
 
     private var browser: NWBrowser?
     private var assignListener: NWListener?
@@ -301,15 +303,65 @@ public final class LANUnicastClient: @unchecked Sendable {
     private var lastDiscovered: (endpoint: NWEndpoint, name: String, advertisedIPv4: String?, advertisedAPIPort: Int?)?
     private var isConnectingToAssignedHost = false
     private var assignedHostFailureCount = 0
+    private var manualHost: String?
+    private var linkStatus: ProducerLinkStatus = .idle
 
     public init() {}
+
+    public static func savedManualHost() -> String? {
+        UserDefaults.standard.string(forKey: manualHostDefaultsKey).flatMap { ManualHostPolicy.validate($0).host }
+    }
+
+    public func setManualHost(_ host: String?) {
+        queue.async { [self] in
+            if let host {
+                UserDefaults.standard.set(host, forKey: Self.manualHostDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.manualHostDefaultsKey)
+            }
+            manualHost = host
+            assignedHostFailureCount = 0
+            guard isRunning else { return }
+            browser?.cancel()
+            browser = nil
+            let old = connection
+            connection = nil
+            old?.cancel()
+            lastDiscovered = nil
+            publish(.idle)
+            if let host {
+                connectDirectly(to: host)
+            } else if let assigned = Self.loadAssignedHost() {
+                connectDirectly(to: assigned)
+            } else {
+                startBrowsing()
+            }
+        }
+    }
+
+    private func publish(_ status: ProducerLinkStatus) {
+        guard status != linkStatus else { return }
+        linkStatus = status
+        DispatchQueue.main.async { [weak self] in self?.onLinkStatusChanged?(status) }
+    }
+
+    private static func isLocalNetworkDenied(_ error: NWError) -> Bool {
+        switch error {
+        case .dns(let code): return code == -65570
+        case .posix(let code): return code == .ENETDOWN || code == .EPERM
+        default: return false
+        }
+    }
 
     public func start() {
         queue.async { [self] in
             guard !isRunning else { return }
             isRunning = true
+            manualHost = Self.savedManualHost()
             startAssignListener()
-            if let assignedHost = Self.loadAssignedHost() {
+            if let manualHost {
+                connectDirectly(to: manualHost)
+            } else if let assignedHost = Self.loadAssignedHost() {
                 connectDirectly(to: assignedHost)
             } else {
                 startBrowsing()
@@ -327,12 +379,14 @@ public final class LANUnicastClient: @unchecked Sendable {
             connection?.cancel()
             connection = nil
             lastDiscovered = nil
+            publish(.idle)
         }
     }
 
     public func forgetAssignedHost() {
         queue.async { [self] in
             Self.clearAssignedHost()
+            guard manualHost == nil else { return }
             isConnectingToAssignedHost = false
             assignedHostFailureCount = 0
             guard isRunning else { return }
@@ -388,9 +442,13 @@ public final class LANUnicastClient: @unchecked Sendable {
             AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER with a non-local host \(host, privacy: .private)")
             return
         }
-        AppLog.networking.info("LANUnicastClient: producer assigned via network ping: \(host, privacy: .private)")
-        Self.saveAssignedHost(host)
         queue.async { [self] in
+            guard manualHost == nil else {
+                AppLog.networking.info("LANUnicastClient: ignoring ASSIGN_PRODUCER because a manual host is set")
+                return
+            }
+            AppLog.networking.info("LANUnicastClient: producer assigned via network ping: \(host, privacy: .private)")
+            Self.saveAssignedHost(host)
             guard isRunning else { return }
             browser?.cancel()
             browser = nil
@@ -458,6 +516,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     private func connect(to endpoint: NWEndpoint, masterName: String, advertisedIPv4: String?, advertisedAPIPort: Int?, isAssigned: Bool) {
         guard connection == nil else { return }
         isConnectingToAssignedHost = isAssigned
+        if !linkStatus.isProblem { publish(.connecting(host: masterName)) }
         let connection = NWConnection(to: endpoint, using: .tcp)
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
@@ -465,6 +524,7 @@ public final class LANUnicastClient: @unchecked Sendable {
             case .ready:
                 AppLog.networking.info("LANUnicastClient connected to \"\(masterName, privacy: .private)\"")
                 self.assignedHostFailureCount = 0
+                self.queue.async { self.publish(.connected) }
                 var resolvedHost = Self.ipString(from: connection.currentPath?.remoteEndpoint)
                 if let pathHost = resolvedHost, pathHost.contains(":"), let advertised = advertisedIPv4 {
                     AppLog.networking.info("LANUnicastClient using TXT-advertised IPv4 \(advertised, privacy: .private) (path resolved \(pathHost, privacy: .private))")
@@ -484,7 +544,18 @@ public final class LANUnicastClient: @unchecked Sendable {
                 self.queue.async { self.receiveLoop(on: connection) }
             case .failed(let error):
                 AppLog.networking.error("LANUnicastClient connection failed: \(String(describing: error), privacy: .private)")
+                self.queue.async {
+                    guard self.connection === connection else { return }
+                    self.publish(Self.isLocalNetworkDenied(error) ? .localNetworkDenied : .unreachable(host: masterName))
+                }
                 self.handleDisconnect(connection)
+            case .waiting(let error):
+                AppLog.networking.error("LANUnicastClient connection waiting: \(String(describing: error), privacy: .private)")
+                self.queue.async {
+                    guard self.connection === connection else { return }
+                    self.publish(Self.isLocalNetworkDenied(error) ? .localNetworkDenied : .unreachable(host: masterName))
+                    connection.cancel()
+                }
             case .cancelled:
                 self.handleDisconnect(connection)
             default:
@@ -502,7 +573,7 @@ public final class LANUnicastClient: @unchecked Sendable {
             DispatchQueue.main.async { [weak self] in self?.onStatusChanged?(false) }
             guard isRunning else { return }
 
-            if isConnectingToAssignedHost {
+            if isConnectingToAssignedHost, manualHost == nil {
                 assignedHostFailureCount += 1
                 if assignedHostFailureCount >= Self.assignedHostFailureThreshold {
                     AppLog.networking.error("LANUnicastClient: assigned host unreachable after \(Self.assignedHostFailureThreshold, privacy: .public) attempts — falling back to Bonjour discovery")

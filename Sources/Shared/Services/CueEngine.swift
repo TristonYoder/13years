@@ -91,6 +91,8 @@ public final class CueEngine: ObservableObject {
     @Published public var connectedProducerHost: String?
     @Published public var connectedProducerAPIPort: Int?
     @Published public var isLANConnected: Bool = true
+    @Published public private(set) var manualProducerHost: String? = LANUnicastClient.savedManualHost()
+    @Published public private(set) var producerLinkStatus: ProducerLinkStatus = .idle
     @Published public var isProducerLive: Bool = false
     @Published public var hasSyncedWithProducer: Bool = false
     var lastProducerPacketAt: Date?
@@ -311,6 +313,9 @@ public final class CueEngine: ObservableObject {
                     self.connectedProducerHost = nil
                     self.connectedProducerAPIPort = nil
                 }
+            }
+            client.onLinkStatusChanged = { [weak self] status in
+                self?.producerLinkStatus = status
             }
             client.onMasterDiscovered = { [weak self] name in
                 self?.connectedMasterName = name
@@ -1785,6 +1790,29 @@ public final class CueEngine: ObservableObject {
         connection.start(queue: .global(qos: .utility))
         AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .private)) to \(ipString, privacy: .private)")
         return true
+    }
+
+    @discardableResult
+    public func setManualProducerHost(_ input: String) -> ManualHostValidation {
+        let result = ManualHostPolicy.validate(input)
+        guard !isRemoteMirror else { return result }
+        switch result {
+        case .valid(let host):
+            manualProducerHost = host
+            client.setManualHost(host)
+        case .empty:
+            clearManualProducerHost()
+        case .invalid:
+            break
+        }
+        return result
+    }
+
+    public func clearManualProducerHost() {
+        guard !isRemoteMirror else { return }
+        manualProducerHost = nil
+        producerLinkStatus = .idle
+        client.setManualHost(nil)
     }
 
     public func forgetAssignedProducer() {

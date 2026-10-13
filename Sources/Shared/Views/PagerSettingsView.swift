@@ -91,6 +91,18 @@ public struct PagerSettingsView: View {
                 #endif
 
                 Section {
+                    LabeledContent("Mode") {
+                        Text(engine.manualProducerHost ?? "Automatic")
+                            .foregroundStyle(.secondary)
+                    }
+                    ProducerHostField()
+                } header: {
+                    Text("Producer")
+                } footer: {
+                    Text("Automatic finds the producer on this network. Enter an IP address or hostname to connect to one directly, for example when discovery is blocked.")
+                }
+
+                Section {
                     LabeledContent("Status") {
                         Text(connectionState.title)
                             .foregroundStyle(connectionState == .live ? Color.green : Color.red)

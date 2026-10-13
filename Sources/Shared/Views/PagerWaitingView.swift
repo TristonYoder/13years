@@ -56,6 +56,8 @@ public struct PagerWaitingView: View {
                 .font(.inter(size: 17, weight: .bold))
                 .foregroundColor(ink)
 
+            ProducerHostField(ink: ink)
+
             if !engine.isLANConnected {
                 Text("Not connected to the LAN cue network")
                     .font(.inter(size: 13, weight: .semibold))
@@ -80,6 +82,6 @@ public struct PagerWaitingView: View {
                 }
             }
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 360)
     }
 }
