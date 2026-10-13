@@ -148,16 +148,24 @@ public struct ProducerRootView: View {
 private struct SidebarPanel: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             content
                 .clipShape(shape)
                 .glassEffect(.regular, in: shape)
         } else {
-            content
-                .background(.regularMaterial, in: shape)
-                .clipShape(shape)
-                .overlay(shape.strokeBorder(.separator, lineWidth: 0.5))
+            material(content, shape)
         }
+        #else
+        material(content, shape)
+        #endif
+    }
+
+    private func material(_ content: Content, _ shape: RoundedRectangle) -> some View {
+        content
+            .background(.regularMaterial, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(.separator, lineWidth: 0.5))
     }
 }
 #endif
