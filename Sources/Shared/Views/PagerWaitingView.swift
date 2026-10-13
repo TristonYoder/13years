@@ -12,6 +12,12 @@ public struct PagerWaitingView: View {
 
     public init() {}
 
+    #if os(tvOS)
+    private static let isTV = true
+    #else
+    private static let isTV = false
+    #endif
+
     private var ink: Color { StoplightMarkView.Palette.dark.ink }
 
     public var body: some View {
@@ -20,13 +26,13 @@ public struct PagerWaitingView: View {
 
             SkeletonLoaderView(ink: ink, layout: .pager)
 
-            VStack(spacing: 26) {
+            VStack(spacing: Self.isTV ? 48 : 26) {
                 StoplightMarkView(palette: .dark)
-                    .frame(maxWidth: 190)
+                    .frame(maxWidth: Self.isTV ? 380 : 190)
 
                 diagnostics
             }
-            .padding(40)
+            .padding(Self.isTV ? 80 : 40)
             .background {
                 RadialGradient(
                     stops: [
@@ -37,7 +43,7 @@ public struct PagerWaitingView: View {
                     ],
                     center: .center,
                     startRadius: 0,
-                    endRadius: 300
+                    endRadius: Self.isTV ? 700 : 300
                 )
             }
         }
@@ -51,27 +57,29 @@ public struct PagerWaitingView: View {
 
     @ViewBuilder
     private var diagnostics: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Self.isTV ? 28 : 14) {
             Text("Waiting for Producer…")
-                .font(.inter(size: 17, weight: .bold))
+                .font(.inter(size: Self.isTV ? 40 : 17, weight: .bold))
                 .foregroundColor(ink)
+
+            ProducerHostField(ink: ink)
 
             if !engine.isLANConnected {
                 Text("Not connected to the LAN cue network")
-                    .font(.inter(size: 13, weight: .semibold))
+                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: Self.isTV ? 12 : 6) {
                     if addresses.isEmpty {
                         Text("IP unavailable")
-                            .font(.inter(size: 15, weight: .semibold))
+                            .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
                             .foregroundColor(ink.opacity(0.85))
                     } else {
-                        VStack(spacing: 3) {
+                        VStack(spacing: Self.isTV ? 6 : 3) {
                             ForEach(addresses, id: \.self) { address in
                                 Text(address)
-                                    .font(.inter(size: 15, weight: .semibold))
+                                    .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
                                     .monospacedDigit()
                                     .foregroundColor(ink.opacity(0.85))
                             }
@@ -80,6 +88,6 @@ public struct PagerWaitingView: View {
                 }
             }
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: Self.isTV ? 800 : 360)
     }
 }

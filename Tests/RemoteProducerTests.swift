@@ -113,6 +113,19 @@ final class RemoteCommandTests: XCTestCase {
         XCTAssertNil(json(RemoteCommand.waypointAssign(ref: "w", itemId: nil).request)?["itemId"])
     }
 
+    @MainActor
+    func testLANServingSuspensionFlag() {
+        let mirror = CueEngine(mirroring: nil)
+        mirror.setLANServingSuspended(true)
+        XCTAssertFalse(mirror.isLANServingSuspended)
+
+        let local = CueEngine(isMasterServer: true, startsNetworking: false)
+        local.setLANServingSuspended(true)
+        XCTAssertTrue(local.isLANServingSuspended)
+        local.setLANServingSuspended(false)
+        XCTAssertFalse(local.isLANServingSuspended)
+    }
+
     func testMirrorForwardsMutationsWithoutChangingLocalState() {
         let sink = RecordingCommands()
         let engine = CueEngine(mirroring: sink)

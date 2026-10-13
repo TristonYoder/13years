@@ -91,6 +91,18 @@ public struct PagerSettingsView: View {
                 #endif
 
                 Section {
+                    LabeledContent("Mode") {
+                        Text(engine.manualProducerHost ?? "Automatic")
+                            .foregroundStyle(.secondary)
+                    }
+                    ProducerHostField()
+                } header: {
+                    Text("Producer")
+                } footer: {
+                    Text("Automatic finds the producer on this network. Enter an IP address or hostname to connect to one directly, for example when discovery is blocked.")
+                }
+
+                Section {
                     LabeledContent("Status") {
                         Text(connectionState.title)
                             .foregroundStyle(connectionState == .live ? Color.green : Color.red)
@@ -147,12 +159,14 @@ public struct PagerSettingsView: View {
                     Text("This device automatically discovers the 13 Years Producer app on the same Wi-Fi network.")
                 }
 
-                Section {
-                    PlotipharPairingSection()
-                } header: {
-                    Text("Plotiphar Cloud Proxy")
-                } footer: {
-                    Text("Paid feature. Pair once with plotiphar.com if the producer controller isn't on the same local network.")
+                if FeatureFlags.plotiphar {
+                    Section {
+                        PlotipharPairingSection()
+                    } header: {
+                        Text("Plotiphar Cloud Proxy")
+                    } footer: {
+                        Text("Pair once with plotiphar.com if the producer controller isn't on the same local network.")
+                    }
                 }
             }
             .formStyle(.grouped)

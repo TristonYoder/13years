@@ -20,13 +20,7 @@ public enum CueState: String, Codable, CaseIterable, Sendable {
             self = retired
             return
         }
-        guard let parsed = CueState(rawValue: raw) else {
-            throw DecodingError.dataCorruptedError(
-                in: try decoder.singleValueContainer(),
-                debugDescription: "Unknown CueState raw value \"\(raw)\""
-            )
-        }
-        self = parsed
+        self = CueState(rawValue: raw) ?? .off
     }
 
     public func encode(to encoder: Encoder) throws {

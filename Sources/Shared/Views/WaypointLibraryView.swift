@@ -65,7 +65,7 @@ public struct WaypointLibraryView: View {
     private var waypointsSection: some View {
         Section {
             if engine.waypoints.isEmpty {
-                Text("No waypoints yet — add one below, e.g. \u{201C}Song 1\u{201D}, then assign it to this week's item from Service Flow.")
+                Text("No waypoints yet — add one below, e.g. \u{201C}Song 1\u{201D}, then assign it to this week's item from the Run Sheet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -87,7 +87,7 @@ public struct WaypointLibraryView: View {
         } header: {
             Text("Waypoints")
         } footer: {
-            Text("A waypoint is a reusable handle like \u{201C}Song 1\u{201D} — assign it to whichever item plays that slot this week from Service Flow. The monospaced text under each name is its slug: what a Stream Deck or Companion button actually types to fire it.")
+            Text("A waypoint is a reusable handle like \u{201C}Song 1\u{201D} — assign it to whichever item plays that slot this week from the Run Sheet. The monospaced text under each name is its slug: what a Stream Deck or Companion button actually types to fire it.")
         }
     }
 

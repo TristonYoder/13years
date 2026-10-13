@@ -48,3 +48,71 @@ public enum AssignedHostPolicy {
         }
     }
 }
+
+public enum ManualHostValidation: Equatable {
+    case valid(String)
+    case empty
+    case invalid(String)
+
+    public var host: String? {
+        if case .valid(let host) = self { return host }
+        return nil
+    }
+
+    public var message: String? {
+        switch self {
+        case .valid, .empty: return nil
+        case .invalid(let reason): return reason
+        }
+    }
+}
+
+public enum ManualHostPolicy {
+    public static func validate(_ input: String) -> ManualHostValidation {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return .empty }
+        guard value.count <= 253 else { return .invalid("That name is too long.") }
+        if value.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) {
+            guard AssignedHostPolicy.ipv4Octets(value) != nil else {
+                return .invalid("That isn't a valid IP address.")
+            }
+            return .valid(value)
+        }
+        guard isHostname(value) else {
+            return .invalid("Enter an IP address like 192.168.1.20 or a name like studio-mac.local.")
+        }
+        return .valid(value)
+    }
+
+    static func isHostname(_ value: String) -> Bool {
+        let labels = value.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.allSatisfy { label in
+            !label.isEmpty && label.count <= 63 && !label.hasPrefix("-") && !label.hasSuffix("-")
+                && label.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+        }
+    }
+}
+
+public enum ProducerLinkStatus: Equatable {
+    case idle
+    case connecting(host: String)
+    case unreachable(host: String)
+    case localNetworkDenied
+    case connected
+
+    public var message: String? {
+        switch self {
+        case .idle, .connected: return nil
+        case .connecting(let host): return "Connecting to \(host)…"
+        case .unreachable(let host): return "Can't reach \(host)"
+        case .localNetworkDenied: return "Local Network access is off for 13 Years. Turn it on in Settings › Privacy & Security › Local Network."
+        }
+    }
+
+    public var isProblem: Bool {
+        switch self {
+        case .unreachable, .localNetworkDenied: return true
+        default: return false
+        }
+    }
+}

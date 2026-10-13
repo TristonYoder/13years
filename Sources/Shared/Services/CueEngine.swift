@@ -91,6 +91,8 @@ public final class CueEngine: ObservableObject {
     @Published public var connectedProducerHost: String?
     @Published public var connectedProducerAPIPort: Int?
     @Published public var isLANConnected: Bool = true
+    @Published public private(set) var manualProducerHost: String? = LANUnicastClient.savedManualHost()
+    @Published public private(set) var producerLinkStatus: ProducerLinkStatus = .idle
     @Published public var isProducerLive: Bool = false
     @Published public var hasSyncedWithProducer: Bool = false
     var lastProducerPacketAt: Date?
@@ -208,7 +210,7 @@ public final class CueEngine: ObservableObject {
             self.controlAPIPort = UserDefaults.standard.object(forKey: Self.controlAPIPortDefaultsKey) as? Int ?? Int(ControlAPIServer.defaultPort)
             self.isControlAPIEnabled = UserDefaults.standard.bool(forKey: Self.controlAPIEnabledDefaultsKey)
         }
-        if !proxyToken.isEmpty {
+        if FeatureFlags.plotiphar && !proxyToken.isEmpty {
             plotipharPairingState = .approved
         }
 
@@ -270,6 +272,18 @@ public final class CueEngine: ObservableObject {
         }
     }
 
+    public private(set) var isLANServingSuspended = false
+
+    public func setLANServingSuspended(_ suspended: Bool) {
+        guard !isRemoteMirror, isLANServingSuspended != suspended else { return }
+        isLANServingSuspended = suspended
+        if suspended {
+            server.stop()
+        } else if isMasterServer {
+            startNetworking()
+        }
+    }
+
     public func startNetworking() {
         guard !isRemoteMirror else { return }
         AppLog.cue.info("startNetworking() — isMasterServer=\(self.isMasterServer, privacy: .public)")
@@ -285,6 +299,10 @@ public final class CueEngine: ObservableObject {
         connectedProducerAPIPort = nil
         if isMasterServer {
             client.stop()
+            if isLANServingSuspended {
+                server.stop()
+                return
+            }
             server.start()
             server.advertisedControlAPIPort = hostsControlAPI && isControlAPIEnabled ? controlAPIPort : nil
             server.advertisedDeviceId = deviceId
@@ -311,6 +329,9 @@ public final class CueEngine: ObservableObject {
                     self.connectedProducerHost = nil
                     self.connectedProducerAPIPort = nil
                 }
+            }
+            client.onLinkStatusChanged = { [weak self] status in
+                self?.producerLinkStatus = status
             }
             client.onMasterDiscovered = { [weak self] name in
                 self?.connectedMasterName = name
@@ -462,7 +483,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func startPlotipharPairing() {
-        guard !isRemoteMirror else { return }
+        guard FeatureFlags.plotiphar, !isRemoteMirror else { return }
         plotipharPollTask?.cancel()
         plotipharPairingState = .starting
 
@@ -508,7 +529,7 @@ public final class CueEngine: ObservableObject {
         relayClient.relayHost = plotipharRelayHost
         relayClient.token = proxyToken
 
-        if isProxyEnabled && !proxyToken.isEmpty {
+        if FeatureFlags.plotiphar && isProxyEnabled && !proxyToken.isEmpty {
             relayClient.start()
             directPeerChannel.start()
             broadcastDirectPeerHello()
@@ -519,7 +540,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func broadcastDirectPeerHello() {
-        guard isProxyEnabled, !proxyToken.isEmpty else { return }
+        guard FeatureFlags.plotiphar, isProxyEnabled, !proxyToken.isEmpty else { return }
         if let payload = directPeerChannel.buildHelloPayload() {
             relayClient.sendText(payload)
         } else {
@@ -1634,7 +1655,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func syncPlotipharAssignments() {
-        guard !isRemoteMirror else { return }
+        guard FeatureFlags.plotiphar, !isRemoteMirror else { return }
         guard isProxyEnabled, !proxyToken.isEmpty else {
             plotipharAssignmentSyncStatus = .notPaired
             return
@@ -1756,7 +1777,7 @@ public final class CueEngine: ObservableObject {
     @discardableResult
     public func pingDevice(atIP ipString: String) -> Bool {
         guard !isRemoteMirror else { return false }
-        guard let selfAddress = DirectPeerChannel.localIPv4Addresses().first else {
+        guard let selfAddress = LocalNetworkAddress.ipv4String() else {
             AppLog.networking.error("pingDevice: couldn't determine this device's own LAN IP")
             return false
         }
@@ -1778,6 +1799,9 @@ public final class CueEngine: ObservableObject {
                 })
             case .failed(let error):
                 AppLog.networking.error("pingDevice: connection failed: \(String(describing: error), privacy: .private)")
+                connection.cancel()
+            case .waiting:
+                connection.cancel()
             default:
                 break
             }
@@ -1785,6 +1809,29 @@ public final class CueEngine: ObservableObject {
         connection.start(queue: .global(qos: .utility))
         AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .private)) to \(ipString, privacy: .private)")
         return true
+    }
+
+    @discardableResult
+    public func setManualProducerHost(_ input: String) -> ManualHostValidation {
+        let result = ManualHostPolicy.validate(input)
+        guard !isRemoteMirror else { return result }
+        switch result {
+        case .valid(let host):
+            manualProducerHost = host
+            client.setManualHost(host)
+        case .empty:
+            clearManualProducerHost()
+        case .invalid:
+            break
+        }
+        return result
+    }
+
+    public func clearManualProducerHost() {
+        guard !isRemoteMirror else { return }
+        manualProducerHost = nil
+        producerLinkStatus = .idle
+        client.setManualHost(nil)
     }
 
     public func forgetAssignedProducer() {
@@ -1963,7 +2010,12 @@ public final class CueEngine: ObservableObject {
         if !isMasterServer {
             if let lastProducerPacketAt {
                 let limit = syncV2.producerIsV2 ? Self.v2StalenessInterval : Self.producerStalenessInterval
-                isProducerLive = Date().timeIntervalSince(lastProducerPacketAt) < limit
+                let silence = Date().timeIntervalSince(lastProducerPacketAt)
+                isProducerLive = silence < limit
+                if silence >= limit, isLANConnected, !isRemoteMirror {
+                    self.lastProducerPacketAt = nil
+                    client.reconnectNow()
+                }
             } else {
                 isProducerLive = false
             }
@@ -2055,7 +2107,7 @@ public final class CueEngine: ObservableObject {
     }
 
     func broadcastToRelay(_ packet: CuePacket) {
-        guard isProxyEnabled, !proxyToken.isEmpty else { return }
+        guard FeatureFlags.plotiphar, isProxyEnabled, !proxyToken.isEmpty else { return }
         relayClient.broadcast(packet: packet)
         directPeerChannel.send(packet: packet)
     }
@@ -2158,7 +2210,7 @@ public final class CueEngine: ObservableObject {
             recentMessages = []
         case .ping:
             if isMasterServer {
-                if packet.proto == CuePacket.protocolVersion {
+                if (packet.proto ?? 0) >= CuePacket.protocolVersion {
                     answerV2CatchUp(origin: origin, requester: packet.senderId)
                 } else {
                     broadcastCatchUp()

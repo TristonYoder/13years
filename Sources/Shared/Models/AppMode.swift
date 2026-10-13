@@ -16,7 +16,7 @@ public enum AppMode: String, Codable, CaseIterable, Sendable, Hashable {
     public var displayName: String {
         switch self {
         case .producerControl: return "Pagers"
-        case .serviceFlow: return "Service Flow"
+        case .serviceFlow: return "Run Sheet"
         case .livePreview: return "Live Preview"
         case .messages: return "Messages"
         case .settings: return "Settings"

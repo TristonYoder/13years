@@ -11,9 +11,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Sources/ProducerMac/Info.plist)"
-pager_version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Sources/PagerMac/Info.plist)"
-[ "$version" = "$pager_version" ] || { echo "Producer ($version) and Pager ($pager_version) versions differ"; exit 1; }
+version="$(sed -n 's/^MARKETING_VERSION *= *//p' Config/Base.xcconfig)"
+[ -n "$version" ] || { echo "MARKETING_VERSION missing from Config/Base.xcconfig"; exit 1; }
 
 out="${RELEASE_DIR:-$root/build/release-$version}"
 derived="$out/DerivedData"
@@ -25,6 +24,7 @@ xcodegen generate
 build() {
   xcodebuild -scheme "$1" -configuration Release -destination 'platform=macOS' \
     -derivedDataPath "$derived" -allowProvisioningUpdates \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
     ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     OTHER_CODE_SIGN_FLAGS="--timestamp" build
 }

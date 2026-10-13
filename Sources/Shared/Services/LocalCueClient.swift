@@ -27,6 +27,10 @@ public final class LocalCueClient: @unchecked Sendable {
         get { channel.onConnectedAPIPort }
         set { channel.onConnectedAPIPort = newValue }
     }
+    public var onLinkStatusChanged: ((ProducerLinkStatus) -> Void)? {
+        get { channel.onLinkStatusChanged }
+        set { channel.onLinkStatusChanged = newValue }
+    }
 
     public init() {}
 
@@ -50,5 +54,13 @@ public final class LocalCueClient: @unchecked Sendable {
 
     public func forgetAssignedHost() {
         channel.forgetAssignedHost()
+    }
+
+    public func reconnectNow(force: Bool = true) {
+        channel.reconnectNow(force: force)
+    }
+
+    public func setManualHost(_ host: String?) {
+        channel.setManualHost(host)
     }
 }

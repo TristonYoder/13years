@@ -43,6 +43,9 @@ struct ProducerMacApp: App {
                 .animation(.easeInOut(duration: 0.25), value: documents.isLauncherPresented)
                 .splashScreen(isPresented: splash.isPresented)
                 .modifier(ConnectWindowOpener(hub: remoteHub))
+                .onChange(of: remoteHub.isRemoteActive) { _, active in
+                    cueEngine.setLANServingSuspended(active)
+                }
                 .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .task {
                     splash.markReady()

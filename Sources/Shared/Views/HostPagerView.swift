@@ -5,7 +5,7 @@ import SwiftUI
 
 public struct HostPagerView: View {
     @EnvironmentObject var engine: CueEngine
-    @State private var selectedRoleId: String = "default"
+    @AppStorage("pagerSelectedRoleId") private var selectedRoleId: String = "default"
     @State private var isShowingChat = false
     @State private var isShowingSettings = false
     @State private var notLiveSince: Date?

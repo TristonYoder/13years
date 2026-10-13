@@ -11,6 +11,18 @@
       "idiom": "tv",
       "filename": "App Icon - App Store.imagestack",
       "role": "primary-app-icon"
+    },
+    {
+      "size": "1920x720",
+      "idiom": "tv",
+      "filename": "Top Shelf Image.imageset",
+      "role": "top-shelf-image"
+    },
+    {
+      "size": "2320x720",
+      "idiom": "tv",
+      "filename": "Top Shelf Image Wide.imageset",
+      "role": "top-shelf-image-wide"
     }
   ],
   "info": {

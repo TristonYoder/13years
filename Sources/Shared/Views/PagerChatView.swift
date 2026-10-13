@@ -53,7 +53,11 @@ public struct PagerChatView: View {
                             .padding(.top, 40)
                     }
                     ForEach(messages) { message in
-                        messageRow(message).id(message.id)
+                        messageRow(message)
+                            .id(message.id)
+                            #if os(tvOS)
+                            .modifier(TVFocusableRow())
+                            #endif
                     }
                 }
                 .padding()
@@ -74,13 +78,18 @@ public struct PagerChatView: View {
     private func messageRow(_ message: InterTeamMessage) -> some View {
         let isBroadcast = message.targetRoleId == nil
         let isMine = message.senderRoleId == roleId
+        #if os(tvOS)
+        let labelSize: CGFloat = 23
+        #else
+        let labelSize: CGFloat = 9
+        #endif
         return HStack {
             if isMine { Spacer(minLength: 40) }
 
             VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text(isBroadcast ? "EVERYONE" : "DIRECT")
-                        .font(.inter(size: 9, weight: .heavy))
+                        .font(.inter(size: labelSize, weight: .heavy))
                         .tracking(0.8)
                         .foregroundStyle(isBroadcast ? Color.orange : Color.blue)
                     Text(message.sender)
@@ -139,3 +148,23 @@ public struct PagerChatView: View {
         messageText = ""
     }
 }
+
+#if os(tvOS)
+private struct TVFocusableRow: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+
+    func body(content: Content) -> some View {
+        content
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(isFocused ? 0.12 : 0))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(isFocused ? 0.8 : 0), lineWidth: 3)
+            )
+            .focusable()
+    }
+}
+#endif

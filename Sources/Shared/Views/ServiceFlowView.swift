@@ -119,9 +119,9 @@ public struct ServiceFlowView: View {
             }
 
             ContentUnavailableView(
-                "No Service Flow",
+                "No Run Sheet",
                 systemImage: "list.bullet.rectangle",
-                description: Text("Sync from Planning Center, paste in a flow, or add items below.")
+                description: Text("Sync from Planning Center, paste in a run sheet, or add items below.")
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -189,7 +189,7 @@ public struct ServiceFlowView: View {
                 }
             }
         } header: {
-            Text(engine.planItems.first?.servicePlanTitle ?? "Service Flow")
+            Text(engine.planItems.first?.servicePlanTitle ?? "Run Sheet")
         }
     }
 

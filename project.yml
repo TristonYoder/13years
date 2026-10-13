@@ -43,6 +43,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.producer.mac
         INFOPLIST_FILE: Sources/ProducerMac/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/ProducerMac/ProducerMac.entitlements
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
 
   ProducerIOS:
     type: application
@@ -59,7 +61,8 @@ targets:
           CODE_SIGN_STYLE: Automatic
           CODE_SIGN_IDENTITY: "Apple Development"
         Release:
-          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: "Apple Development"
       base:
         PRODUCT_NAME: "13 Years Producer"
         PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.producer.ios
@@ -81,7 +84,8 @@ targets:
           CODE_SIGN_STYLE: Automatic
           CODE_SIGN_IDENTITY: "Apple Development"
         Release:
-          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: "Apple Development"
       base:
         PRODUCT_NAME: "13 Years"
         PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager
@@ -104,13 +108,16 @@ targets:
         Debug:
           CODE_SIGN_IDENTITY: "-"
         Release:
-          CODE_SIGN_IDENTITY: "Developer ID Application"
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: "Apple Development"
       base:
         PRODUCT_NAME: "13 Years"
-        PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager.mac
+        PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager
         INFOPLIST_FILE: Sources/PagerMac/Info.plist
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PAGER_MAC"
         CODE_SIGN_ENTITLEMENTS: Sources/PagerMac/PagerMac.entitlements
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
 
   PagerTV:
     type: application
@@ -127,10 +134,11 @@ targets:
           CODE_SIGN_STYLE: Automatic
           CODE_SIGN_IDENTITY: "Apple Development"
         Release:
-          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: "Apple Development"
       base:
         PRODUCT_NAME: "13 Years TV"
-        PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager.tv
+        PRODUCT_BUNDLE_IDENTIFIER: dev.7co.13years.pager
         TARGETED_DEVICE_FAMILY: "3"
         INFOPLIST_FILE: Sources/PagerTV/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
