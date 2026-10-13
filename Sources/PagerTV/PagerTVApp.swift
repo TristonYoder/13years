@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import SwiftUI
+import UIKit
 
 @main
 struct PagerTVApp: App {
@@ -17,7 +18,11 @@ struct PagerTVApp: App {
             PagerRootView()
                 .environmentObject(cueEngine)
                 .onChange(of: scenePhase) { _, phase in
+                    UIApplication.shared.isIdleTimerDisabled = phase == .active
                     if phase == .active { cueEngine.deviceDidBecomeActive() }
+                }
+                .onAppear {
+                    UIApplication.shared.isIdleTimerDisabled = true
                 }
         }
     }
