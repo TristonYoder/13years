@@ -6,7 +6,7 @@ import SwiftUI
 public struct SettingsView: View {
     @EnvironmentObject var engine: CueEngine
 
-    private static let showsPlotipharIntegration = false
+    private static let showsPlotipharIntegration = FeatureFlags.plotiphar
 
     @State private var plotipharURL: String = "http://localhost:3000"
     @State private var showingPlanPicker = false
@@ -86,7 +86,7 @@ public struct SettingsView: View {
             } header: {
                 Text("Waypoints")
             } footer: {
-                Text("Reusable handles like \u{201C}Song 1\u{201D} that a Stream Deck or Companion button fires by name. Define them once here; each week, assign them to that week's items from Service Flow and every button keeps working.")
+                Text("Reusable handles like \u{201C}Song 1\u{201D} that a Stream Deck or Companion button fires by name. Define them once here; each week, assign them to that week's items from the Run Sheet and every button keeps working.")
             }
 
             Section {
@@ -226,7 +226,7 @@ public struct SettingsView: View {
                 } header: {
                     Text("Plotiphar Cloud Proxy")
                 } footer: {
-                    Text("Paid feature. Pair once with plotiphar.com to sync cue state across separate networks when devices aren't on the same LAN.")
+                    Text("Pair once with plotiphar.com to sync cue state across separate networks when devices aren't on the same LAN.")
                 }
             }
 

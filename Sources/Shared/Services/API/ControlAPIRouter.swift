@@ -160,10 +160,12 @@ public final class ControlAPIRouter {
             return json(pcoStatus())
 
         case "plotiphar":
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(plotipharStatus())
 
         case "relay":
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.RelayBody.self, body) else { return badBody() }
             if let host = request.host?.trimmingCharacters(in: .whitespaces), !host.isEmpty {
@@ -462,6 +464,7 @@ public final class ControlAPIRouter {
             return accepted(pcoStatus())
 
         case ("plotiphar", "disconnect"):
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "POST", "DELETE") else { return methodNotAllowed() }
             engine.disconnectPlotiphar()
             return json(plotipharStatus())
@@ -618,16 +621,19 @@ public final class ControlAPIRouter {
             return accepted()
 
         case ("plotiphar", "pair", "start"):
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "POST") else { return methodNotAllowed() }
             engine.startPlotipharPairing()
             return accepted(plotipharStatus())
 
         case ("plotiphar", "pair", "cancel"):
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "POST", "DELETE") else { return methodNotAllowed() }
             engine.cancelPlotipharPairing()
             return json(plotipharStatus())
 
         case ("plotiphar", "assignments", "sync"):
+            guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "POST") else { return methodNotAllowed() }
             engine.syncPlotipharAssignments()
             return accepted(plotipharStatus())
@@ -757,7 +763,7 @@ public final class ControlAPIRouter {
         if let personName = request.personName {
             engine.setPersonName(forRoleId: id, personName: personName.isEmpty ? nil : personName)
         }
-        if let plotipharRoleId = request.plotipharRoleId {
+        if FeatureFlags.plotiphar, let plotipharRoleId = request.plotipharRoleId {
             engine.setPlotipharRoleId(forRoleId: id, plotipharRoleId: plotipharRoleId.isEmpty ? nil : plotipharRoleId)
         }
         if let categories = request.assignedNoteCategories {

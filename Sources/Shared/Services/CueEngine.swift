@@ -210,7 +210,7 @@ public final class CueEngine: ObservableObject {
             self.controlAPIPort = UserDefaults.standard.object(forKey: Self.controlAPIPortDefaultsKey) as? Int ?? Int(ControlAPIServer.defaultPort)
             self.isControlAPIEnabled = UserDefaults.standard.bool(forKey: Self.controlAPIEnabledDefaultsKey)
         }
-        if !proxyToken.isEmpty {
+        if FeatureFlags.plotiphar && !proxyToken.isEmpty {
             plotipharPairingState = .approved
         }
 
@@ -272,6 +272,18 @@ public final class CueEngine: ObservableObject {
         }
     }
 
+    public private(set) var isLANServingSuspended = false
+
+    public func setLANServingSuspended(_ suspended: Bool) {
+        guard !isRemoteMirror, isLANServingSuspended != suspended else { return }
+        isLANServingSuspended = suspended
+        if suspended {
+            server.stop()
+        } else if isMasterServer {
+            startNetworking()
+        }
+    }
+
     public func startNetworking() {
         guard !isRemoteMirror else { return }
         AppLog.cue.info("startNetworking() — isMasterServer=\(self.isMasterServer, privacy: .public)")
@@ -287,6 +299,10 @@ public final class CueEngine: ObservableObject {
         connectedProducerAPIPort = nil
         if isMasterServer {
             client.stop()
+            if isLANServingSuspended {
+                server.stop()
+                return
+            }
             server.start()
             server.advertisedControlAPIPort = hostsControlAPI && isControlAPIEnabled ? controlAPIPort : nil
             server.advertisedDeviceId = deviceId
@@ -467,7 +483,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func startPlotipharPairing() {
-        guard !isRemoteMirror else { return }
+        guard FeatureFlags.plotiphar, !isRemoteMirror else { return }
         plotipharPollTask?.cancel()
         plotipharPairingState = .starting
 
@@ -513,7 +529,7 @@ public final class CueEngine: ObservableObject {
         relayClient.relayHost = plotipharRelayHost
         relayClient.token = proxyToken
 
-        if isProxyEnabled && !proxyToken.isEmpty {
+        if FeatureFlags.plotiphar && isProxyEnabled && !proxyToken.isEmpty {
             relayClient.start()
             directPeerChannel.start()
             broadcastDirectPeerHello()
@@ -524,7 +540,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func broadcastDirectPeerHello() {
-        guard isProxyEnabled, !proxyToken.isEmpty else { return }
+        guard FeatureFlags.plotiphar, isProxyEnabled, !proxyToken.isEmpty else { return }
         if let payload = directPeerChannel.buildHelloPayload() {
             relayClient.sendText(payload)
         } else {
@@ -1639,7 +1655,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func syncPlotipharAssignments() {
-        guard !isRemoteMirror else { return }
+        guard FeatureFlags.plotiphar, !isRemoteMirror else { return }
         guard isProxyEnabled, !proxyToken.isEmpty else {
             plotipharAssignmentSyncStatus = .notPaired
             return
@@ -2083,7 +2099,7 @@ public final class CueEngine: ObservableObject {
     }
 
     func broadcastToRelay(_ packet: CuePacket) {
-        guard isProxyEnabled, !proxyToken.isEmpty else { return }
+        guard FeatureFlags.plotiphar, isProxyEnabled, !proxyToken.isEmpty else { return }
         relayClient.broadcast(packet: packet)
         directPeerChannel.send(packet: packet)
     }

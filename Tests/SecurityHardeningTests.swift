@@ -143,6 +143,10 @@ final class SecurityHardeningTests: XCTestCase {
 
     func testRelayEndpointRejectsPlaintextHosts() {
         let engine = makeEngine()
+        guard FeatureFlags.plotiphar else {
+            XCTAssertEqual(send(engine, "PUT", "/v1/relay", #"{"host":"https://relay.example.com"}"#).status, 404)
+            return
+        }
         let response = send(engine, "PUT", "/v1/relay", #"{"host":"ws://relay.example.com"}"#)
         XCTAssertEqual(response.status, 400)
         XCTAssertNotEqual(engine.plotipharRelayHost, "ws://relay.example.com")

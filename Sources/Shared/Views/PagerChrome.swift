@@ -164,7 +164,11 @@ struct PagerTopRow<RoleMenu: View>: View {
                 .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
             }
+            #if os(tvOS)
+            .buttonStyle(.card)
+            #else
             .buttonStyle(.plain)
+            #endif
 
             PagerHeaderIcons(sizes: sizes, style: style, state: state, showMessages: showMessages, showSettings: showSettings)
         }
@@ -255,7 +259,11 @@ struct PagerHeaderIcons: View {
                 .frame(maxWidth: .infinity, minHeight: PagerChromeSizes.iconRowHeight, maxHeight: PagerChromeSizes.iconRowHeight)
                 .contentShape(Rectangle())
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(.plain)
+        #endif
         .accessibilityLabel(label)
     }
 }

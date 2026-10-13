@@ -57,6 +57,7 @@ struct ProducerIOSApp: App {
                 }
                 .onChange(of: remoteHub.isRemoteActive) { _, active in
                     documents.isRemoteActive = active
+                    cueEngine.setLANServingSuspended(active)
                 }
                 .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in

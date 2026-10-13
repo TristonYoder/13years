@@ -159,12 +159,14 @@ public struct PagerSettingsView: View {
                     Text("This device automatically discovers the 13 Years Producer app on the same Wi-Fi network.")
                 }
 
-                Section {
-                    PlotipharPairingSection()
-                } header: {
-                    Text("Plotiphar Cloud Proxy")
-                } footer: {
-                    Text("Paid feature. Pair once with plotiphar.com if the producer controller isn't on the same local network.")
+                if FeatureFlags.plotiphar {
+                    Section {
+                        PlotipharPairingSection()
+                    } header: {
+                        Text("Plotiphar Cloud Proxy")
+                    } footer: {
+                        Text("Pair once with plotiphar.com if the producer controller isn't on the same local network.")
+                    }
                 }
             }
             .formStyle(.grouped)

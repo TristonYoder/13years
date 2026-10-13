@@ -19,15 +19,15 @@ public struct SectionHeaderBar<Actions: View>: View {
                 if let toggleSidebar {
                     Button(action: toggleSidebar) {
                         Image(systemName: "sidebar.left")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .help("Toggle sidebar")
                 }
 
-                mode.icon
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
                 Text(mode.displayName)
                     .font(.title2.weight(.bold))
                 Spacer()

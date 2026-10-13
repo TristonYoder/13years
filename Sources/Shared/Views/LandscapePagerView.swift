@@ -10,13 +10,21 @@ public struct LandscapeMetrics: Equatable, Sendable {
         self.size = size
     }
 
+    private func legible(_ value: CGFloat) -> CGFloat {
+        #if os(tvOS)
+        max(23, value)
+        #else
+        value
+        #endif
+    }
+
     public var shorterSide: CGFloat { max(1, min(size.width, size.height)) }
     public var frameThickness: CGFloat { max(14, 0.022 * shorterSide) }
     public var badgeFontSize: CGFloat { 0.11 * shorterSide }
     public var countdownFontSize: CGFloat { 0.32 * shorterSide }
     public var titleFontSize: CGFloat { 0.05 * shorterSide }
     public var timeFontSize: CGFloat { min(0.075 * shorterSide, slotWidth / 6.2) }
-    public var timeCaptionFontSize: CGFloat { 0.018 * shorterSide }
+    public var timeCaptionFontSize: CGFloat { legible(0.018 * shorterSide) }
     public var topRowHeight: CGFloat { badgeFontSize * 1.3 }
     public var centreY: CGFloat { size.height / 2 }
     public var badgeWidthEstimate: CGFloat { badgeFontSize * 5.2 }
@@ -36,15 +44,15 @@ public struct LandscapeMetrics: Equatable, Sendable {
         max(1, min(0.25 * shorterSide, bottomRowBottom - centreTagBottom - messageClearance))
     }
     public var messageTop: CGFloat { bottomRowBottom - messageMaxHeight }
-    public var messageCaptionFontSize: CGFloat { 0.022 * shorterSide }
+    public var messageCaptionFontSize: CGFloat { legible(0.022 * shorterSide) }
     public static let messageMaxLines = 3
     public static let fitScales: [CGFloat] = [1, 0.85, 0.72, 0.6, 0.5, 0.4]
     public var nextTitleFontSize: CGFloat { 0.035 * shorterSide }
     public static let widestCueWord = "STANDBY"
-    public var captionFontSize: CGFloat { 0.02 * shorterSide }
+    public var captionFontSize: CGFloat { legible(0.02 * shorterSide) }
     public var tagFontSize: CGFloat { 0.035 * shorterSide }
     public var roleFontSize: CGFloat { 0.04 * shorterSide }
-    public var statusFontSize: CGFloat { 0.022 * shorterSide }
+    public var statusFontSize: CGFloat { legible(0.022 * shorterSide) }
     public var noteFontSize: CGFloat { 0.028 * shorterSide }
     public var margin: CGFloat { 0.03 * shorterSide }
     public var cornerRadius: CGFloat { 0.02 * shorterSide }

@@ -5,7 +5,7 @@ Every release follows the same shape. This is the standing norm; change it here,
 ## Versioning
 
 - Releases bump the **minor** version and reset the patch: `1.2.x` becomes `1.3.0`.
-- One version number covers the Producer (Mac, iPad), the Pagers (Mac, iPhone, iPad, Apple TV) and the Companion module. Bump `CFBundleShortVersionString` in `Sources/ProducerMac`, `Sources/ProducerIOS`, `Sources/PagerMac`, `Sources/PagerIOS` and `Sources/PagerTV`, raise `CFBundleVersion` by one, and run `npm run sync-version -- <version>` in the Companion module.
+- One version number covers the Producer (Mac, iPad), the Pagers (Mac, iPhone, iPad, Apple TV) and the Companion module. Bump `MARKETING_VERSION` in `Config/Base.xcconfig`, raise `CURRENT_PROJECT_VERSION` there by one (every TestFlight upload needs a new build number), and run `npm run sync-version -- <version>` in the Companion module.
 - The Watch app keeps its own version.
 
 ## Mac downloads
@@ -32,4 +32,4 @@ The Pager app is named `13 Years`, the same as the iPhone, iPad and Apple TV app
 7. Delete the branches that fed the release, locally and on GitHub, once they are merged.
 8. Share the release page.
 
-iOS, iPadOS and tvOS builds are installed through Xcode or App Store Connect; they are not attached to the GitHub release.
+The Pager for iPhone, iPad, Apple TV and Mac ships through TestFlight as one App Store record (`dev.7co.13years.pager`): archive each platform in Xcode and upload it from the Organizer. These builds are not attached to the GitHub release.

@@ -12,14 +12,20 @@ struct ProducerHostField: View {
     @State private var error: String?
     @FocusState private var focused: Bool
 
+    #if os(tvOS)
+    private static let isTV = true
+    #else
+    private static let isTV = false
+    #endif
+
     private var primary: Color { ink ?? .primary }
     private var secondary: Color { ink?.opacity(0.7) ?? .secondary }
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(spacing: Self.isTV ? 20 : 10) {
+            HStack(spacing: Self.isTV ? 20 : 10) {
                 TextField("Producer IP or hostname", text: $text)
-                    .font(.inter(size: 15, weight: .semibold))
+                    .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
                     .foregroundColor(primary)
                     .focused($focused)
                     .autocorrectionDisabled()
@@ -32,20 +38,20 @@ struct ProducerHostField: View {
                     .onChange(of: text) { error = nil }
 
                 Button("Connect", action: connect)
-                    .font(.inter(size: 15, weight: .bold))
+                    .font(.inter(size: Self.isTV ? 33 : 15, weight: .bold))
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             if let error {
                 Text(error)
-                    .font(.inter(size: 13, weight: .semibold))
+                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }
 
             if let message = engine.producerLinkStatus.message {
                 Text(message)
-                    .font(.inter(size: 13, weight: .semibold))
+                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
                     .foregroundColor(engine.producerLinkStatus.isProblem ? .red : secondary)
                     .multilineTextAlignment(.center)
             }
@@ -56,7 +62,7 @@ struct ProducerHostField: View {
                     text = ""
                     error = nil
                 }
-                .font(.inter(size: 13, weight: .semibold))
+                .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
             }
         }
         .onAppear { text = engine.manualProducerHost ?? text }

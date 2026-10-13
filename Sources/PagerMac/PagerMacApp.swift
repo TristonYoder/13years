@@ -55,15 +55,34 @@ private struct EdgelessWindow: NSViewRepresentable {
 
     final class Coordinator {
         private var observers: [NSObjectProtocol] = []
+        private var keepAwake: NSObjectProtocol?
 
         func attach(to window: NSWindow) {
             setButtons(visible: window.isKeyWindow, in: window)
+            setKeepAwake(window.styleMask.contains(.fullScreen))
             let center = NotificationCenter.default
             for (name, visible) in [(NSWindow.didBecomeKeyNotification, true), (NSWindow.didResignKeyNotification, false)] {
                 observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self, weak window] _ in
                     guard let window else { return }
                     self?.setButtons(visible: visible, in: window)
                 })
+            }
+            for (name, fullScreen) in [(NSWindow.didEnterFullScreenNotification, true), (NSWindow.didExitFullScreenNotification, false), (NSWindow.willCloseNotification, false)] {
+                observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    self?.setKeepAwake(fullScreen)
+                })
+            }
+        }
+
+        private func setKeepAwake(_ on: Bool) {
+            if on, keepAwake == nil {
+                keepAwake = ProcessInfo.processInfo.beginActivity(
+                    options: [.userInitiated, .idleDisplaySleepDisabled, .latencyCritical],
+                    reason: "Pager is full screen"
+                )
+            } else if !on, let token = keepAwake {
+                ProcessInfo.processInfo.endActivity(token)
+                keepAwake = nil
             }
         }
 
@@ -75,6 +94,7 @@ private struct EdgelessWindow: NSViewRepresentable {
 
         deinit {
             observers.forEach(NotificationCenter.default.removeObserver)
+            if let keepAwake { ProcessInfo.processInfo.endActivity(keepAwake) }
         }
     }
 }

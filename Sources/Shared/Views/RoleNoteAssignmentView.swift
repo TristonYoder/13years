@@ -28,13 +28,13 @@ public struct RoleNoteAssignmentView: View {
 
                 if categories.isEmpty {
                     Section {
-                        Text("No note categories yet — sync from Planning Center or add a note to any item in Service Flow.")
+                        Text("No note categories yet — sync from Planning Center or add a note to any item in the Run Sheet.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                if !engine.plotipharRoles.isEmpty {
+                if FeatureFlags.plotiphar && !engine.plotipharRoles.isEmpty {
                     Section {
                         ForEach(engine.roles) { role in
                             Picker(role.name, selection: Binding(
