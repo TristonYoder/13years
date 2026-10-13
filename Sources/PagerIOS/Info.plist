@@ -26,7 +26,7 @@
 		<string>_13years._udp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>13 years uses the local network to receive real-time standby/go cues from the production control station with sub-10ms latency.</string>
+	<string>13 Years uses the local network to receive real-time standby/go cues from the production control station.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

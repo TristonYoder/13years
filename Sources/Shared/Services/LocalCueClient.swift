@@ -56,6 +56,10 @@ public final class LocalCueClient: @unchecked Sendable {
         channel.forgetAssignedHost()
     }
 
+    public func reconnectNow(force: Bool = true) {
+        channel.reconnectNow(force: force)
+    }
+
     public func setManualHost(_ host: String?) {
         channel.setManualHost(host)
     }

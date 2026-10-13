@@ -541,6 +541,7 @@ extension CueEngine {
 
     public func deviceDidBecomeActive() {
         guard !isMasterServer, !isRemoteMirror else { return }
+        client.reconnectNow(force: false)
         syncV2.estimator.clearSamples()
         startSyncBurst()
         refreshHeldTimer()

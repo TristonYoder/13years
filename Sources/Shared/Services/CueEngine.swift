@@ -1777,7 +1777,7 @@ public final class CueEngine: ObservableObject {
     @discardableResult
     public func pingDevice(atIP ipString: String) -> Bool {
         guard !isRemoteMirror else { return false }
-        guard let selfAddress = DirectPeerChannel.localIPv4Addresses().first else {
+        guard let selfAddress = LocalNetworkAddress.ipv4String() else {
             AppLog.networking.error("pingDevice: couldn't determine this device's own LAN IP")
             return false
         }
@@ -1799,6 +1799,9 @@ public final class CueEngine: ObservableObject {
                 })
             case .failed(let error):
                 AppLog.networking.error("pingDevice: connection failed: \(String(describing: error), privacy: .private)")
+                connection.cancel()
+            case .waiting:
+                connection.cancel()
             default:
                 break
             }
@@ -2007,7 +2010,12 @@ public final class CueEngine: ObservableObject {
         if !isMasterServer {
             if let lastProducerPacketAt {
                 let limit = syncV2.producerIsV2 ? Self.v2StalenessInterval : Self.producerStalenessInterval
-                isProducerLive = Date().timeIntervalSince(lastProducerPacketAt) < limit
+                let silence = Date().timeIntervalSince(lastProducerPacketAt)
+                isProducerLive = silence < limit
+                if silence >= limit, isLANConnected, !isRemoteMirror {
+                    self.lastProducerPacketAt = nil
+                    client.reconnectNow()
+                }
             } else {
                 isProducerLive = false
             }
@@ -2202,7 +2210,7 @@ public final class CueEngine: ObservableObject {
             recentMessages = []
         case .ping:
             if isMasterServer {
-                if packet.proto == CuePacket.protocolVersion {
+                if (packet.proto ?? 0) >= CuePacket.protocolVersion {
                     answerV2CatchUp(origin: origin, requester: packet.senderId)
                 } else {
                     broadcastCatchUp()

@@ -397,6 +397,29 @@ public final class LANUnicastClient: @unchecked Sendable {
         }
     }
 
+    public func reconnectNow(force: Bool = true) {
+        queue.async { [self] in
+            guard isRunning else { return }
+            if !force, connection?.state == .ready { return }
+            let old = connection
+            connection = nil
+            old?.cancel()
+            if old != nil {
+                DispatchQueue.main.async { [weak self] in self?.onStatusChanged?(false) }
+            }
+            if let manualHost {
+                connectDirectly(to: manualHost)
+            } else if let assigned = Self.loadAssignedHost() {
+                connectDirectly(to: assigned)
+            } else {
+                browser?.cancel()
+                browser = nil
+                lastDiscovered = nil
+                startBrowsing()
+            }
+        }
+    }
+
     public func send(_ packet: CuePacket) {
         queue.async { [self] in
             guard let connection, let data = packet.encode(), let framed = LANFraming.frame(data) else { return }
@@ -422,8 +445,9 @@ public final class LANUnicastClient: @unchecked Sendable {
             listener.newConnectionHandler = { [weak self] connection in
                 guard let self else { return }
                 connection.start(queue: self.queue)
+                let senderIP = ControlAPIServer.remoteIP(of: connection.endpoint)
                 connection.receiveMessage { [weak self] data, _, _, _ in
-                    if let data { self?.handleAssignPing(data) }
+                    if let data { self?.handleAssignPing(data, senderIP: senderIP) }
                     connection.cancel()
                 }
             }
@@ -434,10 +458,14 @@ public final class LANUnicastClient: @unchecked Sendable {
         }
     }
 
-    private func handleAssignPing(_ data: Data) {
+    private func handleAssignPing(_ data: Data, senderIP: String?) {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               json["type"] as? String == "ASSIGN_PRODUCER",
               let host = json["host"] as? String, !host.isEmpty else { return }
+        guard host == senderIP else {
+            AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER whose host does not match the sender")
+            return
+        }
         guard AssignedHostPolicy.isAcceptable(host) else {
             AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER with a non-local host \(host, privacy: .private)")
             return

@@ -24,6 +24,7 @@ xcodegen generate
 build() {
   xcodebuild -scheme "$1" -configuration Release -destination 'platform=macOS' \
     -derivedDataPath "$derived" -allowProvisioningUpdates \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
     ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     OTHER_CODE_SIGN_FLAGS="--timestamp" build
 }

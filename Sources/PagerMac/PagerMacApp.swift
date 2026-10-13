@@ -26,6 +26,12 @@ struct PagerMacApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 900, height: 560)
+
+        Settings {
+            PagerSettingsView()
+                .environmentObject(cueEngine)
+                .frame(minWidth: 460, minHeight: 520)
+        }
     }
 }
 
@@ -35,18 +41,31 @@ private struct EdgelessWindow: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { [weak view] in
-            guard let window = view?.window else { return }
+        let view = WindowObservingView()
+        let coordinator = context.coordinator
+        let level: NSWindow.Level = keepOnTop ? .floating : .normal
+        view.onWindow = { window in
             window.styleMask.insert(.fullSizeContentView)
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
             window.backgroundColor = .black
-            window.level = keepOnTop ? .floating : .normal
-            context.coordinator.attach(to: window)
+            window.level = level
+            coordinator.attach(to: window)
         }
         return view
+    }
+
+    final class WindowObservingView: NSView {
+        var onWindow: ((NSWindow) -> Void)?
+        private weak var configured: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, window !== configured else { return }
+            configured = window
+            onWindow?(window)
+        }
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {

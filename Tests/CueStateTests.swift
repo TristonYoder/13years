@@ -48,8 +48,8 @@ final class CueStateTests: XCTestCase {
         XCTAssertEqual(try decode("\"standby\""), CueState.standby)
     }
 
-    func testDecodingAGenuinelyUnknownValueStillThrows() {
-        XCTAssertThrowsError(try decode("\"TEAL\""))
+    func testDecodingAGenuinelyUnknownValueFallsBackToOff() {
+        XCTAssertEqual(try decode("\"TEAL\""), CueState.off)
     }
 
     func testEncodingRoundTrips() {
