@@ -153,10 +153,11 @@ static bool discoverViaStaticIp() {
     return false;
   }
   targetIp = ip;
-  targetPort = kServerPort;
+  uint16_t savedPort = store::getProducerPort();
+  targetPort = savedPort != 0 ? savedPort : kServerPort;
   targetIsStatic = true;
   haveTarget = true;
-  targetLabel = host;
+  targetLabel = savedPort != 0 ? host + ":" + String(savedPort) : host;
   return true;
 }
 
@@ -289,6 +290,7 @@ static void serviceAssignPing() {
 
   Serial.printf("[lan] producer assigned via network ping: %s\n", host);
   store::setProducerHost(String(host));
+  store::setProducerPort(0);
   staticFallbackActive = false;
   staticFailureCount = 0;
   targetIp = ip;

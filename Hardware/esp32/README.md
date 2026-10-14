@@ -40,7 +40,7 @@ and friends for the canonical schema and [`LANUnicastChannel.swift`](../../Sourc
 for the Swift side's implementation. Discovery is via mDNS (`_13years._tcp`
 service type), with a manually-configured static IP as a fallback for networks
 where mDNS is filtered (see `storage/nvs_store.h`'s `getProducerHost()` and the
-`producer <ip>|auto` Serial command). This device is always a *client*: it never
+`producer <ip>[:port]|auto` Serial command). This device is always a *client*: it never
 acts as the hub (that's whichever app has `isMasterServer = true`), so it never
 replies to another peer's `PING` and never broadcasts `CUE_UPDATE` — it
 sends exactly one `PING` after connecting, requesting the hub's catch-up
@@ -132,7 +132,7 @@ role <id>          assign this pager's role (host, keys, speaker, lead_vocal, pr
 status              device id / role / WiFi+LAN state / active cue+timer/note/message
 testpacket <json>   inject a raw CuePacket JSON string directly into the engine — debug aid,
                     bypasses WiFi/network entirely
-producer <ip>|auto  override Producer host: <ip> for static IP fallback, or 'auto' to use mDNS discovery
+producer <ip>[:port]|auto  override Producer host: <ip>[:port] (default port 13380) for static IP fallback, or 'auto' to use mDNS discovery
 reset               wipe all stored config (WiFi, device id, role, Producer host) and restart
 ```
 
@@ -177,7 +177,7 @@ Only `ssid` is required. `pass` may be omitted for an open network, and `role`,
 `producer` and `rotate180` left out to keep whatever is already stored. Left
 out is not the same as `false`: a pager already mounted upside-down must not be
 righted by a provision that never mentioned orientation. `producer` takes an IP
-or the literal `auto` (mDNS discovery), same as the `producer` command.
+or the literal `auto` (mDNS discovery), same as the `producer` command. An optional `"port"` (1-65535, default 13380) or an `ip:port` form of `producer` points the pager at a clock server on a non-default port.
 
 It replies with exactly one line, and that line is a contract — everything
 else this firmware prints is prose for a human, but these two are meant to be
@@ -195,7 +195,7 @@ those stay plain.
 
 The error reasons are fixed strings: `malformed-json`, `expected-json-object`,
 `missing-ssid`, `bad-ssid-length`, `bad-password-length`, `bad-role`,
-`bad-producer-ip`, `bad-rotate180`. Every field is validated before anything is written, so a
+`bad-producer-ip`, `bad-producer-port`, `bad-rotate180`. Every field is validated before anything is written, so a
 rejected `provision` changes nothing rather than leaving the unit on a new
 network under an old role. The `deviceId` in the ok line is there so the app
 can tell which physical unit it just provisioned without a second round trip —

@@ -1816,9 +1816,10 @@ public final class CueEngine: ObservableObject {
         let result = ManualHostPolicy.validate(input)
         guard !isRemoteMirror else { return result }
         switch result {
-        case .valid(let host):
-            manualProducerHost = host
-            client.setManualHost(host)
+        case .valid:
+            let endpoint = result.endpoint
+            manualProducerHost = endpoint
+            client.setManualHost(endpoint)
         case .empty:
             clearManualProducerHost()
         case .invalid:

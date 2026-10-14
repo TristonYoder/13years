@@ -24,7 +24,7 @@ struct ProducerHostField: View {
     var body: some View {
         VStack(spacing: Self.isTV ? 20 : 10) {
             HStack(spacing: Self.isTV ? 20 : 10) {
-                TextField("Producer IP or hostname", text: $text)
+                TextField("IP or hostname, optional :port", text: $text)
                     .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
                     .foregroundColor(primary)
                     .focused($focused)
@@ -71,8 +71,8 @@ struct ProducerHostField: View {
     private func connect() {
         let result = engine.setManualProducerHost(text)
         switch result {
-        case .valid(let host):
-            text = host
+        case .valid:
+            text = result.endpoint ?? text
             error = nil
             focused = false
         case .empty:

@@ -99,7 +99,7 @@ public struct PagerSettingsView: View {
                 } header: {
                     Text("Producer")
                 } footer: {
-                    Text("Automatic finds the producer on this network. Enter an IP address or hostname to connect to one directly, for example when discovery is blocked.")
+                    Text("Automatic finds the producer on this network. Enter an IP address or hostname, optionally followed by :port (default 13380), to connect to one directly, for example when discovery is blocked or the clock server is hosted elsewhere.")
                 }
 
                 Section {

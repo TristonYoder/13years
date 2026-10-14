@@ -50,13 +50,23 @@ public enum AssignedHostPolicy {
 }
 
 public enum ManualHostValidation: Equatable {
-    case valid(String)
+    case valid(host: String, port: UInt16?)
     case empty
     case invalid(String)
 
     public var host: String? {
-        if case .valid(let host) = self { return host }
+        if case .valid(let host, _) = self { return host }
         return nil
+    }
+
+    public var port: UInt16? {
+        if case .valid(_, let port) = self { return port }
+        return nil
+    }
+
+    public var endpoint: String? {
+        guard case .valid(let host, let port) = self else { return nil }
+        return ManualHostPolicy.format(host: host, port: port)
     }
 
     public var message: String? {
@@ -68,20 +78,70 @@ public enum ManualHostValidation: Equatable {
 }
 
 public enum ManualHostPolicy {
+    public static let defaultPort: UInt16 = 13380
+
+    private static let formatHint = "Enter an IP address like 192.168.1.20 or a name like studio-mac.local, optionally followed by :port."
+
     public static func validate(_ input: String) -> ManualHostValidation {
         let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return .empty }
-        guard value.count <= 253 else { return .invalid("That name is too long.") }
-        if value.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) {
-            guard AssignedHostPolicy.ipv4Octets(value) != nil else {
+        guard value.count <= 260 else { return .invalid("That name is too long.") }
+
+        var hostPart = value
+        var portPart: Substring?
+        if value.hasPrefix("[") {
+            guard let close = value.firstIndex(of: "]") else { return .invalid(formatHint) }
+            hostPart = String(value[value.index(after: value.startIndex)..<close])
+            let rest = value[value.index(after: close)...]
+            if !rest.isEmpty {
+                guard rest.hasPrefix(":") else { return .invalid(formatHint) }
+                portPart = rest.dropFirst()
+            }
+            guard isIPv6Literal(hostPart) else { return .invalid("That isn't a valid IPv6 address.") }
+        } else {
+            let colons = value.filter { $0 == ":" }.count
+            if colons > 1 { return .invalid("Put an IPv6 address in brackets, like [::1]:13380.") }
+            if colons == 1, let index = value.firstIndex(of: ":") {
+                hostPart = String(value[..<index])
+                portPart = value[value.index(after: index)...]
+            }
+        }
+
+        var port: UInt16?
+        if let portPart {
+            guard let parsed = parsePort(portPart) else {
+                return .invalid("The port must be a number from 1 to 65535.")
+            }
+            port = parsed
+        }
+
+        guard hostPart.count <= 253, !hostPart.isEmpty else { return .invalid(formatHint) }
+        if value.hasPrefix("[") { return .valid(host: hostPart, port: port) }
+        if hostPart.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) {
+            guard AssignedHostPolicy.ipv4Octets(hostPart) != nil else {
                 return .invalid("That isn't a valid IP address.")
             }
-            return .valid(value)
+            return .valid(host: hostPart, port: port)
         }
-        guard isHostname(value) else {
-            return .invalid("Enter an IP address like 192.168.1.20 or a name like studio-mac.local.")
-        }
-        return .valid(value)
+        guard isHostname(hostPart) else { return .invalid(formatHint) }
+        return .valid(host: hostPart, port: port)
+    }
+
+    public static func format(host: String, port: UInt16?) -> String {
+        let shown = host.contains(":") ? "[\(host)]" : host
+        guard let port else { return shown }
+        return "\(shown):\(port)"
+    }
+
+    static func parsePort(_ text: Substring) -> UInt16? {
+        guard !text.isEmpty, text.count <= 5, text.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let number = UInt16(text), number >= 1 else { return nil }
+        return number
+    }
+
+    static func isIPv6Literal(_ value: String) -> Bool {
+        guard value.contains(":"), !value.isEmpty else { return false }
+        return value.allSatisfy { $0.isASCII && ($0.isHexDigit || $0 == ":" || $0 == ".") }
     }
 
     static func isHostname(_ value: String) -> Bool {

@@ -23,6 +23,8 @@ void setRoleChosen(bool chosen);
 bool getProducerHost(String &host);
 void setProducerHost(const String &host);
 void clearProducerHost();
+uint16_t getProducerPort();
+void setProducerPort(uint16_t port);
 
 bool getDisplayFlipped();
 void setDisplayFlipped(bool flipped);

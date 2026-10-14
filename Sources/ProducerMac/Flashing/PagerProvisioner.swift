@@ -110,6 +110,8 @@ public enum PagerProvisioningError: LocalizedError, Equatable {
             return "The pager rejected the role as empty."
         case "bad-producer-ip":
             return "The pager rejected the producer address as not a valid IP."
+        case "bad-producer-port":
+            return "The pager rejected the producer port."
         case "bad-rotate180":
             return "The pager rejected the screen-rotation setting. This is a bug in the app."
         default:

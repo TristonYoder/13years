@@ -309,7 +309,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     public init() {}
 
     public static func savedManualHost() -> String? {
-        UserDefaults.standard.string(forKey: manualHostDefaultsKey).flatMap { ManualHostPolicy.validate($0).host }
+        UserDefaults.standard.string(forKey: manualHostDefaultsKey).flatMap { ManualHostPolicy.validate($0).endpoint }
     }
 
     public func setManualHost(_ host: String?) {
@@ -431,8 +431,11 @@ public final class LANUnicastClient: @unchecked Sendable {
         }
     }
 
-    private func connectDirectly(to host: String) {
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: LANUnicastServer.port)!)
+    private func connectDirectly(to target: String) {
+        let parsed = ManualHostPolicy.validate(target)
+        let host = parsed.host ?? target
+        let port = NWEndpoint.Port(rawValue: parsed.port ?? LANUnicastServer.port) ?? NWEndpoint.Port(rawValue: LANUnicastServer.port)!
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: port)
         lastDiscovered = (endpoint, host, nil, nil)
         connect(to: endpoint, masterName: host, advertisedIPv4: nil, advertisedAPIPort: nil, isAssigned: true)
     }

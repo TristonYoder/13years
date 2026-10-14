@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 #include "../src/sync/sync_core.h"
+#include "../src/net/endpoint_parse.h"
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -20,6 +21,26 @@ static int checks = 0;
 #define CHECK(cond) do { checks++; if (!(cond)) { failures++; printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #cond); } } while (0)
 #define CHECK_STR(a, b) do { checks++; std::string _a = (a), _b = (b); if (_a != _b) { failures++; printf("FAIL %s:%d got %s want %s\n", __FILE__, __LINE__, _a.c_str(), _b.c_str()); } } while (0)
 #define CHECK_NEAR(a, b, eps) do { checks++; double _a = (a), _b = (b); if (fabs(_a - _b) > (eps)) { failures++; printf("FAIL %s:%d got %f want %f\n", __FILE__, __LINE__, _a, _b); } } while (0)
+
+static void testEndpointParse() {
+  std::string host;
+  uint16_t port = 1;
+  CHECK(endpointparse::splitHostPort("100.75.81.4", host, port));
+  CHECK_STR(host, "100.75.81.4");
+  CHECK(port == 0);
+  CHECK(endpointparse::splitHostPort("192.168.1.20:9000", host, port));
+  CHECK_STR(host, "192.168.1.20");
+  CHECK(port == 9000);
+  CHECK(endpointparse::splitHostPort("10.0.0.5:65535", host, port));
+  CHECK(port == 65535);
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:0", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:70000", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:abc", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:", host, port));
+  CHECK(!endpointparse::splitHostPort(":9000", host, port));
+  CHECK(!endpointparse::splitHostPort("", host, port));
+  CHECK(!endpointparse::splitHostPort("1.2.3.4:5:6", host, port));
+}
 
 static void testHashVectors() {
   CHECK_STR(pagersync::hashHex(""), "cbf29ce484222325");
@@ -559,6 +580,7 @@ static void testUtcOffsetFilter() {
 }
 
 int main() {
+  testEndpointParse();
   testHashVectors();
   testOffsetFormula();
   testMinRtt();

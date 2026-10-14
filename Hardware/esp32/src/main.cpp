@@ -7,6 +7,8 @@
 #include "storage/nvs_store.h"
 #include "net/wifi_manager.h"
 #include "net/lan_client.h"
+#include "net/endpoint_parse.h"
+#include <string>
 #include "cue/cue_engine.h"
 #include "hw/rgb_led.h"
 #include "hw/buzzer.h"
@@ -92,10 +94,34 @@ static void handleProvision(const String &payload) {
   }
 
   String producer;
+  uint16_t producerPort = 0;
   bool clearProducer = false;
+  if (!doc["port"].isNull()) {
+    if (!doc["port"].is<int>() || doc["port"].as<int>() < 1 || doc["port"].as<int>() > 65535) {
+      Serial.println("[err] provision bad-producer-port");
+      return;
+    }
+    producerPort = (uint16_t)doc["port"].as<int>();
+  }
   if (!doc["producer"].isNull()) {
     producer = doc["producer"].as<String>();
     producer.trim();
+    if (producer != "auto") {
+      std::string splitHost;
+      uint16_t splitPort = 0;
+      if (!endpointparse::splitHostPort(producer.c_str(), splitHost, splitPort)) {
+        Serial.println("[err] provision bad-producer-ip");
+        return;
+      }
+      if (splitPort != 0) {
+        if (producerPort != 0 && producerPort != splitPort) {
+          Serial.println("[err] provision bad-producer-port");
+          return;
+        }
+        producerPort = splitPort;
+      }
+      producer = splitHost.c_str();
+    }
     if (producer == "auto") {
       clearProducer = true;
       producer = "";
@@ -121,6 +147,10 @@ static void handleProvision(const String &payload) {
     lan::resetStaticFallback();
   } else if (producer.length() > 0) {
     store::setProducerHost(producer);
+    store::setProducerPort(producerPort);
+    lan::resetStaticFallback();
+  } else if (producerPort != 0) {
+    store::setProducerPort(producerPort);
     lan::resetStaticFallback();
   }
   wifinet::applyNewCredentials(ssid, pass);
@@ -132,11 +162,13 @@ static void handleProvision(const String &payload) {
     String existing;
     producerReport = store::getProducerHost(existing) ? existing : String("auto");
   }
+  uint16_t reportPort = store::getProducerPort();
   JsonDocument ack;
   ack["deviceId"] = store::deviceId();
   ack["ssid"] = ssid;
   ack["role"] = engine.selectedRoleId();
   ack["producer"] = producerReport;
+  if (reportPort != 0 && producerReport != "auto") ack["port"] = reportPort;
   ack["rotate180"] = ui::isDisplayFlipped();
   Serial.print("[ok] provision ");
   serializeJson(ack, Serial);
@@ -173,6 +205,7 @@ static void handleSerialLine(String line) {
     if (rest == "") {
       String host;
       if (store::getProducerHost(host)) {
+        if (store::getProducerPort() != 0) host += ":" + String(store::getProducerPort());
         Serial.printf("[serial] producer host is set to %s — `producer auto` to use mDNS discovery instead\n", host.c_str());
       } else {
         Serial.println("[serial] producer host is unset — discovering via mDNS");
@@ -183,10 +216,13 @@ static void handleSerialLine(String line) {
       Serial.println("[serial] producer host cleared — will discover via mDNS");
     } else {
       IPAddress ip;
-      if (!ip.fromString(rest)) {
-        Serial.printf("[serial] \"%s\" isn't a valid IP address — usage: producer <ip>|auto\n", rest.c_str());
+      std::string splitHost;
+      uint16_t splitPort = 0;
+      if (!endpointparse::splitHostPort(rest.c_str(), splitHost, splitPort) || !ip.fromString(splitHost.c_str())) {
+        Serial.printf("[serial] \"%s\" isn't a valid IP address — usage: producer <ip>[:port]|auto\n", rest.c_str());
       } else {
-        store::setProducerHost(rest);
+        store::setProducerHost(String(splitHost.c_str()));
+        store::setProducerPort(splitPort);
         lan::resetStaticFallback();
         Serial.printf("[serial] producer host set to %s\n", rest.c_str());
       }
@@ -325,7 +361,7 @@ static void handleSerialLine(String line) {
     Serial.println("  provision <json>         set ssid/pass/role/producer in one shot from a JSON object, replying [ok]/[err] — what the Producer app drives over USB after flashing");
     Serial.println("  role <id>                set this pager's role (whatever ids the Producer's roster has — see the on-screen picker)");
     Serial.println("  rotate 180|normal        turn the display (and touch with it) 180 degrees, for upside-down mounting");
-    Serial.println("  producer <ip>|auto       set a static Producer IP (skips mDNS discovery), or `auto` to discover via mDNS again; bare `producer` reports the current setting");
+    Serial.println("  producer <ip>[:port]|auto set a static Producer IP and optional port (default 13380; skips mDNS discovery), or `auto` to discover via mDNS again; bare `producer` reports the current setting");
     Serial.println("  cue outline|full         choose how the cue is shown: a coloured frame (outline) or the whole screen filled with the cue colour; bare `cue` reports it");
     Serial.println("  status                   print device id / role / connection state");
     Serial.println("  testpacket <json>        inject a raw CuePacket JSON string directly into the engine (debug aid, bypasses the network)");
