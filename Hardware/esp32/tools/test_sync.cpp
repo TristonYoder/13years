@@ -40,6 +40,27 @@ static void testEndpointParse() {
   CHECK(!endpointparse::splitHostPort(":9000", host, port));
   CHECK(!endpointparse::splitHostPort("", host, port));
   CHECK(!endpointparse::splitHostPort("1.2.3.4:5:6", host, port));
+  {
+    using namespace endpointparse;
+    IntroducerTarget t = decideIntroducer("mac.local", "9000", "10.0.0.7", "introducer");
+    CHECK(t.kind == IntroducerKind::Direct && t.ip == "10.0.0.7" && t.port == 9000);
+    t = decideIntroducer("10.0.0.9", "9001", "", "introducer");
+    CHECK(t.kind == IntroducerKind::Direct && t.ip == "10.0.0.9" && t.port == 9001);
+    t = decideIntroducer("mac.local", "9000", "bad", "introducer");
+    CHECK(t.kind == IntroducerKind::NeedsResolve && t.host == "mac.local" && t.port == 9000);
+    t = decideIntroducer("mac.local", "9000", "", "");
+    CHECK(t.kind == IntroducerKind::NeedsResolve);
+    CHECK(decideIntroducer("mac.local", "0", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "70000", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "abc", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("", "9000", "10.0.0.7", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "9000", "10.0.0.7", "relay").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("0.0.0.0", "9000", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("10.0.0.256", "9000", "", "introducer").kind == IntroducerKind::NeedsResolve);
+    t = decideIntroducer("mac.local", "9000", "0.0.0.0", "introducer");
+    CHECK(t.kind == IntroducerKind::NeedsResolve);
+  }
 }
 
 static void testHashVectors() {

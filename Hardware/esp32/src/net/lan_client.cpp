@@ -9,6 +9,8 @@
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include <string.h>
+#include <string>
+#include "endpoint_parse.h"
 #include <stdlib.h>
 
 static cue::Engine *engineRef = nullptr;
@@ -167,11 +169,35 @@ static bool discoverViaMdns() {
     Serial.printf("[lan] mDNS query for _13years._tcp returned %d results\n", n);
     return false;
   }
+  targetIsStatic = false;
+  String advertiser = MDNS.hostname(0);
+  std::string txtHost = MDNS.hasTxt(0, "host") ? MDNS.txt(0, "host").c_str() : "";
+  std::string txtPort = MDNS.hasTxt(0, "port") ? MDNS.txt(0, "port").c_str() : "";
+  std::string txtHostIp = MDNS.hasTxt(0, "hostip") ? MDNS.txt(0, "hostip").c_str() : "";
+  std::string txtMode = MDNS.hasTxt(0, "mode") ? MDNS.txt(0, "mode").c_str() : "";
+  endpointparse::IntroducerTarget intro = endpointparse::decideIntroducer(txtHost, txtPort, txtHostIp, txtMode);
+  IPAddress introIp;
+  bool introduced = false;
+  if (intro.kind == endpointparse::IntroducerKind::Direct) {
+    introduced = introIp.fromString(intro.ip.c_str());
+  } else if (intro.kind == endpointparse::IntroducerKind::NeedsResolve) {
+    introduced = WiFi.hostByName(intro.host.c_str(), introIp) == 1 && introIp != IPAddress(0, 0, 0, 0);
+    if (!introduced) Serial.printf("[lan] introducer host \"%s\" did not resolve — using advertiser\n", intro.host.c_str());
+  }
+  if (introduced) {
+    targetIp = introIp;
+    targetPort = intro.port;
+    targetLabel = advertiser;
+    if (targetLabel.length() == 0) targetLabel = intro.host.c_str();
+    haveTarget = true;
+    Serial.printf("[lan] introduced to producer by %s: %s:%u\n",
+                  advertiser.c_str(), targetIp.toString().c_str(), targetPort);
+    return true;
+  }
   targetIp = MDNS.IP(0);
   targetPort = MDNS.port(0);
-  targetIsStatic = false;
   haveTarget = true;
-  targetLabel = MDNS.hostname(0);
+  targetLabel = advertiser;
   if (targetLabel.length() == 0) targetLabel = targetIp.toString();
   Serial.printf("[lan] discovered producer via mDNS: %s (%s:%u)\n",
                 MDNS.hostname(0).c_str(), targetIp.toString().c_str(), targetPort);

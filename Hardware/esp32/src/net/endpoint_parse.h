@@ -38,4 +38,62 @@ inline bool splitHostPort(const std::string &input, std::string &host, uint16_t 
   return true;
 }
 
+
+enum class IntroducerKind { None, Direct, NeedsResolve };
+
+struct IntroducerTarget {
+  IntroducerKind kind = IntroducerKind::None;
+  std::string ip;
+  std::string host;
+  uint16_t port = 0;
+};
+
+inline bool parseIPv4(const std::string &text, std::string &canonical) {
+  unsigned parts[4];
+  size_t pos = 0;
+  for (int i = 0; i < 4; i++) {
+    size_t start = pos;
+    unsigned value = 0;
+    while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+      value = value * 10 + (unsigned)(text[pos] - '0');
+      if (value > 255) return false;
+      pos++;
+    }
+    if (pos == start || pos - start > 3) return false;
+    parts[i] = value;
+    if (i < 3) {
+      if (pos >= text.size() || text[pos] != '.') return false;
+      pos++;
+    }
+  }
+  if (pos != text.size()) return false;
+  canonical = std::to_string(parts[0]) + "." + std::to_string(parts[1]) + "." +
+              std::to_string(parts[2]) + "." + std::to_string(parts[3]);
+  return true;
+}
+
+inline IntroducerTarget decideIntroducer(const std::string &host, const std::string &portText,
+                                         const std::string &hostIp, const std::string &mode) {
+  IntroducerTarget result;
+  if (!mode.empty() && mode != "introducer") return result;
+  if (host.empty()) return result;
+  uint16_t port = 0;
+  if (!parsePort(portText, port)) return result;
+  std::string canonical;
+  if (parseIPv4(hostIp, canonical) && canonical != "0.0.0.0") {
+    result.kind = IntroducerKind::Direct;
+    result.ip = canonical;
+  } else if (parseIPv4(host, canonical) && canonical != "0.0.0.0") {
+    result.kind = IntroducerKind::Direct;
+    result.ip = canonical;
+  } else if (parseIPv4(host, canonical)) {
+    return result;
+  } else {
+    result.kind = IntroducerKind::NeedsResolve;
+  }
+  result.host = host;
+  result.port = port;
+  return result;
+}
+
 }
