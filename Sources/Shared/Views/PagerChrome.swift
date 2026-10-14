@@ -100,7 +100,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     }
 
     private var clock: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.wallClockSeconds) { context in
             VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
                 Text(context.date, format: .dateTime.hour().minute().second())
                     .font(.inter(size: sizes.timeFont, weight: .black))
@@ -218,6 +218,22 @@ public enum PagerConnectionState: Equatable, Sendable {
         case .notConnected: return "Not connected"
         }
     }
+}
+
+public struct WallClockSecondsSchedule: TimelineSchedule {
+    public init() {}
+
+    public func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        var next = Date(timeIntervalSinceReferenceDate: floor(startDate.timeIntervalSinceReferenceDate))
+        return AnyIterator {
+            defer { next = next.addingTimeInterval(1) }
+            return next
+        }
+    }
+}
+
+public extension TimelineSchedule where Self == WallClockSecondsSchedule {
+    static var wallClockSeconds: WallClockSecondsSchedule { WallClockSecondsSchedule() }
 }
 
 public enum PagerLinkIndicator: Equatable, Sendable {

@@ -151,7 +151,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
     private func clockBlock(_ m: LowerThirdMetrics, primary: Color) -> some View {
         VStack(alignment: .leading, spacing: m.tagFontSize * 0.3) {
             ZStack(alignment: .leading) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.wallClockSeconds) { context in
                     Text(context.date, format: .dateTime.hour().minute().second())
                         .font(.inter(size: m.fontSize, weight: .black))
                         .monospacedDigit()

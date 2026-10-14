@@ -2003,8 +2003,13 @@ function tickLocalTime() {
   clearTimeout(localTimer);
   localTimer = null;
   const layout = root.dataset.layout;
-  if (layout !== "landscape" && layout !== "standard") return;
-  setText(layout === "landscape" ? el.lsTimeValue : el.ptTimeValue, formatClock(new Date()));
+  if (layout === "lowerthird") {
+    paintClock();
+  } else if (layout === "landscape" || layout === "standard") {
+    setText(layout === "landscape" ? el.lsTimeValue : el.ptTimeValue, formatClock(new Date()));
+  } else {
+    return;
+  }
   localTimer = setTimeout(tickLocalTime, msUntilNextSecond(Date.now()) + 5);
 }
 
