@@ -35,6 +35,13 @@ final class LANRelayTests: XCTestCase {
         XCTAssertNil(byName.advertisedIPv4)
     }
 
+    func testOnlyActiveModesRetargetAnExistingConnection() {
+        XCTAssertTrue(LANDiscoveryRouting.advertisesMode(txt: ["mode": "introducer", "host": "david", "port": "13380"]))
+        XCTAssertTrue(LANDiscoveryRouting.advertisesMode(txt: ["mode": "relay"]))
+        XCTAssertFalse(LANDiscoveryRouting.advertisesMode(txt: [:]))
+        XCTAssertFalse(LANDiscoveryRouting.advertisesMode(txt: ["ip": "10.0.0.2", "did": "x"]))
+    }
+
     func testDiscoveryFallsBackToServiceEndpoint() {
         let service = NWEndpoint.service(name: "Booth", type: "_13years._tcp", domain: "local.", interface: nil)
         for txt in [["ip": "192.168.1.9"], ["mode": "relay", "host": "10.0.0.5", "port": "13380", "ip": "192.168.1.9"], ["host": "10.0.0.5"], ["host": "10.0.0.5", "port": "0"], ["host": "", "port": "13380"], ["host": "x", "port": "abc"]] as [[String: String]] {

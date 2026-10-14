@@ -474,17 +474,20 @@ public final class LANUnicastClient: @unchecked Sendable {
             if case .bonjour(let txt) = first.metadata { txtDictionary = txt.dictionary }
             let target = LANDiscoveryRouting.target(serviceEndpoint: first.endpoint, txt: txtDictionary)
             let advertisedAPIPort = txtDictionary["apiport"].flatMap { Int($0) }
+            let displayName = target.isIntroduced ? (txtDictionary["host"] ?? name) : name
+            let advertisesMode = LANDiscoveryRouting.advertisesMode(txt: txtDictionary)
             self.queue.async {
                 guard !self.isConnectingToAssignedHost, self.manualHost == nil else { return }
+                if self.connection != nil, !advertisesMode { return }
                 let previous = self.lastDiscovered?.endpoint
-                self.lastDiscovered = (target.endpoint, name, target.advertisedIPv4, advertisedAPIPort)
+                self.lastDiscovered = (target.endpoint, displayName, target.advertisedIPv4, advertisedAPIPort)
                 if let current = self.connection, let previous, previous != target.endpoint {
                     AppLog.networking.info("LANUnicastClient: discovery target changed, reconnecting")
                     self.connection = nil
                     current.cancel()
                     DispatchQueue.main.async { [weak self] in self?.onStatusChanged?(false) }
                 }
-                self.connect(to: target.endpoint, masterName: name, advertisedIPv4: target.advertisedIPv4, advertisedAPIPort: advertisedAPIPort, isAssigned: false)
+                self.connect(to: target.endpoint, masterName: displayName, advertisedIPv4: target.advertisedIPv4, advertisedAPIPort: advertisedAPIPort, isAssigned: false)
             }
         }
         browser.stateUpdateHandler = { state in

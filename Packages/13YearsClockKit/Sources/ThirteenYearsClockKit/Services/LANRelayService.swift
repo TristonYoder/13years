@@ -260,6 +260,10 @@ public enum LANDiscoveryRouting {
         public var isIntroduced: Bool
     }
 
+    public static func advertisesMode(txt: [String: String]) -> Bool {
+        txt["mode"] == "relay" || txt["mode"] == "introducer"
+    }
+
     public static func target(serviceEndpoint: NWEndpoint, txt: [String: String]) -> Target {
         let ownIP = txt["ip"].flatMap { $0.isEmpty ? nil : $0 }
         if txt["mode"] != "relay",
