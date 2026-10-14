@@ -132,6 +132,10 @@ public struct SettingsView: View {
                 Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
             }
 
+            #if os(macOS) || os(iOS)
+            RemoteProducerSettingsSection()
+            #endif
+
             Section {
                 Toggle("Act as Master Controller", isOn: $engine.isMasterServer)
                     .onChange(of: engine.isMasterServer) { _, _ in
@@ -165,10 +169,6 @@ public struct SettingsView: View {
             } footer: {
                 Text("A template opens as a new untitled document, so the template file itself is never changed except by Save as Template.")
             }
-            #endif
-
-            #if os(macOS) || os(iOS)
-            RemoteProducerSettingsSection()
             #endif
 
             Section {

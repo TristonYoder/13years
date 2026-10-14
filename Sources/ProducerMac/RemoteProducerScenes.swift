@@ -11,7 +11,8 @@ struct MacFileCommands: Commands {
     let flashingWindow: PagerFlashingWindowController
 
     private var isLocalDisabled: Bool { hub.isRemoteActive }
-    private var isDocumentActionsEnabled: Bool { !documents.isLauncherPresented && !isLocalDisabled }
+    private var isDocumentActionsEnabled: Bool { hub.isRemoteActive || !documents.isLauncherPresented }
+    private var activeEngine: CueEngine { hub.session?.engine ?? engine }
     private var isOpenEnabled: Bool { hub.isRemoteActive || !documents.isLauncherPresented }
 
     var body: some Commands {
@@ -38,23 +39,22 @@ struct MacFileCommands: Commands {
                 .disabled(!hub.isRemoteActive)
         }
         CommandGroup(replacing: .saveItem) {
-            Button("Save") { documents.save(engine) }
+            Button("Save") { documents.save(activeEngine) }
                 .keyboardShortcut("s")
                 .disabled(!isDocumentActionsEnabled)
-            Button("Save As…") { documents.saveAs(engine) }
+            Button("Save As…") { documents.saveAs(activeEngine) }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(!isDocumentActionsEnabled)
             Button("Revert to Last Save") { documents.revert(engine) }
-                .disabled(!documents.canRevert || !isDocumentActionsEnabled)
-            Button("Save as Template…") { documents.saveAsTemplate(engine) }
+                .disabled(!documents.canRevert || !isDocumentActionsEnabled || hub.isRemoteActive)
+            Button("Save as Template…") { documents.saveAsTemplate(activeEngine) }
                 .disabled(!isDocumentActionsEnabled)
         }
         CommandGroup(after: .newItem) {
             Button("Flash a Pager…") {
-                flashingWindow.present(cueEngine: engine)
+                flashingWindow.present(cueEngine: activeEngine)
             }
             .keyboardShortcut("F", modifiers: [.command, .shift])
-            .disabled(isLocalDisabled)
         }
     }
 }

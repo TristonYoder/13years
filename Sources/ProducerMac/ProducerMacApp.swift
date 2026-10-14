@@ -58,7 +58,6 @@ struct ProducerMacApp: App {
     var body: some Scene {
         Window("13 Years Producer", id: "main") {
             mainContent
-                .environment(\.remoteLAN, remoteHub.lan)
                 .background(WindowCloseHandler(
                     decide: { WindowClosePolicy.decide(isRemoteActive: remoteHub.isRemoteActive, isLauncherPresented: documents.isLauncherPresented) },
                     disconnect: { remoteHub.disconnect() }

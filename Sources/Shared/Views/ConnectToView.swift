@@ -222,14 +222,6 @@ struct RemoteProducerContainerView: View {
     var body: some View {
         VStack(spacing: 0) {
             banner
-            if let status = lan.statusText {
-                Text(status)
-                    .font(.caption)
-                    .foregroundStyle(lan.isError ? Color.red : Color.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 3)
-            }
             ProducerRootView()
                 .id(session.id)
                 .environmentObject(session.engine)
@@ -241,6 +233,9 @@ struct RemoteProducerContainerView: View {
                 }
         }
         .id(session.id)
+        #if os(macOS)
+        .ignoresSafeArea(.container, edges: .top)
+        #endif
     }
 
     private var isWarning: Bool {
@@ -269,6 +264,9 @@ struct RemoteProducerContainerView: View {
                     Button("Reconnect now") { session.reconnectNow() }
                         .buttonStyle(.borderedProminent)
                         .tint(.black)
+                        #if os(macOS)
+                        .controlSize(.small)
+                        #endif
                 }
                 #if os(iOS)
                 Menu {
@@ -280,6 +278,17 @@ struct RemoteProducerContainerView: View {
                 .tint(foreground)
                 #endif
             }
+            .foregroundStyle(foreground)
+            #if os(macOS)
+            .padding(.leading, 78)
+            .padding(.trailing, 14)
+            .frame(height: 28)
+            #else
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            #endif
+            .background(background)
+
             if !session.recentErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(session.recentErrors) { note in
@@ -297,21 +306,12 @@ struct RemoteProducerContainerView: View {
                         .foregroundStyle(.white)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(background)
                 .onTapGesture { session.dismissError() }
             }
         }
-        .foregroundStyle(foreground)
-        #if os(macOS)
-        .padding(.leading, 70)
-        .padding(.trailing, 14)
-        .padding(.vertical, 10)
-        .frame(minHeight: 38)
-        #else
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        #endif
-        .background(background)
     }
 
     @ViewBuilder
@@ -347,29 +347,14 @@ struct RemoteProducerContainerView: View {
     }
 }
 
-private struct RemoteLANCoordinatorKey: EnvironmentKey {
-    static let defaultValue: RemoteLANCoordinator? = nil
-}
-
-extension EnvironmentValues {
-    var remoteLAN: RemoteLANCoordinator? {
-        get { self[RemoteLANCoordinatorKey.self] }
-        set { self[RemoteLANCoordinatorKey.self] = newValue }
-    }
-}
-
 struct RemoteProducerSettingsSection: View {
-    @Environment(\.remoteLAN) private var lan
-
     var body: some View {
-        if let lan {
-            Section {
-                RemoteLANModePicker(lan: lan)
-            } header: {
-                Text("Remote Producer")
-            } footer: {
-                Text("Applies to the next remote session you start with Connect To…. It has no effect on this device’s own pagers.")
-            }
+        Section {
+            RemoteLANModePicker(lan: RemoteLANCoordinator.shared)
+        } header: {
+            Text("Remote Producer")
+        } footer: {
+            Text("Applies to the next remote session you start with Connect To…. It has no effect on this device’s own pagers.")
         }
     }
 }

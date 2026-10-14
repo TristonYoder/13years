@@ -45,7 +45,9 @@ final class IOSDocumentController: ObservableObject {
 
     var recentURLs: [URL] { recents.compactMap(\.url) }
 
-    var isDocumentActionsEnabled: Bool { !isLauncherPresented && !isRemoteActive }
+    var isDocumentActionsEnabled: Bool { isRemoteActive || !isLauncherPresented }
+
+    private func source(_ engine: CueEngine) -> CueEngine { remoteSession?.engine ?? engine }
 
     private static var blankFile: ProducerDocumentFile {
         ProducerDocumentFile(ProducerDocument(
@@ -146,15 +148,18 @@ final class IOSDocumentController: ObservableObject {
         isExporting = true
     }
 
-    func save(_ engine: CueEngine) {
+    func save(_ local: CueEngine) {
+        let engine = source(local)
         guard let url = engine.currentDocumentURL else {
             saveAs(engine)
             return
         }
         do {
             try Self.coordinatedWrite(engine.makeDocument(), to: url)
-            autosaver?.reseed()
-            autosaver?.markManualSave()
+            if !engine.isRemoteMirror {
+                autosaver?.reseed()
+                autosaver?.markManualSave()
+            }
         } catch {
             errorMessage = "Couldn’t save “\(url.lastPathComponent)”. \(error.localizedDescription)"
         }
@@ -246,15 +251,17 @@ final class IOSDocumentController: ObservableObject {
         Binding(get: { self.errorMessage != nil }, set: { if !$0 { self.errorMessage = nil } })
     }
 
-    func saveAs(_ engine: CueEngine) {
+    func saveAs(_ local: CueEngine) {
+        let engine = source(local)
         exportFile = ProducerDocumentFile(engine.makeDocument())
-        exportFilename = engine.currentDocumentURL.map { RecentDocuments.title(for: $0) } ?? "Untitled"
+        exportFilename = engine.currentDocumentURL.map { RecentDocuments.title(for: $0) }
+            ?? (engine.isRemoteMirror ? (engine.remoteProducerName ?? "Remote Producer") : "Untitled")
         exportPurpose = .saveAs
         isExporting = true
     }
 
-    func saveAsTemplate(_ engine: CueEngine) {
-        exportFile = ProducerDocumentFile(engine.makeDocument(), isTemplate: true)
+    func saveAsTemplate(_ local: CueEngine) {
+        exportFile = ProducerDocumentFile(source(local).makeDocument(), isTemplate: true)
         exportFilename = "Untitled Template"
         exportPurpose = .copy
         isExporting = true
@@ -281,10 +288,13 @@ final class IOSDocumentController: ObservableObject {
             case .copy:
                 break
             case .saveAs:
-                engine.currentDocumentURL = url
+                let target = source(engine)
+                target.currentDocumentURL = url
                 noteRecent(url)
-                autosaver?.reseed()
-                autosaver?.markManualSave()
+                if !target.isRemoteMirror {
+                    autosaver?.reseed()
+                    autosaver?.markManualSave()
+                }
             case .newDocument:
                 guard settle() else { return }
                 create(engine, content: nil, at: url)
@@ -409,7 +419,7 @@ struct DocumentCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(!documents.isDocumentActionsEnabled)
             Button("Revert to Last Save") { documents.isConfirmingRevert = true }
-                .disabled(!documents.canRevert || !documents.isDocumentActionsEnabled)
+                .disabled(!documents.canRevert || !documents.isDocumentActionsEnabled || documents.isRemoteActive)
             Button("Save as Template…") { documents.saveAsTemplate(engine) }
                 .disabled(!documents.isDocumentActionsEnabled)
         }

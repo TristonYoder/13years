@@ -156,7 +156,7 @@ final class DocumentController: ObservableObject {
         panel.allowedContentTypes = [contentType]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = engine.currentDocumentURL?.lastPathComponent
-            ?? "Untitled.\(ProducerDocument.fileExtension)"
+            ?? "\(engine.isRemoteMirror ? (engine.remoteProducerName ?? "Remote Producer") : "Untitled").\(ProducerDocument.fileExtension)"
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return write(engine, to: url)
     }
@@ -362,9 +362,10 @@ final class DocumentController: ObservableObject {
             return false
         }
         engine.currentDocumentURL = url
+        noteRecent(url)
+        if engine.isRemoteMirror { return true }
         discardedOnClose = false
         isLauncherPresented = false
-        noteRecent(url)
         autosaver?.reseed()
         autosaver?.markManualSave()
         return true

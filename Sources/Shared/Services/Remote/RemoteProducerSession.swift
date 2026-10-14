@@ -640,7 +640,7 @@ public final class RemoteProducerHub: ObservableObject {
     @Published public var requestedEndpoint: RemoteEndpoint?
     public var pending: RemoteProducerSession?
     public var onActivated: ((RemoteProducerSession) -> Void)?
-    public let lan = RemoteLANCoordinator()
+    public let lan = RemoteLANCoordinator.shared
 
     public init() {}
 

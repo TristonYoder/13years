@@ -7,6 +7,8 @@ import Combine
 
 @MainActor
 public final class RemoteLANCoordinator: ObservableObject {
+    public static let shared = RemoteLANCoordinator()
+
     @Published public var mode: RemoteLANMode {
         didSet {
             guard mode != oldValue else { return }

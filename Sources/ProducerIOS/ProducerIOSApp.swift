@@ -56,7 +56,6 @@ struct ProducerIOSApp: App {
     var body: some Scene {
         WindowGroup {
             mainContent
-                .environment(\.remoteLAN, remoteHub.lan)
                 .environmentObject(launchPreferences)
                 .splashScreen(isPresented: splash.isPresented)
                 .task {
