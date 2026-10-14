@@ -24,9 +24,30 @@ struct ProducerHostField: View {
     var body: some View {
         VStack(spacing: Self.isTV ? 20 : 10) {
             HStack(spacing: Self.isTV ? 20 : 10) {
-                TextField("IP or hostname, optional :port", text: $text)
+                TextField(
+                    "",
+                    text: $text,
+                    prompt: Text("IP or hostname, optional :port").foregroundColor(.white.opacity(0.45))
+                )
+                    .textFieldStyle(.plain)
                     .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
-                    .foregroundColor(primary)
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .tint(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Self.isTV ? 24 : 12)
+                    .padding(.vertical, Self.isTV ? 16 : 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: Self.isTV ? 16 : 8, style: .continuous)
+                            .fill(Color.white.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.isTV ? 16 : 8, style: .continuous)
+                            .stroke(Color.white.opacity(focused ? 0.45 : 0.22), lineWidth: 1)
+                    )
+                    #if os(macOS)
+                    .focusEffectDisabled()
+                    #endif
                     .focused($focused)
                     .autocorrectionDisabled()
                     #if os(iOS)
