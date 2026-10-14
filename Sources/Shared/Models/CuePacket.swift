@@ -111,7 +111,7 @@ public struct CuePacket: Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decode(PacketType.self, forKey: .type)
-        timestamp = try container.decode(Double.self, forKey: .timestamp)
+        timestamp = try container.decodeIfPresent(Double.self, forKey: .timestamp) ?? Date().timeIntervalSince1970
         senderId = try container.decode(String.self, forKey: .senderId)
         roleCues = try container.decodeIfPresent([RoleCue].self, forKey: .roleCues)
         timerItem = try container.decodeIfPresent(PCOTimerItem.self, forKey: .timerItem)
