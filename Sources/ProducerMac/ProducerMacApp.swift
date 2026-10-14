@@ -98,7 +98,7 @@ struct ProducerMacApp: App {
                     splash.markReady()
                     remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
-                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
+                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
                     guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }

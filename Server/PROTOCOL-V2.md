@@ -214,3 +214,17 @@ Role messages remain in the thread; this rule only decides what a pager screen s
 
 The Swift pager offers the lower third described for the web pager: one strip with the clock (replaced by the cue word while STANDBY or GO), the element name and the countdown with its PROJECTED/ACTUAL tag; a standing message replaces the clock and the title. It is used when the viewer chooses Lower third in settings, or automatically when the window is at least 3:1 wide. Tapping the strip reveals the role chooser, messages and settings for six seconds. Not offered on tvOS.
 
+
+## Assigning a pager to a producer (ASSIGN_PRODUCER)
+
+A producer (or any app) can point a pager at a clock server with one UDP datagram to the pager's port 13381:
+
+```json
+{"type":"ASSIGN_PRODUCER","host":"192.168.1.20","port":13380,"mode":"introducer"}
+```
+
+- `host` (required): IPv4 address or hostname of the server the pager should connect to. Any well-formed host is accepted, public or private.
+- `port` (optional): the pager TCP port, 1-65535, default 13380. A packet with a port outside that range is ignored.
+- `mode` (optional): `"introducer"` marks a packet whose `host` is not the sender, as when a Producer in a remote session introduces a pager to the remote clock server. Without it the pager only accepts a packet whose `host` equals the datagram's source address, so a third party cannot redirect it.
+
+The pager remembers the host and port and reconnects to them until it is told to forget the assignment. A Producer sends its own address (no `port`, no `mode`) when it serves the pager itself, including a remote session in Local Relay mode; in Introducer or Control Only mode it sends the remote server's IPv4, its `network.lanPort`, and `"mode":"introducer"`.

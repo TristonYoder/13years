@@ -170,15 +170,17 @@ final class IOSDocumentController: ObservableObject {
         open(url, in: engine)
     }
 
-    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine, connectRemote: @escaping (RemoteEndpoint) -> Void) {
         guard !hasScheduledLaunchBehavior else { return }
         hasScheduledLaunchBehavior = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard let self, !self.openedByURL, self.isLauncherPresented else { return }
-            switch preferences.behavior {
+            switch preferences.action {
             case .showLauncher:
                 return
+            case .connectRemote(let endpoint):
+                connectRemote(endpoint)
             case .reopenLast:
                 guard let url = self.recentURLs.first else { return }
                 self.openRecent(url, in: engine)

@@ -7,6 +7,11 @@ import Foundation
 public protocol RemoteProducerCommanding: AnyObject {
     func send(_ command: RemoteCommand)
     func request(_ command: RemoteCommand) async throws -> Data
+    var assignContext: RemoteAssignContext? { get }
+}
+
+public extension RemoteProducerCommanding {
+    var assignContext: RemoteAssignContext? { nil }
 }
 
 public enum RemoteCommand: Equatable, Sendable {
@@ -59,6 +64,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoDefaultServiceType(id: String?)
     case pcoLiveSync(Bool)
     case loadDocument(body: Data)
+    case hourFormat(String)
 
     public var isIdempotent: Bool {
         switch self {
@@ -179,6 +185,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/live-sync", ["enabled": enabled])
         case .loadDocument(let body):
             return Request(method: "PUT", path: "/v1/document", body: body)
+        case .hourFormat(let raw):
+            return Request(method: "PUT", path: "/v1/settings", body: Self.json(["hourFormatThreshold": raw]))
         }
     }
 

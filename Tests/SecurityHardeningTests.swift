@@ -257,10 +257,10 @@ final class SecurityHardeningTests: XCTestCase {
     }
 
     func testAssignedHostPolicy() {
-        for host in ["192.168.1.20", "10.1.2.3", "172.16.0.1", "172.31.255.254", "169.254.10.10", "100.64.0.1", "100.127.255.254", "127.0.0.1", "producer.local", "My-Mac.local"] {
+        for host in ["192.168.1.20", "10.1.2.3", "172.16.0.1", "172.31.255.254", "169.254.10.10", "100.64.0.1", "100.127.255.254", "127.0.0.1", "producer.local", "My-Mac.local", "8.8.8.8", "203.0.113.9", "clock.example.com"] {
             XCTAssertTrue(AssignedHostPolicy.isAcceptable(host), host)
         }
-        for host in ["8.8.8.8", "172.32.0.1", "172.15.0.1", "100.63.255.255", "100.128.0.1", "192.169.1.1", "evil.example.com", "producer.local.evil.com", "1.2.3", "256.1.1.1", "", " ", "::1", ".local", "a b.local", "010.1.1.1.5"] {
+        for host in ["1.2.3", "256.1.1.1", "", " ", "::1", ".local", "a b.local", "010.1.1.1.5"] {
             XCTAssertFalse(AssignedHostPolicy.isAcceptable(host), host)
         }
     }

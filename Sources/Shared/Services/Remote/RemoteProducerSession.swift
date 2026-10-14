@@ -73,6 +73,10 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
     public let id = UUID()
 
     public let endpoint: RemoteEndpoint
+
+    public var assignContext: RemoteAssignContext? {
+        RemoteAssignContext(endpointHost: endpoint.host, lanPort: state?.network.lanPort, lanMode: RemoteLANCoordinator.shared.mode)
+    }
     public let engine: CueEngine
 
     private let http: RemoteProducerHTTP

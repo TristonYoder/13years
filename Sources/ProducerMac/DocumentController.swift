@@ -247,20 +247,22 @@ final class DocumentController: ObservableObject {
         return created
     }
 
-    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine, connectRemote: @escaping (RemoteEndpoint) -> Void) {
         guard !hasScheduledLaunchBehavior else { return }
         hasScheduledLaunchBehavior = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard let self, !self.openedByURL, self.isLauncherPresented else { return }
-            self.runLaunchBehavior(preferences, engine: engine)
+            self.runLaunchBehavior(preferences, engine: engine, connectRemote: connectRemote)
         }
     }
 
-    private func runLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
-        switch preferences.behavior {
+    private func runLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine, connectRemote: (RemoteEndpoint) -> Void) {
+        switch preferences.action {
         case .showLauncher:
             return
+        case .connectRemote(let endpoint):
+            connectRemote(endpoint)
         case .reopenLast:
             guard let url = recentURLs.first else { return }
             open(url, in: engine)

@@ -86,3 +86,10 @@ extension CueEngine {
         if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }
+
+extension CueEngine {
+    public func setHourFormatThreshold(_ threshold: HourFormatThreshold) {
+        hourFormatThreshold = threshold
+        if isRemoteMirror { remoteCommands?.send(.hourFormat(threshold.rawValue)) }
+    }
+}

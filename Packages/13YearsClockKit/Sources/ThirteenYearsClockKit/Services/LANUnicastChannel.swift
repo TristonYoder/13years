@@ -416,16 +416,11 @@ public final class LANUnicastClient: @unchecked Sendable {
 
     private func handleAssignPing(_ data: Data, senderIP: String?) {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              json["type"] as? String == "ASSIGN_PRODUCER",
-              let host = json["host"] as? String, !host.isEmpty else { return }
-        guard host == senderIP else {
-            AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER whose host does not match the sender")
+              let accepted = AssignProducerPolicy.accept(json, senderIP: senderIP) else {
+            AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER")
             return
         }
-        guard AssignedHostPolicy.isAcceptable(host) else {
-            AppLog.networking.error("LANUnicastClient: rejected ASSIGN_PRODUCER with a non-local host \(host, privacy: .private)")
-            return
-        }
+        let host = accepted.endpoint
         queue.async { [self] in
             guard manualHost == nil else {
                 AppLog.networking.info("LANUnicastClient: ignoring ASSIGN_PRODUCER because a manual host is set")
@@ -444,7 +439,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     }
 
     private static func loadAssignedHost() -> String? {
-        UserDefaults.standard.string(forKey: assignedHostDefaultsKey).flatMap { AssignedHostPolicy.isAcceptable($0) ? $0 : nil }
+        UserDefaults.standard.string(forKey: assignedHostDefaultsKey).flatMap { AssignProducerPolicy.parseStored($0)?.endpoint }
     }
 
     private static func ipString(from endpoint: NWEndpoint?) -> String? {

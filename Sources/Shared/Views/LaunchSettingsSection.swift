@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 struct LaunchSettingsSection: View {
     @EnvironmentObject var preferences: LaunchPreferences
     @State private var isChoosingFile = false
+    var recentRemoteHosts: [RecentItem] = RecentItems.load(defaults: .standard).items.filter { $0.kind == .remoteHost }
 
     private var fileTypes: [UTType] {
         [
@@ -22,6 +23,34 @@ struct LaunchSettingsSection: View {
         Picker("When the app opens", selection: $preferences.behavior) {
             ForEach(LaunchBehavior.allCases) { behavior in
                 Text(behavior.title).tag(behavior)
+            }
+        }
+
+        if preferences.behavior == .connectRemote {
+            if !recentRemoteHosts.isEmpty {
+                Picker("Recent hosts", selection: $preferences.remoteAddress) {
+                    Text("Choose…").tag("")
+                    ForEach(recentRemoteHosts) { item in
+                        if let endpoint = item.endpoint {
+                            Text("\(item.title) — \(endpoint.address)").tag(endpoint.address)
+                        }
+                    }
+                }
+            }
+            TextField("host or host:port", text: $preferences.remoteAddress)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                #endif
+            if preferences.action == .showLauncher {
+                Text("Enter a valid host to connect on launch. Until then the start window opens.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("If it can’t be reached, the start window opens with the error.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
 

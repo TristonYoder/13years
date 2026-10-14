@@ -62,7 +62,7 @@ struct ProducerIOSApp: App {
                     splash.markReady()
                     remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
-                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
+                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { documents.flushForBackground() }

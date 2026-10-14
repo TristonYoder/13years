@@ -7,10 +7,9 @@ public enum AssignedHostPolicy {
     public static func isAcceptable(_ host: String) -> Bool {
         let value = host.trimmingCharacters(in: .whitespaces)
         guard !value.isEmpty, value.count <= 253 else { return false }
-        if let octets = ipv4Octets(value) {
-            return isPrivateOrLocal(octets)
-        }
-        return isMulticastDNSName(value)
+        if ipv4Octets(value) != nil { return true }
+        if value.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) { return false }
+        return ManualHostPolicy.isHostname(value)
     }
 
     static func ipv4Octets(_ value: String) -> [Int]? {

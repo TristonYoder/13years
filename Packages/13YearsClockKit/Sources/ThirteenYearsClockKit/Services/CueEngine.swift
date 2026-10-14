@@ -1826,15 +1826,17 @@ public final class CueEngine: ObservableObject {
 
     @discardableResult
     public func pingDevice(atIP ipString: String) -> Bool {
-        guard !isRemoteMirror else { return false }
-        guard let selfAddress = LocalNetworkAddress.ipv4String() else {
-            AppLog.networking.error("pingDevice: couldn't determine this device's own LAN IP")
+        let context = isRemoteMirror ? remoteCommands?.assignContext : nil
+        guard let plan = AssignProducerPolicy.plan(
+            selfAddress: LocalNetworkAddress.ipv4String(),
+            remote: context,
+            resolveServer: AssignProducerPolicy.resolveIPv4
+        ) else {
+            AppLog.networking.error("pingDevice: couldn't determine the address to assign")
             return false
         }
-        guard let payload = try? JSONSerialization.data(withJSONObject: [
-            "type": "ASSIGN_PRODUCER",
-            "host": selfAddress,
-        ]) else { return false }
+        let selfAddress = plan.host
+        guard let payload = try? JSONSerialization.data(withJSONObject: plan.jsonObject) else { return false }
         #if canImport(Network)
         guard let port = NWEndpoint.Port(rawValue: LANUnicastServer.assignPort) else { return false }
 

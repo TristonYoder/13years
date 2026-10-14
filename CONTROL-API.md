@@ -360,7 +360,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 |-------|--------|---------|
 | `POST /v1/network/ping` | POST | Send a UDP ping to a device on the LAN to wake it or signal the app to go live. Body: `{"ip": "string"}` (required, non-empty). Returns 202 (fire-and-forget; UDP has no acknowledgement). Returns 503 if this device cannot determine its own LAN address. |
 | `POST /v1/network/forget-producer` | POST | Clear the assigned producer (client mode only). Returns the full state snapshot. |
-| `POST /v1/network/master` | POST | Switch between master and client mode. Body: `{"isMaster": boolean}`. Returns the full state snapshot. |
+| `POST /v1/network/master` | POST | **Deprecated** (Producers are always master; follow another Producer with Connect To…). Switch between master and client mode. Body: `{"isMaster": boolean}`. Returns the full state snapshot. |
 
 ### App Navigation
 
