@@ -61,7 +61,7 @@ everything it sends is handled exactly as before. Against a v2 producer
 - applies `CUE_DELTA` per role id, ignores packets with a lower `rev`
   (reset on every reconnect), and checks each `DIGEST` (FNV-1a 64 over roles,
   timer and message ids). A mismatch sends one catch-up `PING`.
-- treats the producer as lost after 25 s of silence (12 s for a legacy one).
+- treats the producer as lost after 20 s without any packet and shows the stale (dimmed, "Reconnecting...") look after 5 s; the next packet restores it at once.
 
 Spec v2.1 on the device: a changed `epoch` discards the anchor, rev gate and
 clock samples and triggers a sync burst plus one catch-up `PING`; packets with a
@@ -78,9 +78,8 @@ fallback when free heap is short; see `kRxBufPreferred` in `lan_client.cpp`).
 Larger frames are consumed and discarded without dropping the connection and a
 catch-up `PING` follows after 5 s. Packets are parsed with an ArduinoJson filter
 that keeps only the fields the pager uses. A parse failure is logged and
-requests a (rate-limited) catch-up. If the producer is silent for the
-staleness limit plus 5 s the pager sends one `PING`, and closes the socket if
-nothing arrives within another 5 s. `status` also prints free, minimum free and
+requests a (rate-limited) catch-up. If the producer is silent for
+5 s the pager sends one `PING`, and closes the socket to reconnect at 20 s. `status` also prints free, minimum free and
 largest-block heap.
 
 The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly) lives in

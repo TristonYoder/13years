@@ -574,11 +574,18 @@ static void testCueDisplay() {
 static void testLinkPhase() {
   using pagersync::LinkPhase;
   CHECK(pagersync::linkPhase(0) == LinkPhase::Live);
-  CHECK(pagersync::linkPhase(11999) == LinkPhase::Live);
-  CHECK(pagersync::linkPhase(12000) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(4999) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(5000) == LinkPhase::Stale);
   CHECK(pagersync::linkPhase(19999) == LinkPhase::Stale);
-  CHECK(pagersync::linkPhase(20000) == LinkPhase::Extended);
-  CHECK(pagersync::linkPhase(600000) == LinkPhase::Extended);
+  CHECK(pagersync::linkPhase(20000) == LinkPhase::Lost);
+  CHECK(pagersync::linkPhase(600000) == LinkPhase::Lost);
+  CHECK(pagersync::STALE_AFTER_MS == 5000 && pagersync::LOST_AFTER_MS == 20000);
+  CHECK(pagersync::msSince(10, 4294967290u) == 16);
+  CHECK(pagersync::linkPhase(pagersync::msSince(4998, 4294967295u)) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(pagersync::msSince(4999, 4294967295u)) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(pagersync::msSince(19998, 0xFFFFFFFFu)) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(pagersync::msSince(19999, 0xFFFFFFFFu)) == LinkPhase::Lost);
+  CHECK(pagersync::linkPhase(pagersync::msSince(100, 0xFFFFFF00u)) == LinkPhase::Live);
   CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Live), "Live");
   CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Stale), "Disconnected - retrying");
   CHECK_STR(pagersync::linkStatusText(true, false, LinkPhase::Live), "Disconnected - retrying");

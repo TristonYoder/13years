@@ -116,7 +116,6 @@ public:
   bool takeCatchUpRequest();
   bool takeSyncBurstRequest();
   unsigned long silenceMs() const { return millis() - lastRxAnyMillis_; }
-  unsigned long stalenessLimitMs() const { return producerV2_ ? kProducerStalenessV2Ms : kProducerStalenessMs; }
 
   const String &selectedRoleIdRef() const { return selectedRoleId_; }
   const RoleView *activeRoleRef() const;
@@ -145,8 +144,7 @@ public:
 
   bool hasSyncedWithProducer() const { return hasSyncedWithProducer_; }
   bool isProducerLive() const {
-    unsigned long limit = producerV2_ ? kProducerStalenessV2Ms : kProducerStalenessMs;
-    return hasSyncedWithProducer_ && (millis() - lastProducerPacketAtMillis_ < limit);
+    return hasSyncedWithProducer_ && pagersync::linkPhase(pagersync::msSince(millis(), lastRxAnyMillis_)) != pagersync::LinkPhase::Lost;
   }
 
   void (*onCueTransition)(CueState newState) = nullptr;
@@ -156,8 +154,6 @@ private:
   static const int kMaxRoles = 8;
   static const int kMaxMessages = 16;
   static const int kMaxNoteCategories = 6;
-  static const unsigned long kProducerStalenessMs = 12000;
-  static const unsigned long kProducerStalenessV2Ms = 25000;
   static const int kMaxMessageMismatchStreak = 2;
   static const unsigned long kCatchUpRateLimitMs = 5000;
   static constexpr double kMaxMonotonicOffsetMs = 4.2e12;

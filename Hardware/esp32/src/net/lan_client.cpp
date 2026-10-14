@@ -54,9 +54,7 @@ static const unsigned long kOversizeCatchUpBackoffMs = 5000;
 static bool oversizeCatchUpPending = false;
 static unsigned long oversizeCatchUpAt = 0;
 
-static const unsigned long kWatchdogGraceMs = 5000;
 static bool watchdogPinged = false;
-static unsigned long watchdogPingAt = 0;
 
 static const int kConnectTimeoutMs = 3000;
 
@@ -272,25 +270,24 @@ static void serviceReceive() {
 
 static void serviceWatchdog() {
   if (!engineRef) return;
-  unsigned long limit = engineRef->stalenessLimitMs() + kWatchdogGraceMs;
   unsigned long silence = engineRef->silenceMs();
-  if (silence <= limit) {
+  pagersync::LinkPhase phase = pagersync::linkPhase((int64_t)silence);
+  if (phase == pagersync::LinkPhase::Live) {
     watchdogPinged = false;
     return;
   }
   unsigned long now = millis();
+  if (phase == pagersync::LinkPhase::Lost) {
+    Serial.printf("[lan] producer silent for %lums — closing socket to reconnect\n", silence);
+    watchdogPinged = false;
+    client.stop();
+    return;
+  }
   if (!watchdogPinged) {
     Serial.printf("[lan] producer silent for %lums — sending catch-up PING\n", silence);
     sendPing();
     lastPingAt = now;
     watchdogPinged = true;
-    watchdogPingAt = now;
-    return;
-  }
-  if (now - watchdogPingAt >= kWatchdogGraceMs) {
-    Serial.println("[lan] no answer to watchdog PING — closing socket to reconnect");
-    watchdogPinged = false;
-    client.stop();
   }
 }
 
