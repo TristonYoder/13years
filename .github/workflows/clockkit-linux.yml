@@ -1,0 +1,44 @@
+name: ClockKit (Linux)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Packages/13YearsClockKit/**'
+      - 'Package.swift'
+      - '.github/workflows/clockkit-linux.yml'
+  pull_request:
+    paths:
+      - 'Packages/13YearsClockKit/**'
+      - 'Package.swift'
+      - '.github/workflows/clockkit-linux.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: swift build (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.3.3-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/13YearsClockKit/.build
+            .build
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('Packages/13YearsClockKit/Package.resolved', 'Package.resolved') }}
+          restore-keys: swiftpm-${{ runner.os }}-
+
+      - name: Build ThirteenYearsClockKit package
+        working-directory: Packages/13YearsClockKit
+        run: swift build
+
+      - name: Build root package
+        run: |
+          if [ -f Package.swift ]; then
+            swift build
+          else
+            echo "No root Package.swift; skipping."
+          fi

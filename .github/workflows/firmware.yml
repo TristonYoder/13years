@@ -42,6 +42,14 @@ jobs:
       - name: Build, merge and verify
         run: Hardware/esp32/tools/build-firmware.py
 
+      - name: Host tests (sync logic)
+        working-directory: Hardware/esp32
+        run: |
+          INC=""
+          [ -d .pio/libdeps/cyd/ArduinoJson/src ] && INC="-I.pio/libdeps/cyd/ArduinoJson/src"
+          g++ -std=c++17 -Wall -o "$RUNNER_TEMP/test_sync" tools/test_sync.cpp $INC
+          "$RUNNER_TEMP/test_sync"
+
       - name: Check the bundled firmware is not stale
         shell: bash
         run: |
