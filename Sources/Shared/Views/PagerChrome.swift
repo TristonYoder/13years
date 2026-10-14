@@ -213,6 +213,59 @@ public enum PagerConnectionState: Equatable, Sendable {
     }
 }
 
+public enum PagerLinkIndicator: Equatable, Sendable {
+    case live
+    case waitingForProducer
+    case connecting(host: String)
+    case problem(String)
+    case notConnected
+
+    public init(isMasterServer: Bool, isLANConnected: Bool, isProducerLive: Bool, link: ProducerLinkStatus) {
+        if isMasterServer {
+            self = .live
+            return
+        }
+        if link.isProblem, let message = link.message {
+            self = .problem(message)
+            return
+        }
+        guard isLANConnected else {
+            if case .connecting(let host) = link {
+                self = .connecting(host: host)
+            } else {
+                self = .notConnected
+            }
+            return
+        }
+        self = isProducerLive ? .live : .waitingForProducer
+    }
+
+    public var title: String {
+        switch self {
+        case .live: return "Live"
+        case .waitingForProducer: return "Connected, waiting for producer"
+        case .connecting(let host): return "Connecting to \(host)…"
+        case .problem(let message): return message
+        case .notConnected: return "Not connected"
+        }
+    }
+
+    public var tint: Color {
+        switch self {
+        case .live: return .green
+        case .waitingForProducer, .connecting: return .orange
+        case .problem, .notConnected: return .red
+        }
+    }
+
+    public var isLinked: Bool {
+        switch self {
+        case .live, .waitingForProducer: return true
+        default: return false
+        }
+    }
+}
+
 struct ChipMatchedColumn: Layout {
     let spacing: CGFloat
 

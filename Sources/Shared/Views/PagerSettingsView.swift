@@ -15,8 +15,13 @@ public struct PagerSettingsView: View {
 
     public init() {}
 
-    private var connectionState: PagerConnectionState {
-        PagerConnectionState(isProducerLive: engine.isMasterServer || engine.isProducerLive, isLANConnected: engine.isLANConnected)
+    private var linkIndicator: PagerLinkIndicator {
+        PagerLinkIndicator(
+            isMasterServer: engine.isMasterServer,
+            isLANConnected: engine.isLANConnected,
+            isProducerLive: engine.isProducerLive,
+            link: engine.producerLinkStatus
+        )
     }
 
     static func syncText(offsetMs: Double, rttMs: Double?) -> String {
@@ -104,12 +109,12 @@ public struct PagerSettingsView: View {
 
                 Section {
                     LabeledContent("Status") {
-                        Text(connectionState.title)
-                            .foregroundStyle(connectionState == .live ? Color.green : Color.red)
+                        Text(linkIndicator.title)
+                            .foregroundStyle(linkIndicator.tint)
                             .fontWeight(.medium)
                     }
                     LabeledContent("Producer") {
-                        Text(engine.connectedMasterName ?? "—")
+                        Text(linkIndicator.isLinked ? (engine.connectedMasterName ?? "—") : "—")
                             .foregroundStyle(.secondary)
                     }
                     if let offset = engine.clockEstimator.offsetMs {
@@ -124,7 +129,7 @@ public struct PagerSettingsView: View {
                 }
 
                 Section {
-                    if let master = engine.connectedMasterName {
+                    if let master = engine.connectedMasterName, linkIndicator.isLinked {
                         LabeledContent("Connected Master") {
                             Text(master)
                                 .foregroundStyle(.green)
