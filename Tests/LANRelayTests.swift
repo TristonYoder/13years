@@ -99,4 +99,48 @@ final class LANRelayTests: XCTestCase {
         client.cancel()
         wait(for: [dropped], timeout: 10)
     }
+    func testIntroducerNeverCarriesTraffic() throws {
+        let upstream = try NWListener(using: .tcp)
+        let queue = DispatchQueue(label: "test.introducer.upstream")
+        let upstreamReady = expectation(description: "upstream ready")
+        var upstreamConnections = 0
+        upstream.newConnectionHandler = { connection in
+            upstreamConnections += 1
+            connection.cancel()
+        }
+        upstream.stateUpdateHandler = { if case .ready = $0 { upstreamReady.fulfill() } }
+        upstream.start(queue: queue)
+        wait(for: [upstreamReady], timeout: 5)
+        let upstreamPort = try XCTUnwrap(upstream.port?.rawValue)
+        defer { upstream.cancel() }
+
+        let relay = LANRelayService(listenPort: 0, advertise: false)
+        let ready = expectation(description: "introducer ready")
+        ready.assertForOverFulfill = false
+        relay.onStatusChanged = { if case .advertising = relay.state { ready.fulfill() } }
+        relay.start(mode: .introducer, upstreamHost: "127.0.0.1", upstreamPort: upstreamPort, advertisedName: "Test", deviceId: "did")
+        wait(for: [ready], timeout: 5)
+        defer { relay.stop() }
+        let relayPort = try XCTUnwrap(relay.boundPort)
+
+        let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: relayPort)!, using: .tcp)
+        let refused = expectation(description: "refused")
+        refused.assertForOverFulfill = false
+        client.stateUpdateHandler = { state in
+            if case .ready = state {
+                client.send(content: Data("ping".utf8), completion: .contentProcessed { _ in })
+                client.receive(minimumIncompleteLength: 1, maximumLength: 64) { data, _, done, error in
+                    if (data ?? Data()).isEmpty && (done || error != nil) { refused.fulfill() }
+                }
+            }
+            if case .failed = state { refused.fulfill() }
+            if case .cancelled = state { refused.fulfill() }
+        }
+        client.start(queue: queue)
+        wait(for: [refused], timeout: 10)
+        client.cancel()
+        XCTAssertEqual(relay.relayedConnectionCount, 0)
+        XCTAssertEqual(upstreamConnections, 0)
+    }
+
 }

@@ -23,7 +23,7 @@ public enum RemoteLANMode: String, CaseIterable, Sendable {
         case .controlOnly:
             return "This Producer only controls the clock; pagers on this network are not served."
         case .introducer:
-            return "Advertises the clock server on this network so pagers connect to it directly (the server must be reachable from this network)."
+            return "Advertises the clock server on this network so pagers connect to it directly. This Producer carries no pager traffic, so pagers must be able to reach the server."
         case .localRelay:
             return "Pagers on this network connect to this Producer, which relays their feed to and from the clock server."
         }

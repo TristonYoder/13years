@@ -145,7 +145,14 @@ public final class LANRelayService: @unchecked Sendable {
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
-                self?.queue.async { self?.accept(connection, generation: generation) }
+                self?.queue.async {
+                    guard let self else { return }
+                    if self.mode == .introducer {
+                        connection.cancel()
+                        return
+                    }
+                    self.accept(connection, generation: generation)
+                }
             }
             self.listener = listener
             listener.start(queue: queue)

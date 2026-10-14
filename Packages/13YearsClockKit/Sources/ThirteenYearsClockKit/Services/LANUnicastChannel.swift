@@ -475,7 +475,15 @@ public final class LANUnicastClient: @unchecked Sendable {
             let target = LANDiscoveryRouting.target(serviceEndpoint: first.endpoint, txt: txtDictionary)
             let advertisedAPIPort = txtDictionary["apiport"].flatMap { Int($0) }
             self.queue.async {
+                guard !self.isConnectingToAssignedHost, self.manualHost == nil else { return }
+                let previous = self.lastDiscovered?.endpoint
                 self.lastDiscovered = (target.endpoint, name, target.advertisedIPv4, advertisedAPIPort)
+                if let current = self.connection, let previous, previous != target.endpoint {
+                    AppLog.networking.info("LANUnicastClient: discovery target changed, reconnecting")
+                    self.connection = nil
+                    current.cancel()
+                    DispatchQueue.main.async { [weak self] in self?.onStatusChanged?(false) }
+                }
                 self.connect(to: target.endpoint, masterName: name, advertisedIPv4: target.advertisedIPv4, advertisedAPIPort: advertisedAPIPort, isAssigned: false)
             }
         }
@@ -561,8 +569,14 @@ public final class LANUnicastClient: @unchecked Sendable {
             }
 
             guard let lastDiscovered else { return }
+            if !isConnectingToAssignedHost, manualHost == nil {
+                browser?.cancel()
+                browser = nil
+                startBrowsing()
+            }
             queue.asyncAfter(deadline: .now() + Self.reconnectInterval) { [weak self] in
                 guard let self, self.isRunning, self.connection == nil else { return }
+                let lastDiscovered = self.lastDiscovered ?? lastDiscovered
                 self.connect(to: lastDiscovered.endpoint, masterName: lastDiscovered.name, advertisedIPv4: lastDiscovered.advertisedIPv4, advertisedAPIPort: lastDiscovered.advertisedAPIPort, isAssigned: self.isConnectingToAssignedHost)
             }
         }
