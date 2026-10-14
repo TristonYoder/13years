@@ -207,14 +207,3 @@ private struct PagerPreviewPane: View {
         .frame(width: 380)
     }
 }
-
-private extension View {
-    @ViewBuilder
-    func compactControlSize() -> some View {
-        #if os(tvOS)
-        self
-        #else
-        self.controlSize(.small)
-        #endif
-    }
-}

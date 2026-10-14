@@ -528,7 +528,7 @@ private struct InlineItemEditor: View {
                         #endif
                     Button("Set") { commitDuration() }
                         .producerSecondaryButton()
-                        .controlSize(.small)
+                        .compactControlSize()
                 }
             }
 
@@ -586,7 +586,7 @@ private struct InlineItemEditor: View {
                 addCategory(trimmed)
                 newCategoryName = ""
             }
-            .controlSize(.small)
+            .compactControlSize()
             .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }

@@ -21,10 +21,13 @@ mkdir -p "$out/stage-producer" "$out/stage-pager"
 
 xcodegen generate
 
+team="${DEVELOPMENT_TEAM:-$(sed -n 's/^ *DEVELOPMENT_TEAM *= *//p' Config/Local.xcconfig 2>/dev/null | head -1)}"
+[ -n "$team" ] || { echo "DEVELOPMENT_TEAM missing (set it or add it to Config/Local.xcconfig)"; exit 1; }
+
 build() {
   xcodebuild -scheme "$1" -configuration Release -destination 'platform=macOS' \
     -derivedDataPath "$derived" -allowProvisioningUpdates \
-    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM="$team" \
     ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     OTHER_CODE_SIGN_FLAGS="--timestamp" build
 }
