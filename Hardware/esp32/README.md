@@ -430,8 +430,8 @@ fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
   under it while the link is lost. There is no `FOR: person`.
 - **Connection state.** The connection state (`Live`, `Disconnected - retrying`,
   `Not connected`), the producer name or address and the clock offset are shown
-  at the top of the role picker screen. After 12 s without a packet the pager
-  screen shows the marker; after 20 s without any packet it shows the
+  at the top of the role picker screen. After 5 s without a packet the pager
+  screen dims and shows `Reconnecting...`; after 20 s without any packet it shows the
   `Waiting for Producer...` logo screen until packets resume
   (`pagersync::linkPhase` in `src/sync/sync_core.h`, host-tested).
 - **Local time of day.** The producer's epoch time (synced offset applied to
