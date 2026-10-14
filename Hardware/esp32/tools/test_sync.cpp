@@ -607,6 +607,52 @@ static void testUtcOffsetFilter() {
 #endif
 }
 
+static void testReconnectKeepsState() {
+  using namespace pagersync;
+  CHECK(keepStateOnReconnect(0));
+  CHECK(keepStateOnReconnect(STALE_AFTER_MS));
+  CHECK(keepStateOnReconnect(LOST_AFTER_MS - 1));
+  CHECK(!keepStateOnReconnect(LOST_AFTER_MS));
+
+  Anchor a;
+  a.valid = true;
+  a.itemId = "t1";
+  a.lengthInSeconds = 600;
+  a.elapsedMs = 0;
+  a.anchorMs = 1000000;
+  a.isRunning = true;
+  RevGuard rev;
+  EpochTracker epoch;
+  OffsetEstimator clock;
+  CHECK(rev.accept(40));
+  CHECK(!epoch.observe(7));
+  CHECK(clock.addSample(1000, 1500, 1500, 1000));
+  double held = clock.offsetMs();
+
+  CHECK(a.valid);
+  CHECK_STR(a.itemId, "t1");
+  CHECK(clock.hasOffset());
+  CHECK_NEAR(clock.offsetMs(), held, 0.001);
+  CHECK(anchorRemainingSeconds(a, clock.producerNow(1000000 - held + 12000)) == 588);
+  CHECK(rev.highest == 40);
+
+  CHECK(rev.accept(40, RevKind::Rebase));
+  CHECK(rev.accept(41, RevKind::Rebase));
+  CHECK(rev.accept(41, RevKind::NotLower));
+  CHECK(!epoch.observe(7));
+  CHECK(a.valid);
+
+  CHECK(epoch.observe(8));
+  rev.reset();
+  clock.reset();
+  a = Anchor();
+  CHECK(!a.valid);
+  CHECK(!clock.hasOffset());
+  CHECK(rev.accept(1, RevKind::Strict, true));
+
+  CHECK(!keepStateOnReconnect(LOST_AFTER_MS + 1));
+}
+
 int main() {
   testEndpointParse();
   testHashVectors();
@@ -618,6 +664,7 @@ int main() {
   testAnchor();
   testRevGuard();
   testEpoch();
+  testReconnectKeepsState();
   testAnchorBounds();
   testMessageOrder();
   testSampleAging();

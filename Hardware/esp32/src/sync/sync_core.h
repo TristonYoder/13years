@@ -392,6 +392,10 @@ inline LinkPhase linkPhase(int64_t msSinceLastPacket) {
   return LinkPhase::Live;
 }
 
+inline bool keepStateOnReconnect(int64_t msSinceLastPacket) {
+  return linkPhase(msSinceLastPacket) != LinkPhase::Lost;
+}
+
 inline int64_t msSince(uint32_t nowMs, uint32_t thenMs) {
   return (int64_t)(uint32_t)(nowMs - thenMs);
 }
