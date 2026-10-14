@@ -194,13 +194,13 @@ final class SyncV2ProducerTests: SyncV2TestCase {
         XCTAssertTrue(outbox.targets(.timerUpdate).allSatisfy(\.isLegacyLAN))
         XCTAssertTrue(outbox.targets(.cueUpdate).allSatisfy(\.isLegacyLAN))
         XCTAssertTrue(outbox.packets(.timerAnchor).isEmpty)
-        XCTAssertTrue(outbox.packets(.digest).isEmpty)
+        XCTAssertEqual(outbox.packets(.digest).count, 2)
 
         for _ in 0..<5 {
             clock.value.addTimeInterval(1)
             engine.tickTimer()
         }
-        XCTAssertEqual(outbox.packets(.digest).count, 1)
+        XCTAssertEqual(outbox.packets(.digest).count, 5)
         XCTAssertTrue(outbox.targets(.digest).allSatisfy(\.isV2LAN))
         XCTAssertEqual(outbox.packets(.timerUpdate).count, 2)
         XCTAssertTrue(outbox.packets(.timerAnchor).isEmpty)
@@ -602,19 +602,99 @@ final class SyncV2ClientTests: SyncV2TestCase {
         XCTAssertFalse(engine.syncV2.catchUpInFlight)
     }
 
-    func testStalenessIsTwentyFiveSecondsForV2AndTwelveForLegacy() {
+    func testSignalTransitionsOnAnInjectedMonotonicClock() {
         let engine = makeClient()
-        engine.lastProducerPacketAt = Date().addingTimeInterval(-20)
-        engine.tickTimer()
-        XCTAssertFalse(engine.isProducerLive)
-
+        var mono = 1_000_000.0
+        engine.monotonicMsClock = { mono }
+        XCTAssertEqual(engine.producerSignal, .lost)
         engine.handlePacket(digest(rev: 1, hashes: engine.localHashes()))
-        engine.lastProducerPacketAt = Date().addingTimeInterval(-20)
-        engine.tickTimer()
+        XCTAssertEqual(engine.producerSignal, .live)
         XCTAssertTrue(engine.isProducerLive)
-        engine.lastProducerPacketAt = Date().addingTimeInterval(-30)
+        for (elapsed, expected) in [(4.9, ProducerSignal.live), (5.0, .stale), (19.9, .stale), (20.0, .lost)] {
+            mono = 1_000_000 + elapsed * 1000
+            engine.tickTimer()
+            XCTAssertEqual(engine.producerSignal, expected, "at \(elapsed)s")
+            XCTAssertEqual(engine.isProducerLive, expected != .lost, "at \(elapsed)s")
+        }
+        engine.handlePacket(digest(rev: 1, hashes: engine.localHashes()))
+        XCTAssertEqual(engine.producerSignal, .live)
+        XCTAssertTrue(engine.isProducerLive)
+    }
+
+    private func epochAnchor(rev: Int, epoch: Int, elapsedMs: Int) -> CuePacket {
+        let item = PCOTimerItem(id: "a", title: "Song", lengthInSeconds: 300, elapsedSeconds: 0, isRunning: true)
+        let anchor = TimerAnchor(itemId: "a", lengthInSeconds: 300, elapsedMs: elapsedMs, anchorMs: clock.ms, isRunning: true, isDurationActual: false)
+        var packet = anchorPacket(rev: rev, anchor: anchor, item: item)
+        packet.epoch = epoch
+        return packet
+    }
+
+    func testDisconnectKeepsTheClockRunningAndSameEpochReconnectIsAccepted() {
+        let engine = makeClient()
+        var mono = 1_000_000.0
+        engine.monotonicMsClock = { mono }
+        engine.handlePacket(epochAnchor(rev: 1, epoch: 1, elapsedMs: 10_000))
+        XCTAssertNotNil(engine.syncV2.held)
+        let before = engine.activeTimerItem?.elapsedSeconds ?? 0
+
+        engine.lanClientStatusChanged(false)
+        XCTAssertNotNil(engine.syncV2.held)
+        XCTAssertTrue(engine.syncV2.producerIsV2)
+        clock.value.addTimeInterval(3)
+        mono += 3_000
         engine.tickTimer()
-        XCTAssertFalse(engine.isProducerLive)
+        XCTAssertEqual(engine.activeTimerItem?.elapsedSeconds, before + 3)
+        XCTAssertEqual(engine.producerSignal, .live)
+
+        engine.lanClientStatusChanged(true)
+        var pong = CuePacket(type: .pong, senderId: "producer", roleCues: [])
+        pong.proto = 2
+        pong.rev = 1
+        pong.epoch = 1
+        engine.handlePacket(pong)
+        XCTAssertNotNil(engine.syncV2.held)
+        XCTAssertEqual(engine.syncV2.producerEpoch, 1)
+
+        engine.handlePacket(epochAnchor(rev: 1, epoch: 2, elapsedMs: 0))
+        XCTAssertEqual(engine.syncV2.producerEpoch, 2)
+    }
+
+    func testReachingLostResetsTheSyncState() {
+        let engine = makeClient()
+        var mono = 1_000_000.0
+        engine.monotonicMsClock = { mono }
+        engine.handlePacket(epochAnchor(rev: 1, epoch: 1, elapsedMs: 0))
+        XCTAssertNotNil(engine.syncV2.held)
+        engine.lanClientStatusChanged(false)
+        mono += 20_000
+        engine.tickTimer()
+        XCTAssertEqual(engine.producerSignal, .lost)
+        XCTAssertNil(engine.syncV2.held)
+    }
+
+    func testAMasterIsAlwaysLive() {
+        let engine = CueEngine(isMasterServer: true, startsNetworking: false)
+        engine.tickTimer()
+        XCTAssertEqual(engine.producerSignal, .live)
+    }
+
+    func testLegacyProducerGetsAWiderStaleMarginSoItsFiveSecondBeatDoesNotFlicker() {
+        let engine = makeClient()
+        var mono = 1_000_000.0
+        engine.monotonicMsClock = { mono }
+        engine.handlePacket(CuePacket(type: .timerUpdate, senderId: "producer"))
+        XCTAssertFalse(engine.syncV2.producerIsV2)
+        mono += 5_100
+        engine.tickTimer()
+        XCTAssertEqual(engine.producerSignal, .live)
+        mono += 3_000
+        engine.tickTimer()
+        XCTAssertEqual(engine.producerSignal, .stale)
+    }
+
+    func testDigestHeartbeatEveryTwoTicks() {
+        XCTAssertEqual(CueEngine.digestIntervalTicks, 2)
+        XCTAssertEqual(ControlAPIEventHub.digestInterval, 2)
     }
 
     func testEveryV2PacketCountsAsLiveness() {

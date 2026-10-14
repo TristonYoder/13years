@@ -199,6 +199,7 @@ targets:
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerDocument.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/Waypoint.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ServiceSchedule.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/ProducerSignal.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/SyncHash.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/API/ControlAPILimits.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/API/ControlAPIModels.swift

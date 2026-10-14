@@ -54,8 +54,7 @@ extension CueEngine {
     public static let syncBurstCount = 5
     static let syncBurstSpacing: TimeInterval = 0.1
     static let syncIntervalTicks = 30
-    static let digestIntervalTicks = 10
-    static let v2StalenessInterval: TimeInterval = 25
+    static let digestIntervalTicks = 2
     static let catchUpMessageLimit = 20
     static let maxCatchUpPongBytes = 4096
     static let legacyCatchUpMinGapMs = 5_000.0

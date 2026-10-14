@@ -11,7 +11,7 @@ import OpenCombine
 @MainActor
 public final class ControlAPIEventHub {
     private static let coalesceInterval: TimeInterval = 0.1
-    static let digestInterval: TimeInterval = 10
+    static let digestInterval: TimeInterval = 2
 
     private unowned let engine: CueEngine
     private unowned let broadcaster: ControlAPIBroadcaster

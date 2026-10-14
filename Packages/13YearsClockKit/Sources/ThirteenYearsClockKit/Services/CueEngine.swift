@@ -103,8 +103,8 @@ public final class CueEngine: ObservableObject {
     @Published public private(set) var producerLinkStatus: ProducerLinkStatus = .idle
     @Published public var isProducerLive: Bool = false
     @Published public var hasSyncedWithProducer: Bool = false
-    var lastProducerPacketAt: Date?
-    private static let producerStalenessInterval: TimeInterval = 12
+    @Published public private(set) var producerSignal: ProducerSignal = .lost
+    var lastProducerPacketMono: Double?
     @Published public var isProxyEnabled: Bool = false {
         didSet {
             write(isProxyEnabled, forKey: Self.proxyEnabledDefaultsKey)
@@ -313,7 +313,8 @@ public final class CueEngine: ObservableObject {
         syncV2.lastBroadcastRoles = nil
         syncV2.relayHasV2Peer = false
         cancelProducerDisplayTick()
-        lastProducerPacketAt = nil
+        lastProducerPacketMono = nil
+        producerSignal = isMasterServer ? .live : .lost
         connectedProducerHost = nil
         connectedProducerAPIPort = nil
         if isMasterServer {
@@ -338,16 +339,7 @@ public final class CueEngine: ObservableObject {
                 self?.handlePacket(packet, origin: .lanClient)
             }
             client.onStatusChanged = { [weak self] isJoined in
-                self?.isLANConnected = isJoined
-                if !isJoined {
-                    guard let self else { return }
-                    if !self.syncV2.relayLinked {
-                        self.resetClientSyncState()
-                        self.isProducerLive = false
-                    }
-                    self.connectedProducerHost = nil
-                    self.connectedProducerAPIPort = nil
-                }
+                self?.lanClientStatusChanged(isJoined)
             }
             client.onLinkStatusChanged = { [weak self] status in
                 self?.producerLinkStatus = status
@@ -2029,6 +2021,37 @@ public final class CueEngine: ObservableObject {
     var monotonicMsClock: () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000 }
     #endif
 
+    func lanClientStatusChanged(_ isJoined: Bool) {
+        isLANConnected = isJoined
+        if !isJoined {
+            connectedProducerHost = nil
+            connectedProducerAPIPort = nil
+        }
+    }
+
+    func noteProducerPacket() {
+        lastProducerPacketMono = monotonicMs
+        hasSyncedWithProducer = true
+        evaluateProducerSignal()
+    }
+
+    func evaluateProducerSignal() {
+        guard !isMasterServer else {
+            if producerSignal != .live { producerSignal = .live }
+            return
+        }
+        let silence = lastProducerPacketMono.map { max(0, monotonicMs - $0) / 1000 }
+        let staleAfter = syncV2.producerIsV2 ? ProducerSignal.staleAfter : ProducerSignal.legacyStaleAfter
+        let signal = ProducerSignal(silence: silence, staleAfter: staleAfter)
+        if producerSignal != signal {
+            let enteredLost = signal == .lost && producerSignal != .lost && lastProducerPacketMono != nil
+            producerSignal = signal
+            if enteredLost { resetClientSyncState() }
+        }
+        let live = signal != .lost
+        if isProducerLive != live { isProducerLive = live }
+    }
+
     func tickTimer() {
         guard !isRemoteMirror else { return }
         heartbeatTickCount += 1
@@ -2052,17 +2075,13 @@ public final class CueEngine: ObservableObject {
         }
 
         if !isMasterServer {
-            if let lastProducerPacketAt {
-                let limit = syncV2.producerIsV2 ? Self.v2StalenessInterval : Self.producerStalenessInterval
-                let silence = Date().timeIntervalSince(lastProducerPacketAt)
-                isProducerLive = silence < limit
-                if silence >= limit, isLANConnected, !isRemoteMirror {
-                    self.lastProducerPacketAt = nil
-                    client.reconnectNow()
-                }
-            } else {
-                isProducerLive = false
+            evaluateProducerSignal()
+            if producerSignal == .lost, lastProducerPacketMono != nil, isLANConnected, !isRemoteMirror {
+                lastProducerPacketMono = nil
+                client.reconnectNow()
             }
+        } else if producerSignal != .live {
+            producerSignal = .live
         }
 
         v2HeartbeatTick()
@@ -2215,14 +2234,10 @@ public final class CueEngine: ObservableObject {
 
         switch packet.type {
         case .cueUpdate, .timerUpdate, .pong:
-            lastProducerPacketAt = Date()
-            hasSyncedWithProducer = true
-            isProducerLive = true
+            noteProducerPacket()
         case .timerAnchor, .cueDelta, .digest, .syncReply:
             if !isMasterServer {
-                lastProducerPacketAt = Date()
-                hasSyncedWithProducer = true
-                isProducerLive = true
+                noteProducerPacket()
             }
         default:
             break

@@ -15,6 +15,8 @@ public final class WatchPagerModel: ObservableObject {
     @Published public private(set) var isReachable = false
     @Published public private(set) var lastError: String?
     @Published public private(set) var lastSuccessfulPollAt: Date?
+    @Published public private(set) var signal: ProducerSignal = .lost
+    @Published public private(set) var heartbeat = 0
 
     public var host: String { persistedHost }
     public var port: Int { persistedPort }
@@ -28,6 +30,7 @@ public final class WatchPagerModel: ObservableObject {
     public var currentState: CueState { presentation?.currentState ?? .off }
     public var roles: [RoleCue] { state?.roles ?? [] }
 
+    private var lastSuccessInstant: ContinuousClock.Instant?
     private var client: ProducerHTTPPagerClient?
     private var pollTask: Task<Void, Never>?
     private var seededInitialSnapshot = false
@@ -126,6 +129,8 @@ public final class WatchPagerModel: ObservableObject {
         seededInitialSnapshot = false
         lastMessageId = nil
         lastSuccessfulPollAt = nil
+        lastSuccessInstant = nil
+        signal = .lost
         pollTask?.cancel()
         pollTask = Task { await pollLoop() }
     }
@@ -134,6 +139,7 @@ public final class WatchPagerModel: ObservableObject {
         var nextTick = ContinuousClock.now
         while !Task.isCancelled {
             await pollOnce()
+            refreshSignal()
             nextTick += .seconds(1)
             let now = ContinuousClock.now
             if nextTick > now {
@@ -144,6 +150,13 @@ public final class WatchPagerModel: ObservableObject {
         }
     }
 
+    private func refreshSignal() {
+        let silence = lastSuccessInstant.map { Double($0.duration(to: .now).components.seconds) + Double($0.duration(to: .now).components.attoseconds) / 1e18 }
+        let next = ProducerSignal(silence: silence)
+        if signal != next { signal = next }
+        heartbeat &+= 1
+    }
+
     private func pollOnce() async {
         guard let client else { return }
         do {
@@ -152,6 +165,8 @@ public final class WatchPagerModel: ObservableObject {
             let previous = state
             state = fresh
             lastSuccessfulPollAt = Date.now
+            lastSuccessInstant = .now
+            signal = .live
             isReachable = true
             lastError = nil
 

@@ -453,7 +453,7 @@ Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PRO
 
 **Timer.** Every `timer` object carries `anchor` (see above). A v2 client runs its timer locally from `anchor` and `producerNow` and does not wait for ticks. On a v2 socket the `timer` event is sent only when something about the timer changes (start, pause, reset, adjust, item change, Projected/Actual change, live-sync correction), never once a second.
 
-**Digest.** Every 10 seconds a v2 socket receives
+**Digest.** Every 2 seconds a v2 socket receives
 
 ```json
 {
@@ -466,7 +466,7 @@ Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PRO
 }
 ```
 
-Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets.
+Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets. The digest doubles as the heartbeat: a client treats 5 seconds without any frame as a stale signal (grey the display) and 20 seconds as lost (show the connection error and reconnect). See `Server/PROTOCOL-V2.md`, section Signal loss and heartbeat (v2.4).
 
 ### Sending (Client to Server)
 

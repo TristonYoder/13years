@@ -6,13 +6,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const html = fs.readFileSync(path.join(here, "../../Sources/Shared/Resources/WebPager/pager.html"), "utf8");
+const html = fs.readFileSync(path.join(here, "../../Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Resources/WebPager/pager.html"), "utf8");
 const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
-  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS",
+  "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -400,26 +400,40 @@ test("matching digest does nothing, mismatch triggers exactly one fetch", async 
   assert.equal(h.fullCalls.at(-1), h.stateBody);
 });
 
-test("v2 liveness is 25 s of silence, legacy keeps 6.5 s", () => {
+test("v2 signal is live under 5 s, stale to 20 s, then lost and reconnecting", () => {
   const { h, ws } = v2Ready();
   ws.receive({ event: "hello", data: { rev: 1, roles: [] } });
-  h.time += 24000;
-  assert.equal(h.link.isLive(), true);
-  h.time += 1500;
-  assert.equal(h.link.isLive(), false);
+  for (const [ms, phase, live] of [[4900, "live", true], [100, "stale", true], [14900, "stale", true], [100, "extended", false]]) {
+    h.time += ms;
+    assert.equal(h.link.phase(), phase, `after ${ms}`);
+    assert.equal(h.link.isLive(), live);
+  }
   h.link.pollTick();
   assert.equal(ws.onclose, null);
   assert.equal(FakeSocket.instances.length, 2);
+});
 
+test("a digest recovers the signal immediately", () => {
+  const { h, ws } = v2Ready();
+  ws.receive({ event: "hello", data: { rev: 1, roles: [] } });
+  h.time += 12000;
+  assert.equal(h.link.phase(), "stale");
+  ws.receive({ event: "digest", data: { rev: 1, serverNowMs: 1, hashes: {} } });
+  assert.equal(h.link.phase(), "live");
+});
+
+test("legacy producers keep a wider stale margin for their 5 s beat but lose at 20 s", () => {
   const legacy = harness();
   legacy.link.connect();
   const lws = FakeSocket.instances.at(-1);
   lws.open();
   lws.receive({ id: lws.lastOp("proto").id, status: 400 });
   lws.receive({ event: "hello", data: { roles: [] } });
-  legacy.time += 6000;
-  assert.equal(legacy.link.isLive(), true);
-  legacy.time += 600;
+  legacy.time += 5500;
+  assert.equal(legacy.link.phase(), "live");
+  legacy.time += 3000;
+  assert.equal(legacy.link.phase(), "stale");
+  legacy.time += 11500;
   assert.equal(legacy.link.isLive(), false);
 });
 
@@ -980,13 +994,15 @@ test("every element id the page script looks up exists in the markup", () => {
   assert.deepEqual(missing, []);
 });
 
-test("disconnectPhase is live, stale, then extended after 20 s", () => {
+test("disconnectPhase is live, stale at 5 s, extended at 20 s", () => {
   assert.equal(core.EXTENDED_DISCONNECT_MS, 20000);
-  assert.equal(core.disconnectPhase(true, 500), "live");
-  assert.equal(core.disconnectPhase(false, 0), "stale");
-  assert.equal(core.disconnectPhase(false, 19999), "stale");
-  assert.equal(core.disconnectPhase(false, 20000), "extended");
-  assert.equal(core.disconnectPhase(false, 600000), "extended");
+  assert.equal(core.SIGNAL_STALE_MS, 5000);
+  assert.equal(core.disconnectPhase(0), "live");
+  assert.equal(core.disconnectPhase(4900), "live");
+  assert.equal(core.disconnectPhase(5000), "stale");
+  assert.equal(core.disconnectPhase(19900), "stale");
+  assert.equal(core.disconnectPhase(20000), "extended");
+  assert.equal(core.disconnectPhase(600000), "extended");
 });
 
 test("connectionStateText names the settings state", () => {

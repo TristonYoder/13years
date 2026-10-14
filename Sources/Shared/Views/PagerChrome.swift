@@ -180,14 +180,21 @@ public enum DisconnectPhase: Equatable, Sendable {
     case dimmed
     case extended
 
-    public static let extendedThreshold: TimeInterval = 20
-
-    public init(elapsedSinceLive: TimeInterval?) {
-        guard let elapsed = elapsedSinceLive, elapsed > 0 else {
-            self = .live
-            return
+    public init(signal: ProducerSignal) {
+        switch signal {
+        case .live: self = .live
+        case .stale: self = .dimmed
+        case .lost: self = .extended
         }
-        self = elapsed >= Self.extendedThreshold ? .extended : .dimmed
+    }
+}
+
+extension View {
+    func pagerStaleLook(_ phase: DisconnectPhase) -> some View {
+        self
+            .saturation(phase == .dimmed ? 0.05 : 1)
+            .brightness(phase == .dimmed ? -0.08 : 0)
+            .animation(.easeInOut(duration: 0.45), value: phase)
     }
 }
 
@@ -330,7 +337,7 @@ struct PagerNoConnectionNotice: View {
     var body: some View {
         VStack {
             Spacer(minLength: 0)
-            Label("No connection", systemImage: "wifi.slash")
+            Label("Reconnecting…", systemImage: "wifi.slash")
                 .font(.inter(size: font, weight: .bold))
                 .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
                 .lineLimit(1)
@@ -349,9 +356,10 @@ struct PagerDisconnectOverlay: View {
         case .live:
             EmptyView()
         case .dimmed:
-            Color.black.opacity(0.55)
+            Color.gray.opacity(0.45)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+                .transition(.opacity)
         case .extended:
             PagerWaitingView()
         }

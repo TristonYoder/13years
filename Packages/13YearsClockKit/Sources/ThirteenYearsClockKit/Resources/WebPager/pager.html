@@ -375,8 +375,9 @@
     font-weight: 700;
     text-align: center;
   }
+  #standard, #lowerthird, #landscape { transition: filter 0.45s ease, opacity 0.45s ease; }
   html[data-offline="1"] #standard,
-  html[data-offline="1"] #lowerthird { opacity: 0.5; }
+  html[data-offline="1"] #lowerthird { filter: grayscale(1) brightness(0.8); opacity: 0.5; }
   #waitingMark {
     width: min(30vw, 50vh);
     height: auto;
@@ -410,7 +411,7 @@
   html[data-cuedisplay="full"][data-layout="standard"], html[data-cuedisplay="full"][data-layout="standard"] body {
     background: var(--cuefull);
   }
-  html[data-offline="1"] #landscape { opacity: 0.5; }
+  html[data-offline="1"] #landscape { filter: grayscale(1) brightness(0.8); opacity: 0.5; }
 
   .fr {
     --u: min(100vw, 100vh);
@@ -1055,9 +1056,10 @@
 "use strict";
 
 const HEARTBEAT_MS = 2000;
-const STALE_AFTER_MS = 6500;
-const V2_SILENCE_MS = 25000;
-const LEGACY_SILENCE_MS = 12000;
+const SIGNAL_STALE_MS = 5000;
+const LEGACY_SIGNAL_STALE_MS = 8000;
+const V2_SILENCE_MS = 20000;
+const LEGACY_SILENCE_MS = 20000;
 const CONNECT_TIMEOUT_MS = 10000;
 const POLL_DOWN_MS = 5000;
 const PROTO_TIMEOUT_MS = 3000;
@@ -1371,9 +1373,9 @@ function parseFlagParam(value, fallback) {
   return fallback;
 }
 
-function disconnectPhase(live, elapsedMs) {
+function disconnectPhase(elapsedMs, staleMs) {
   if (elapsedMs >= EXTENDED_DISCONNECT_MS) return "extended";
-  return live ? "live" : "stale";
+  return elapsedMs >= (staleMs === undefined ? SIGNAL_STALE_MS : staleMs) ? "stale" : "live";
 }
 
 function connectionStateText(phase, hasSnapshot) {
@@ -1792,10 +1794,21 @@ function createLink(env) {
     if (mode === "legacy" && now - snapshotAt >= HEARTBEAT_MS) fetchState();
   }
 
+  function silenceMs() {
+    return Math.max(0, env.now() - Math.max(lastFrameAt, snapshotAt));
+  }
+
+  function staleMs() {
+    return mode === "legacy" ? LEGACY_SIGNAL_STALE_MS : SIGNAL_STALE_MS;
+  }
+
+  function phase() {
+    return disconnectPhase(silenceMs(), staleMs());
+  }
+
   function isLive() {
     if (env.getSnapshot() === null) return false;
-    if (mode === "v2") return isOpen() && env.now() - lastFrameAt < V2_SILENCE_MS;
-    return env.now() - snapshotAt < STALE_AFTER_MS;
+    return phase() !== "extended";
   }
 
   return {
@@ -1803,6 +1816,8 @@ function createLink(env) {
     fetchState,
     pollTick,
     isLive,
+    phase,
+    silenceMs,
     wake,
     producerNow() { return clock.producerNow(env.now()); },
     get mode() { return mode; },
@@ -2094,7 +2109,7 @@ function latestRelevantMessage() {
 function remainingSeconds() {
   if (!snapshot || !snapshot.timer) return null;
   const timer = snapshot.timer;
-  if (link.mode === "v2" && link.clockReady && timer.anchor) {
+  if (link.clockReady && timer.anchor) {
     return anchorRemainingSeconds(timer.anchor, link.producerNow());
   }
   if (!timer.isRunning) return timer.remainingSeconds;
@@ -2504,17 +2519,16 @@ function formatTime(timestamp) {
 function offlineText() {
   const seconds = Math.max(0, Math.round((Date.now() - link.lastContactAt) / 1000));
   const age = seconds < 120 ? seconds + " s" : Math.floor(seconds / 60) + " min";
-  return "No connection — last update " + age + " ago";
+  return "Reconnecting — last update " + age + " ago";
 }
 
 function renderConnection() {
-  const live = link.isLive();
   const hasSnapshot = snapshot !== null;
-  const phase = disconnectPhase(live, Date.now() - link.lastContactAt);
+  const phase = link.phase();
+  const live = hasSnapshot && phase !== "extended";
   const lowerThird = root.dataset.layout === "lowerthird";
-  const extended = hasSnapshot && !live && phase === "extended" && !lowerThird;
-  const fullOverlay = (!live && !hasSnapshot) || extended;
-  const offline = !live && hasSnapshot && !fullOverlay;
+  const fullOverlay = !hasSnapshot || (phase === "extended" && !lowerThird);
+  const offline = hasSnapshot && phase !== "live" && !fullOverlay;
   setHidden(el.waiting, !fullOverlay);
   setHidden(el.offline, !offline);
   const offlineFlag = offline ? "1" : "0";
@@ -2577,7 +2591,7 @@ let tickTimer = null;
 function scheduleTick() {
   clearTimeout(tickTimer);
   tickTimer = null;
-  if (link.mode !== "v2" || !link.clockReady || !snapshot || !snapshot.timer || !snapshot.timer.anchor) return;
+  if (!link.clockReady || !snapshot || !snapshot.timer || !snapshot.timer.anchor) return;
   const delay = anchorNextBoundaryMs(snapshot.timer.anchor, link.producerNow());
   if (delay === null) return;
   tickTimer = setTimeout(() => {

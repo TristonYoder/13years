@@ -27,8 +27,7 @@ struct WatchCueView: View {
     private var nextNotes: [(category: String, text: String)] { presentation?.nextNotes ?? [] }
 
     private var isTimerFresh: Bool {
-        guard scenePhase == .active, let last = model.lastSuccessfulPollAt else { return false }
-        return Date.now.timeIntervalSince(last) <= 4
+        scenePhase == .active && model.signal != .lost
     }
 
     private var backgroundColor: Color {
@@ -75,6 +74,9 @@ struct WatchCueView: View {
                 }
             }
         }
+        .saturation(model.signal == .stale ? 0.05 : 1)
+        .opacity(model.signal == .stale ? 0.55 : 1)
+        .animation(.easeInOut(duration: 0.45), value: model.signal)
         .sheet(isPresented: $showingRoles) {
             roleSheet
         }
@@ -126,7 +128,12 @@ struct WatchCueView: View {
 
     private func countdownText(for item: PCOTimerItem) -> String {
         guard isTimerFresh else { return "--:--" }
-        return TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation?.hourFormatThreshold ?? .over90Minutes)
+        _ = model.heartbeat
+        var remaining = item.remainingSeconds
+        if item.isRunning, let last = model.lastSuccessfulPollAt {
+            remaining -= max(0, Int(Date.now.timeIntervalSince(last)))
+        }
+        return TimeFormatting.string(forSeconds: remaining, threshold: presentation?.hourFormatThreshold ?? .over90Minutes)
     }
 
     private var topBar: some View {
@@ -154,9 +161,9 @@ struct WatchCueView: View {
 
             HStack(spacing: 3) {
                 Circle()
-                    .fill(model.isReachable ? Color.green : Color.red)
+                    .fill(model.signal == .live ? Color.green : (model.signal == .stale ? Color.orange : Color.red))
                     .frame(width: 6, height: 6)
-                Text(model.isReachable ? "Live" : "Offline")
+                Text(model.signal == .live ? "Live" : (model.signal == .stale ? "Reconnecting…" : "Offline"))
                     .font(.system(size: 10, weight: .semibold))
             }
             .foregroundStyle(contentTextColor.opacity(0.85))
