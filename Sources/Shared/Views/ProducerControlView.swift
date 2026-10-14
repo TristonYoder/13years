@@ -54,7 +54,7 @@ public struct ProducerControlView: View {
                 Button("Clear All", role: .destructive) {
                     engine.clearAllCues()
                 }
-                .controlSize(.small)
+                .compactControlSize()
                 .help("Clear the cue for every role")
             }
 
@@ -99,14 +99,14 @@ public struct ProducerControlView: View {
                     Image(systemName: "message.fill")
                 }
                 .producerSecondaryButton()
-                .controlSize(.small)
+                .compactControlSize()
                 .help("Open the message thread with \(role.name)")
 
                 Button(action: { engine.clearActiveNotification() }) {
                     Image(systemName: "bell.slash")
                 }
                 .producerSecondaryButton()
-                .controlSize(.small)
+                .compactControlSize()
                 .disabled(engine.activeNotification(forRoleId: role.id) == nil)
                 .help("Take the standing message off the web pagers and lower thirds, keeping the history")
             }
@@ -116,18 +116,18 @@ public struct ProducerControlView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.yellow)
                     .foregroundStyle(.black)
-                    .controlSize(.small)
+                    .compactControlSize()
                     .frame(maxWidth: .infinity)
 
                 Button("GO!") { engine.setCueForRole(id: role.id, state: .go) }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
-                    .controlSize(.small)
+                    .compactControlSize()
                     .frame(maxWidth: .infinity)
 
                 Button("Off") { engine.setCueForRole(id: role.id, state: .off) }
                     .producerSecondaryButton()
-                    .controlSize(.small)
+                    .compactControlSize()
             }
         }
         .padding(12)
@@ -205,5 +205,16 @@ private struct PagerPreviewPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 380)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func compactControlSize() -> some View {
+        #if os(tvOS)
+        self
+        #else
+        self.controlSize(.small)
+        #endif
     }
 }
