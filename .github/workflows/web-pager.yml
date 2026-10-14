@@ -1,0 +1,33 @@
+name: Web pager
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Tests/WebPager/**'
+      - 'Sources/**/*.js'
+      - 'Sources/**/*.mjs'
+      - 'Sources/**/*.html'
+      - '.github/workflows/web-pager.yml'
+  pull_request:
+    paths:
+      - 'Tests/WebPager/**'
+      - 'Sources/**/*.js'
+      - 'Sources/**/*.mjs'
+      - 'Sources/**/*.html'
+      - '.github/workflows/web-pager.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Node tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run sync tests
+        run: node --test Tests/WebPager/sync.test.mjs

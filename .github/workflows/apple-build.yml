@@ -16,6 +16,47 @@ on:
 
 jobs:
   build:
+    name: Build ${{ matrix.scheme }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: ProducerMac
+            destination: platform=macOS
+          - scheme: PagerMac
+            destination: platform=macOS
+          - scheme: Pager
+            destination: generic/platform=iOS Simulator
+          - scheme: ProducerIOS
+            destination: generic/platform=iOS Simulator
+          - scheme: PagerTV
+            destination: generic/platform=tvOS Simulator
+          - scheme: PagerWatch
+            destination: generic/platform=watchOS Simulator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write signing and OAuth config
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PCO_OAUTH_CLIENT_ID: ${{ secrets.PCO_OAUTH_CLIENT_ID }}
+        run: |
+          {
+            echo "DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}"
+            echo "PCO_OAUTH_CLIENT_ID = ${PCO_OAUTH_CLIENT_ID}"
+          } > Config/Local.xcconfig
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build ${{ matrix.scheme }}
+        run: xcodebuild build -project ThirteenYears.xcodeproj -scheme "${{ matrix.scheme }}" -destination "${{ matrix.destination }}" CODE_SIGNING_ALLOWED=NO
+
+  test:
+    name: Unit tests (macOS)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +76,5 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
-      - name: Build ProducerMac
-        run: xcodebuild build -project ThirteenYears.xcodeproj -scheme ProducerMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
-
-      - name: Build Pager (iOS)
-        run: xcodebuild build -project ThirteenYears.xcodeproj -scheme Pager -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+      - name: Run ThirteenYearsTests
+        run: xcodebuild test -project ThirteenYears.xcodeproj -scheme ProducerMac -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO

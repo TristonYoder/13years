@@ -61,9 +61,8 @@ public struct ServiceSchedule: Identifiable, Codable, Equatable, Sendable {
         return true
     }
 
-    public func nextOccurrence(after now: Date) -> Date? {
+    public func nextOccurrence(after now: Date, calendar: Calendar = .current) -> Date? {
         guard recurrence == .weekly else { return nil }
-        let calendar = Calendar.current
         var candidate = startsAt
         while candidate <= now {
             guard let stepped = calendar.date(byAdding: .day, value: 7, to: candidate) else { return nil }

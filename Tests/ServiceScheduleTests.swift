@@ -125,7 +125,7 @@ final class ServiceScheduleTests: XCTestCase {
         }
 
         let schedule = ServiceSchedule(title: "Sunday Service", startsAt: startsAt, recurrence: .weekly)
-        guard let next = schedule.nextOccurrence(after: startsAt) else {
+        guard let next = schedule.nextOccurrence(after: startsAt, calendar: calendar) else {
             XCTFail("Expected a next occurrence for a .weekly schedule")
             return
         }

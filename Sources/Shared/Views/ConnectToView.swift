@@ -66,7 +66,7 @@ struct ConnectToView: View {
 
             HStack {
                 if isConnecting {
-                    ProgressView().controlSize(.small)
+                    ProgressView().compactControlSize()
                     Text("Connecting to \(connectingTo ?? "Producer")…")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -108,7 +108,7 @@ struct ConnectToView: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             } else {
                 HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
+                    ProgressView().compactControlSize()
                     Text("Looking for Producers…")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -158,7 +158,7 @@ struct ConnectToView: View {
                         .foregroundStyle(reachable == false ? Color.orange : Color.secondary)
                 }
                 Spacer()
-                if reachable == nil { ProgressView().controlSize(.small) }
+                if reachable == nil { ProgressView().compactControlSize() }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -270,7 +270,7 @@ struct RemoteProducerContainerView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(.black)
                         #if os(macOS)
-                        .controlSize(.small)
+                        .compactControlSize()
                         #endif
                 }
                 #if os(iOS)
@@ -323,7 +323,7 @@ struct RemoteProducerContainerView: View {
     private var statusLabel: some View {
         switch session.connection {
         case .reconnecting:
-            ProgressView().controlSize(.small)
+            ProgressView().compactControlSize()
             Text(session.isResyncing ? "Resyncing with \(session.displayName)…" : "Reconnecting to \(session.displayName)…")
                 .font(.callout.weight(.semibold))
         case .stalled(let reason):

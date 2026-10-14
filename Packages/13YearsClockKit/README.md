@@ -25,6 +25,16 @@ ThirteenYearsClockKit  (this package: Apple platforms + Linux)
   - The LAN feed is supplied by the host through `LANTransportRegistry.makeServer` / `makeClient`.
   - The Control API is hosted outside the engine: build `ControlAPIRouter(engine:connectedClientCount:)`, then `ControlAPIEventHub(engine:broadcaster:router:)` with your own `ControlAPIBroadcaster`.
 
+## Consuming
+
+The repository root also has a `Package.swift` exposing the same `ThirteenYearsClockKit` library, so other packages can depend on a tagged release:
+
+```swift
+.package(url: "https://github.com/TristonYoder/13years.git", exact: "1.5.0")
+```
+
+Keep the two manifests' dependencies and settings identical; CI builds both.
+
 ## Building
 
 ```bash

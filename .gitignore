@@ -19,3 +19,7 @@ node_modules/
 result
 result-*
 xcuserdata/
+
+/.build/
+/.swiftpm/
+/Package.resolved
