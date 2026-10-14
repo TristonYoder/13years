@@ -11,6 +11,7 @@ final class DocumentController: ObservableObject {
     @Published private(set) var items: [RecentItem] = []
     @Published var isLauncherPresented = true
     @Published private(set) var canRevert = false
+    var remoteSession: RemoteProducerSession?
     let saveIndicator = DocumentSaveIndicator()
     private var observers: [AnyCancellable] = []
 
@@ -161,6 +162,7 @@ final class DocumentController: ObservableObject {
     }
 
     func newDocument(_ engine: CueEngine) {
+        guard remoteSession == nil else { return }
         guard settle(engine, closing: false) else { return }
         guard let url = chooseNewDocumentLocation(name: "Untitled") else { return }
         create(engine, content: nil, at: url)
@@ -212,7 +214,7 @@ final class DocumentController: ObservableObject {
     }
 
     func newFromTemplate(_ engine: CueEngine) {
-        guard settle(engine, closing: false) else { return }
+        guard remoteSession != nil || settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [templateType]
         panel.allowsMultipleSelection = false
@@ -225,6 +227,10 @@ final class DocumentController: ObservableObject {
 
     @discardableResult
     func openTemplate(_ url: URL, in engine: CueEngine, reportErrors: Bool = true) -> Bool {
+        if let session = remoteSession {
+            RemoteDocumentLoader.send(url, to: session)
+            return true
+        }
         guard settle(engine, closing: false) else { return false }
         let document: ProducerDocument
         do {
@@ -278,9 +284,9 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ engine: CueEngine) {
-        guard settle(engine, closing: false) else { return }
+        guard remoteSession != nil || settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [contentType]
+        panel.allowedContentTypes = remoteSession != nil ? RemoteDocumentLoader.contentTypes : [contentType]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -288,6 +294,10 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ url: URL, in engine: CueEngine) {
+        if let session = remoteSession {
+            RemoteDocumentLoader.send(url, to: session)
+            return
+        }
         guard settle(engine, closing: false) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

@@ -167,6 +167,10 @@ public struct SettingsView: View {
             }
             #endif
 
+            #if os(macOS) || os(iOS)
+            RemoteProducerSettingsSection()
+            #endif
+
             Section {
                 ControlAPISettingsSection()
             } header: {

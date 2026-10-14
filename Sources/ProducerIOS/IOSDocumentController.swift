@@ -30,6 +30,7 @@ final class IOSDocumentController: ObservableObject {
     @Published var isRemoteActive = false {
         didSet { publishMenuState() }
     }
+    var remoteSession: RemoteProducerSession?
     @Published private(set) var canRevert = false
     @Published var isConfirmingRevert = false
     @Published private(set) var items: [RecentItem] = [] {
@@ -63,7 +64,7 @@ final class IOSDocumentController: ObservableObject {
     }
 
     private func publishMenuState() {
-        DocumentMenuBridge.isEnabled = isDocumentActionsEnabled
+        DocumentMenuBridge.isEnabled = !isLauncherPresented || isRemoteActive
     }
 
     private enum ExportPurpose { case copy, saveAs, newDocument, newFromTemplate }
@@ -137,6 +138,7 @@ final class IOSDocumentController: ObservableObject {
     }
 
     func newDocument(_ engine: CueEngine) {
+        guard remoteSession == nil else { return }
         guard settle() else { return }
         exportFile = Self.blankFile
         exportFilename = "Untitled"
@@ -226,13 +228,14 @@ final class IOSDocumentController: ObservableObject {
     }
 
     var importTypes: [UTType] {
+        if remoteSession != nil { return RemoteDocumentLoader.contentTypes }
         let base: UTType = importsTemplate ? .thirteenYearsTemplate : .thirteenYearsDocument
         let ext = importsTemplate ? ProducerDocument.templateExtension : ProducerDocument.fileExtension
         return [base, UTType(filenameExtension: ext)].compactMap { $0 }
     }
 
     func beginImport(template: Bool) {
-        guard settle() else { return }
+        guard remoteSession != nil || settle() else { return }
         importsTemplate = template
         isImporting = true
     }
@@ -357,6 +360,10 @@ final class IOSDocumentController: ObservableObject {
     }
 
     func open(_ url: URL, in engine: CueEngine) {
+        if let session = remoteSession {
+            RemoteDocumentLoader.send(url, to: session)
+            return
+        }
         if url.pathExtension.lowercased() == ProducerDocument.templateExtension {
             openTemplate(url)
             return
@@ -390,7 +397,6 @@ struct DocumentCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(remote.isRemoteActive)
             Button("New from Template…") { documents.beginImport(template: true) }
-                .disabled(remote.isRemoteActive)
             Button("Connect To…") { remote.isConnectPresented = true }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
                 .disabled(remote.isRemoteActive)

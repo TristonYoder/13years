@@ -205,10 +205,11 @@ public final class CueEngine: ObservableObject {
         self.selectedRoleIds = []
     }
 
-    public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false, startsNetworking: Bool = true) {
+    public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false, startsNetworking: Bool = true, defersLANServing: Bool = false) {
         self.isMasterServer = isMasterServer
         self.hostsControlAPI = hostsControlAPI
         self.isRemoteMirror = false
+        self.isLANServingHeld = defersLANServing
         self.deviceId = Self.persistentDeviceId()
         self.pcoDefaultServiceTypeId = UserDefaults.standard.string(forKey: Self.defaultServiceTypeDefaultsKey)
         self.hourFormatThreshold = UserDefaults.standard.string(forKey: Self.hourFormatThresholdDefaultsKey)
@@ -294,12 +295,28 @@ public final class CueEngine: ObservableObject {
     public private(set) var isLANServingSuspended = false
 
     public func setLANServingSuspended(_ suspended: Bool) {
+    public private(set) var isLANServingHeld = false
+
+    public private(set) var isLANServing = false
+
+    public var isLANServingBlocked: Bool { isLANServingSuspended || isLANServingHeld }
         guard !isRemoteMirror, isLANServingSuspended != suspended else { return }
         isLANServingSuspended = suspended
-        if suspended {
+        applyLANServingGate()
+    }
+
+    public func setLANServingHeld(_ held: Bool) {
+        guard !isRemoteMirror, isLANServingHeld != held else { return }
+        isLANServingHeld = held
+        applyLANServingGate()
+    }
+
+    private func applyLANServingGate() {
+        if isLANServingBlocked {
             server.stop()
         } else if isMasterServer {
             startNetworking()
+            isLANServing = false
         }
     }
 
@@ -319,14 +336,16 @@ public final class CueEngine: ObservableObject {
         connectedProducerAPIPort = nil
         if isMasterServer {
             client.stop()
-            if isLANServingSuspended {
+            if isLANServingBlocked {
                 server.stop()
                 return
             }
             server.start()
+                isLANServing = false
             server.advertisedControlAPIPort = hostsControlAPI && isControlAPIEnabled ? controlAPIPort : nil
             server.advertisedDeviceId = deviceId
             server.onPacketReceived = { [weak self] packet, connection in
+            isLANServing = true
                 self?.handlePacket(packet, origin: .lanServer(connection))
             }
             server.onStatusChanged = { [weak self] isJoined in
@@ -337,6 +356,7 @@ public final class CueEngine: ObservableObject {
             client.start()
             client.onPacketReceived = { [weak self] packet in
                 self?.handlePacket(packet, origin: .lanClient)
+            isLANServing = false
             }
             client.onStatusChanged = { [weak self] isJoined in
                 self?.lanClientStatusChanged(isJoined)

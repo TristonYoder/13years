@@ -222,7 +222,14 @@ struct RemoteProducerContainerView: View {
     var body: some View {
         VStack(spacing: 0) {
             banner
-            RemoteLANModeBar(lan: lan)
+            if let status = lan.statusText {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(lan.isError ? Color.red : Color.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 3)
+            }
             ProducerRootView()
                 .id(session.id)
                 .environmentObject(session.engine)
@@ -263,10 +270,15 @@ struct RemoteProducerContainerView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(.black)
                 }
-                RemoteLoadFileButton(session: session, tint: foreground)
-                Button("Disconnect", action: onDisconnect)
-                    .producerSecondaryButton()
-                    .tint(foreground)
+                #if os(iOS)
+                Menu {
+                    Button("Disconnect", role: .destructive, action: onDisconnect)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.large)
+                }
+                .tint(foreground)
+                #endif
             }
             if !session.recentErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -290,8 +302,15 @@ struct RemoteProducerContainerView: View {
             }
         }
         .foregroundStyle(foreground)
+        #if os(macOS)
+        .padding(.leading, 70)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .frame(minHeight: 38)
+        #else
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        #endif
         .background(background)
     }
 
@@ -328,24 +347,44 @@ struct RemoteProducerContainerView: View {
     }
 }
 
-struct RemoteLANModeBar: View {
+private struct RemoteLANCoordinatorKey: EnvironmentKey {
+    static let defaultValue: RemoteLANCoordinator? = nil
+}
+
+extension EnvironmentValues {
+    var remoteLAN: RemoteLANCoordinator? {
+        get { self[RemoteLANCoordinatorKey.self] }
+        set { self[RemoteLANCoordinatorKey.self] = newValue }
+    }
+}
+
+struct RemoteProducerSettingsSection: View {
+    @Environment(\.remoteLAN) private var lan
+
+    var body: some View {
+        if let lan {
+            Section {
+                RemoteLANModePicker(lan: lan)
+            } header: {
+                Text("Remote Producer")
+            } footer: {
+                Text("Applies to the next remote session you start with Connect To…. It has no effect on this device’s own pagers.")
+            }
+        }
+    }
+}
+
+struct RemoteLANModePicker: View {
     @ObservedObject var lan: RemoteLANCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 10) {
-                Text("Pagers on this network")
-                    .font(.footnote.weight(.semibold))
-                Picker("Pagers on this network", selection: $lan.mode) {
-                    ForEach(RemoteLANMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Pagers on this network", selection: $lan.mode) {
+                ForEach(RemoteLANMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 360)
-                Spacer(minLength: 0)
             }
+            .pickerStyle(.segmented)
             Text(lan.mode.summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -356,9 +395,6 @@ struct RemoteLANModeBar: View {
                     .foregroundStyle(lan.isError ? Color.red : Color.secondary)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 #endif

@@ -27,25 +27,4 @@ enum RemoteDocumentLoader {
         ].compactMap { $0 }
     }
 }
-
-struct RemoteLoadFileButton: View {
-    @ObservedObject var session: RemoteProducerSession
-    let tint: Color
-    @State private var isChoosing = false
-
-    var body: some View {
-        Button("Load File…") { isChoosing = true }
-            .producerSecondaryButton()
-            .tint(tint)
-            .disabled(!session.isLive)
-            .fileImporter(isPresented: $isChoosing, allowedContentTypes: RemoteDocumentLoader.contentTypes) { result in
-                switch result {
-                case .success(let url):
-                    RemoteDocumentLoader.send(url, to: session)
-                case .failure(let error):
-                    session.noteFailure("Couldn’t open that file.", detail: error.localizedDescription)
-                }
-            }
-    }
-}
 #endif
