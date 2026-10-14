@@ -304,20 +304,32 @@ static void serviceAssignPing() {
   if (strcmp(type, "ASSIGN_PRODUCER") != 0) return;
   const char *host = doc["host"] | "";
   if (strlen(host) == 0) return;
+  JsonVariantConst portVar = doc["port"];
+  bool hasPort = !portVar.isNull();
+  if (hasPort && !portVar.is<long long>()) {
+    Serial.println("[lan] ASSIGN_PRODUCER carried a non-integer port — ignoring");
+    return;
+  }
+  const char *mode = doc["mode"] | "";
+  String sender = assignUdp.remoteIP().toString();
 
-  IPAddress ip;
-  if (!ip.fromString(host)) {
-    Serial.printf("[lan] ASSIGN_PRODUCER carried an invalid host \"%s\" — ignoring\n", host);
+  endpointparse::AssignDecision decision = endpointparse::decideAssign(
+    host, hasPort, hasPort ? portVar.as<long long>() : 0, mode, sender.c_str());
+  if (!decision.accept) {
+    Serial.printf("[lan] ASSIGN_PRODUCER from %s for \"%s\" rejected\n", sender.c_str(), host);
     return;
   }
 
-  Serial.printf("[lan] producer assigned via network ping: %s\n", host);
-  store::setProducerHost(String(host));
-  store::setProducerPort(0);
+  IPAddress ip;
+  if (!ip.fromString(decision.host.c_str())) return;
+
+  Serial.printf("[lan] producer assigned via network ping: %s:%u\n", decision.host.c_str(), (unsigned)decision.port);
+  store::setProducerHost(String(decision.host.c_str()));
+  store::setProducerPort(decision.port == kServerPort ? 0 : decision.port);
   staticFallbackActive = false;
   staticFailureCount = 0;
   targetIp = ip;
-  targetPort = kServerPort;
+  targetPort = decision.port;
   targetIsStatic = true;
   haveTarget = true;
   if (client.connected()) client.stop();

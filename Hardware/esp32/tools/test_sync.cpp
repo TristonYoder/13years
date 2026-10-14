@@ -42,6 +42,28 @@ static void testEndpointParse() {
   CHECK(!endpointparse::splitHostPort("1.2.3.4:5:6", host, port));
   {
     using namespace endpointparse;
+    AssignDecision d = decideAssign("192.168.1.5", false, 0, "", "192.168.1.5");
+    CHECK(d.accept && d.host == "192.168.1.5" && d.port == 13380);
+    d = decideAssign("10.0.0.9", true, 9001, "introducer", "192.168.1.5");
+    CHECK(d.accept && d.host == "10.0.0.9" && d.port == 9001);
+    CHECK(!decideAssign("10.0.0.9", true, 9001, "", "192.168.1.5").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 9001, "relay", "192.168.1.5").accept);
+    CHECK(!decideAssign("8.8.8.8", false, 0, "introducer", "8.8.8.8").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 9001, "introducer", "8.8.8.8").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 0, "", "10.0.0.9").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 70000, "", "10.0.0.9").accept);
+    CHECK(!decideAssign("10.0.0.9", true, -5, "", "10.0.0.9").accept);
+    CHECK(decideAssign("10.0.0.9", true, 65535, "", "10.0.0.9").port == 65535);
+    CHECK(decideAssign("100.75.81.4", false, 0, "", "100.75.81.4").accept);
+    CHECK(!decideAssign("100.128.0.1", false, 0, "", "100.128.0.1").accept);
+    CHECK(decideAssign("172.31.0.1", false, 0, "", "172.31.0.1").accept);
+    CHECK(!decideAssign("172.32.0.1", false, 0, "", "172.32.0.1").accept);
+    CHECK(decideAssign("169.254.3.4", false, 0, "", "169.254.3.4").accept);
+    CHECK(decideAssign("127.0.0.1", false, 0, "", "127.0.0.1").accept);
+    CHECK(!decideAssign("mac.local", false, 0, "", "10.0.0.9").accept);
+  }
+  {
+    using namespace endpointparse;
     IntroducerTarget t = decideIntroducer("mac.local", "9000", "10.0.0.7", "introducer");
     CHECK(t.kind == IntroducerKind::Direct && t.ip == "10.0.0.7" && t.port == 9000);
     t = decideIntroducer("10.0.0.9", "9001", "", "introducer");

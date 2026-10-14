@@ -40,7 +40,12 @@ and friends for the canonical schema and [`LANUnicastChannel.swift`](../../Sourc
 for the Swift side's implementation. Discovery is via mDNS (`_13years._tcp`
 service type), with a manually-configured static IP as a fallback for networks
 where mDNS is filtered (see `storage/nvs_store.h`'s `getProducerHost()` and the
-`producer <ip>[:port]|auto` Serial command). This device is always a *client*: it never
+`producer <ip>[:port]|auto` Serial command). The Producer can also point the pager at a server with a UDP
+"magic packet" on port 13381, `{"type":"ASSIGN_PRODUCER","host":"<ipv4>","port":<optional, 1-65535, default 13380>,"mode":"introducer"}`;
+it is persisted like a static Producer. The host must be a private/local IPv4 (10/8,
+172.16/12, 192.168/16, 169.254/16, 100.64/10, 127/8), an invalid port drops the packet, and
+a host different from the UDP sender's address requires `"mode":"introducer"` plus a
+private/local sender. This device is always a *client*: it never
 acts as the hub (that's whichever app has `isMasterServer = true`), so it never
 replies to another peer's `PING` and never broadcasts `CUE_UPDATE` — it
 sends exactly one `PING` after connecting, requesting the hub's catch-up

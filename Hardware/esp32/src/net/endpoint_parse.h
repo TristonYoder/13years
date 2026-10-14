@@ -96,4 +96,55 @@ inline IntroducerTarget decideIntroducer(const std::string &host, const std::str
   return result;
 }
 
+struct AssignDecision {
+  bool accept = false;
+  std::string host;
+  uint16_t port = 13380;
+};
+
+inline bool parseIPv4Octets(const std::string &text, unsigned o[4]) {
+  std::string canonical;
+  if (!parseIPv4(text, canonical)) return false;
+  size_t pos = 0;
+  for (int i = 0; i < 4; i++) {
+    size_t dot = canonical.find('.', pos);
+    o[i] = (unsigned)std::stoul(canonical.substr(pos, dot == std::string::npos ? std::string::npos : dot - pos));
+    pos = dot + 1;
+  }
+  return true;
+}
+
+inline bool isPrivateIPv4(const std::string &text) {
+  unsigned o[4];
+  if (!parseIPv4Octets(text, o)) return false;
+  if (o[0] == 10 || o[0] == 127) return true;
+  if (o[0] == 172 && o[1] >= 16 && o[1] <= 31) return true;
+  if (o[0] == 192 && o[1] == 168) return true;
+  if (o[0] == 169 && o[1] == 254) return true;
+  if (o[0] == 100 && o[1] >= 64 && o[1] <= 127) return true;
+  return false;
+}
+
+inline AssignDecision decideAssign(const std::string &host, bool hasPort, long long portValue,
+                                   const std::string &mode, const std::string &sender) {
+  AssignDecision result;
+  std::string canonical;
+  if (!parseIPv4(host, canonical) || !isPrivateIPv4(canonical)) return result;
+  uint16_t port = 13380;
+  if (hasPort) {
+    if (portValue < 1 || portValue > 65535) return result;
+    port = (uint16_t)portValue;
+  }
+  std::string senderCanonical;
+  bool senderValid = parseIPv4(sender, senderCanonical);
+  if (!senderValid || senderCanonical != canonical) {
+    if (mode != "introducer") return result;
+    if (!senderValid || !isPrivateIPv4(senderCanonical)) return result;
+  }
+  result.accept = true;
+  result.host = canonical;
+  result.port = port;
+  return result;
+}
+
 }
