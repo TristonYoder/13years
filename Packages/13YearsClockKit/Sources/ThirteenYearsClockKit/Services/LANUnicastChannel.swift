@@ -466,7 +466,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     }
 
     private func startBrowsing() {
-        let browser = NWBrowser(for: .bonjour(type: "_13years._tcp", domain: "local."), using: .tcp)
+        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_13years._tcp", domain: "local."), using: .tcp)
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             guard let self, let first = results.first else { return }
             guard case let .service(name, _, _, _) = first.endpoint else { return }

@@ -26,6 +26,15 @@ final class LANRelayTests: XCTestCase {
         XCTAssertEqual(hinted.advertisedIPv4, "10.0.0.5")
     }
 
+    func testDiscoveryPrefersResolvedHostIPOverHostname() {
+        let service = NWEndpoint.service(name: "Booth", type: "_13years._tcp", domain: "local.", interface: nil)
+        let byIP = LANDiscoveryRouting.target(serviceEndpoint: service, txt: ["mode": "introducer", "host": "david", "port": "13380", "hostip": "100.75.81.4"])
+        XCTAssertEqual(byIP.endpoint, .hostPort(host: "100.75.81.4", port: 13380))
+        let byName = LANDiscoveryRouting.target(serviceEndpoint: service, txt: ["mode": "introducer", "host": "david", "port": "13380", "hostip": "not-an-ip"])
+        XCTAssertEqual(byName.endpoint, .hostPort(host: "david", port: 13380))
+        XCTAssertNil(byName.advertisedIPv4)
+    }
+
     func testDiscoveryFallsBackToServiceEndpoint() {
         let service = NWEndpoint.service(name: "Booth", type: "_13years._tcp", domain: "local.", interface: nil)
         for txt in [["ip": "192.168.1.9"], ["mode": "relay", "host": "10.0.0.5", "port": "13380", "ip": "192.168.1.9"], ["host": "10.0.0.5"], ["host": "10.0.0.5", "port": "0"], ["host": "", "port": "13380"], ["host": "x", "port": "abc"]] as [[String: String]] {

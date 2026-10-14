@@ -258,8 +258,8 @@ public enum LANDiscoveryRouting {
         if txt["mode"] != "relay",
            let host = txt["host"], !host.isEmpty,
            let portText = txt["port"], let portValue = UInt16(portText), let port = NWEndpoint.Port(rawValue: portValue), portValue != 0 {
-            let hostIP = txt["hostip"].flatMap { $0.isEmpty ? nil : $0 }
-            return Target(endpoint: .hostPort(host: NWEndpoint.Host(host), port: port), advertisedIPv4: hostIP, isIntroduced: true)
+            let hostIP = txt["hostip"].flatMap { AssignedHostPolicy.ipv4Octets($0) == nil ? nil : $0 }
+            return Target(endpoint: .hostPort(host: NWEndpoint.Host(hostIP ?? host), port: port), advertisedIPv4: hostIP, isIntroduced: true)
         }
         return Target(endpoint: serviceEndpoint, advertisedIPv4: ownIP, isIntroduced: false)
     }
