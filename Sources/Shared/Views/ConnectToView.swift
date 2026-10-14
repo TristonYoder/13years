@@ -9,6 +9,7 @@ import UIKit
 
 struct ConnectToView: View {
     var prefill: RemoteEndpoint?
+    var prefillError: String? = nil
     let onConnected: (RemoteProducerSession) -> Void
     let onCancel: () -> Void
 
@@ -179,6 +180,10 @@ struct ConnectToView: View {
     private func connectToPrefill() {
         guard let prefill, !isConnecting else { return }
         address = prefill.address
+        if let prefillError {
+            errorText = prefillError
+            return
+        }
         connect(to: prefill, name: prefill.name)
     }
 
@@ -380,6 +385,29 @@ struct RemoteLANModePicker: View {
                     .foregroundStyle(lan.isError ? Color.red : Color.secondary)
             }
         }
+    }
+}
+#endif
+
+#if os(macOS) || os(iOS)
+struct RemoteConnectingOverlay: View {
+    let name: String
+    let cancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.25).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView()
+                Text("Connecting to \(name)…")
+                    .font(.headline)
+                Button("Cancel", action: cancel)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(24)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .transition(.opacity)
     }
 }
 #endif

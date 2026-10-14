@@ -65,9 +65,15 @@ struct ProducerMacApp: App {
                 .frame(minWidth: 800, minHeight: 600)
                 .environmentObject(launchPreferences)
                 .splashScreen(isPresented: splash.isPresented)
-                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.requestedEndpoint = nil }) {
+                .overlay {
+                    if let name = remoteHub.connectingTo {
+                        RemoteConnectingOverlay(name: name, cancel: remoteHub.cancelConnect)
+                    }
+                }
+                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.requestedEndpoint = nil; remoteHub.clearFailure() }) {
                     ConnectToView(
-                        prefill: remoteHub.requestedEndpoint,
+                        prefill: remoteHub.failedEndpoint ?? remoteHub.requestedEndpoint,
+                        prefillError: remoteHub.failureMessage,
                         onConnected: { session in
                             remoteHub.activate(session)
                             remoteHub.isConnectPresented = false

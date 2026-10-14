@@ -658,9 +658,47 @@ public final class RemoteProducerHub: ObservableObject {
         onActivated?(new)
     }
 
+    @Published public private(set) var connectingTo: String?
+    @Published public private(set) var failedEndpoint: RemoteEndpoint?
+    @Published public private(set) var failureMessage: String?
+    private var connectTask: Task<Void, Never>?
+
     public func connect(to endpoint: RemoteEndpoint) {
-        requestedEndpoint = endpoint
-        isConnectPresented = true
+        connectTask?.cancel()
+        clearFailure()
+        let session = RemoteProducerSession(endpoint: endpoint)
+        connectingTo = endpoint.name.isEmpty ? endpoint.host : endpoint.name
+        connectTask = Task { [weak self] in
+            await session.connect()
+            guard let self else { return }
+            self.connectingTo = nil
+            self.connectTask = nil
+            if Task.isCancelled {
+                session.disconnect()
+                return
+            }
+            if session.connection == .connected {
+                self.activate(session)
+            } else {
+                var message = "Couldn't connect to \(endpoint.address)."
+                if case .failed(let reason) = session.connection { message = reason }
+                session.disconnect()
+                self.failedEndpoint = endpoint
+                self.failureMessage = message
+                self.isConnectPresented = true
+            }
+        }
+    }
+
+    public func cancelConnect() {
+        connectTask?.cancel()
+        connectTask = nil
+        connectingTo = nil
+    }
+
+    public func clearFailure() {
+        failedEndpoint = nil
+        failureMessage = nil
     }
 
     public func promotePending() {

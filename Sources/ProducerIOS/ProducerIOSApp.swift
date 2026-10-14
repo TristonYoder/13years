@@ -99,12 +99,19 @@ struct ProducerIOSApp: App {
                     guard !remoteHub.isRemoteActive else { return }
                     documents.clearRecents()
                 }
+                .overlay {
+                    if let name = remoteHub.connectingTo {
+                        RemoteConnectingOverlay(name: name, cancel: remoteHub.cancelConnect)
+                    }
+                }
                 .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: {
                     remoteHub.requestedEndpoint = nil
+                    remoteHub.clearFailure()
                     remoteHub.promotePending()
                 }) {
                     ConnectToView(
-                        prefill: remoteHub.requestedEndpoint,
+                        prefill: remoteHub.failedEndpoint ?? remoteHub.requestedEndpoint,
+                        prefillError: remoteHub.failureMessage,
                         onConnected: { session in
                             documents.flushForBackground()
                             remoteHub.pending = session
