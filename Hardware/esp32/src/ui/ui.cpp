@@ -602,6 +602,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   if (!pc.valid || !pc.clockText.equals(clockBuf)) {
     pc.clockText = clockBuf;
     lv_label_set_text(clockLabel, clockBuf);
+    if (pc.valid) lv_refr_now(NULL);
   }
   int utc = engine.hasUtcOffset() ? 0 : 1;
   if (!pc.valid || utc != pc.clockUtc) {

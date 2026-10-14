@@ -527,6 +527,22 @@ static std::string len(int64_t s) {
 }
 
 static void testTimeOfDay() {
+  {
+    pagersync::OffsetEstimator ce;
+    ce.setMaxAbsOffsetMs(4.2e12);
+    ce.addSample(1000, 1760000000000LL + 20, 1760000000000LL + 20, 1040);
+    int64_t off = (int64_t)llround(ce.offsetMs());
+    int64_t base = 1760000000000LL;
+    int64_t localAtSecond = (base / 1000 + 1) * 1000 - off;
+    CHECK_STR(tod(ce.producerNow(localAtSecond - 1), 0), tod(base, 0));
+    CHECK_STR(tod(ce.producerNow(localAtSecond), 0), tod(base + 1000, 0));
+    CHECK_STR(tod(ce.producerNow(localAtSecond), -5 * 3600), tod(base + 1000 - 5 * 3600000LL, 0));
+  }
+  CHECK_STR(tod(999, 0), "12:00:00 AM");
+  CHECK_STR(tod(1000, 0), "12:00:01 AM");
+  CHECK_STR(tod(0, -3600), "11:00:00 PM");
+  CHECK_STR(tod(0, 19800), "5:30:00 AM");
+  CHECK_STR(tod(-1, 0), "11:59:59 PM");
   CHECK_STR(tod(0, 0), "12:00:00 AM");
   CHECK_STR(tod(12 * 3600 * 1000LL, 0), "12:00:00 PM");
   CHECK_STR(tod(11 * 3600 * 1000LL + 59 * 60000LL + 59000LL, 0), "11:59:59 AM");
