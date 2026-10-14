@@ -51,7 +51,7 @@ struct SyncV2State {
 }
 
 extension CueEngine {
-    static let syncBurstCount = 5
+    public static let syncBurstCount = 5
     static let syncBurstSpacing: TimeInterval = 0.1
     static let syncIntervalTicks = 30
     static let digestIntervalTicks = 10
@@ -65,6 +65,8 @@ extension CueEngine {
     static let messageCatchUpBackoffMs = 30_000.0
 
     var monotonicMs: Double { monotonicMsClock() }
+
+    public var clockEstimator: ClockOffsetEstimator { syncV2.estimator }
 
     static func clampedInt(_ value: Double) -> Int {
         guard value.isFinite else { return 0 }

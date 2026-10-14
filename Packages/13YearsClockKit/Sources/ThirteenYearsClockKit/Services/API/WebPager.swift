@@ -37,7 +37,7 @@ public enum WebPager {
         if let cachedPage {
             return .html(body: cachedPage)
         }
-        guard let url = bundle.url(forResource: "pager", withExtension: "html"),
+        guard let url = bundle.url(forResource: "pager", withExtension: "html", subdirectory: "WebPager") ?? bundle.url(forResource: "pager", withExtension: "html"),
               let data = try? Data(contentsOf: url)
         else {
             AppLog.networking.error("WebPager: pager.html missing from the bundle — check Sources/Shared/Resources/WebPager")
@@ -49,8 +49,8 @@ public enum WebPager {
 
     private static func font(named name: String) -> HTTPResponse {
         let base = name.hasSuffix(".ttf") ? String(name.dropLast(4)) : name
-        guard AppFonts.interPostScriptNames.contains(base),
-              let url = bundle.url(forResource: base, withExtension: "ttf"),
+        guard fontNames.contains(base),
+              let url = fontSearchBundles.lazy.compactMap({ $0.url(forResource: base, withExtension: "ttf") }).first,
               let data = try? Data(contentsOf: url)
         else {
             return ControlAPIRouter.error(404, "Unknown font", detail: name)
@@ -65,9 +65,17 @@ public enum WebPager {
         )
     }
 
-    private final class BundleAnchor {}
+    public nonisolated static let fontNames: Set<String> = [
+        "Inter-Regular", "Inter-Medium", "Inter-SemiBold", "Inter-Bold", "Inter-ExtraBold", "Inter-Black",
+    ]
+
+    public static var additionalFontBundles: [Bundle] = []
+
+    private static var fontSearchBundles: [Bundle] {
+        [Bundle.main] + additionalFontBundles + [Bundle.module] + Bundle.allBundles
+    }
 
     private static var bundle: Bundle {
-        Bundle(for: BundleAnchor.self)
+        Bundle.module
     }
 }

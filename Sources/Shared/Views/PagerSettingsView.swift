@@ -112,9 +112,9 @@ public struct PagerSettingsView: View {
                         Text(engine.connectedMasterName ?? "—")
                             .foregroundStyle(.secondary)
                     }
-                    if let offset = engine.syncV2.estimator.offsetMs {
+                    if let offset = engine.clockEstimator.offsetMs {
                         LabeledContent("Clock sync") {
-                            Text(Self.syncText(offsetMs: offset, rttMs: engine.syncV2.estimator.best?.effectiveRtt))
+                            Text(Self.syncText(offsetMs: offset, rttMs: engine.clockEstimator.best?.effectiveRtt))
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }

@@ -310,7 +310,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
         return Data(bytes).base64EncodedString()
     }
 
-    static func localIPv4Addresses() -> [String] {
+    public static func localIPv4Addresses() -> [String] {
         var addresses: [String] = []
 
         var ifaddrPointer: UnsafeMutablePointer<ifaddrs>?

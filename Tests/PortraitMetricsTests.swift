@@ -3,6 +3,7 @@
 
 import SwiftUI
 import XCTest
+@testable import ThirteenYearsClockKit
 
 final class PortraitMetricsTests: XCTestCase {
     private let phone = CGSize(width: 390, height: 844)

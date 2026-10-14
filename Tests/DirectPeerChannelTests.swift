@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import XCTest
+@testable import ThirteenYearsClockKit
 import Network
 
 final class DirectPeerChannelTests: XCTestCase {
