@@ -87,7 +87,7 @@ struct ProducerIOSApp: App {
                     set: { if !$0 { remoteHub.disconnect() } }
                 )) {
                     if let session = remoteHub.session {
-                        RemoteProducerContainerView(session: session) { remoteHub.disconnect() }
+                        RemoteProducerContainerView(session: session, lan: remoteHub.lan) { remoteHub.disconnect() }
                     }
                 }
                 .fileImporter(isPresented: $documents.isImporting, allowedContentTypes: documents.importTypes) {

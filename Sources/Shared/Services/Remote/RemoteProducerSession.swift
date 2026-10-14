@@ -621,6 +621,7 @@ public final class RemoteProducerHub: ObservableObject {
     @Published public var isConnectPresented = false
     @Published public private(set) var session: RemoteProducerSession?
     public var pending: RemoteProducerSession?
+    public let lan = RemoteLANCoordinator()
 
     public init() {}
 
@@ -629,6 +630,7 @@ public final class RemoteProducerHub: ObservableObject {
     public func activate(_ new: RemoteProducerSession) {
         session?.disconnect()
         session = new
+        lan.attach(new)
     }
 
     public func promotePending() {
@@ -640,6 +642,7 @@ public final class RemoteProducerHub: ObservableObject {
     public func disconnect() {
         session?.disconnect()
         session = nil
+        lan.shutdown()
     }
 }
 #endif

@@ -205,11 +205,13 @@ struct ConnectToView: View {
 
 struct RemoteProducerContainerView: View {
     @ObservedObject var session: RemoteProducerSession
+    @ObservedObject var lan: RemoteLANCoordinator
     let onDisconnect: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             banner
+            RemoteLANModeBar(lan: lan)
             ProducerRootView()
                 .id(session.id)
                 .environmentObject(session.engine)
@@ -311,6 +313,40 @@ struct RemoteProducerContainerView: View {
         case .refused: return "\(session.displayName) is there, but its Control API is off."
         case .noHello: return "\(session.displayName) didn't start a live connection."
         }
+    }
+}
+
+struct RemoteLANModeBar: View {
+    @ObservedObject var lan: RemoteLANCoordinator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text("Pagers on this network")
+                    .font(.footnote.weight(.semibold))
+                Picker("Pagers on this network", selection: $lan.mode) {
+                    ForEach(RemoteLANMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 360)
+                Spacer(minLength: 0)
+            }
+            Text(lan.mode.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let status = lan.statusText {
+                Text(status)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(lan.isError ? Color.red : Color.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 #endif

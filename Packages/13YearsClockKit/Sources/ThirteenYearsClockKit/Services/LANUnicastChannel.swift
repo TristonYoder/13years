@@ -225,7 +225,7 @@ public final class LANUnicastServer: @unchecked Sendable {
         }
     }
 
-    private static func hostDisplayName() -> String {
+    public static func hostDisplayName() -> String {
         #if os(macOS)
         return Host.current().localizedName ?? "13 Years Producer"
         #else
@@ -470,22 +470,13 @@ public final class LANUnicastClient: @unchecked Sendable {
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             guard let self, let first = results.first else { return }
             guard case let .service(name, _, _, _) = first.endpoint else { return }
-            let advertisedIPv4: String? = {
-                if case .bonjour(let txt) = first.metadata {
-                    let ip = txt["ip"]
-                    return ip.flatMap { $0.isEmpty ? nil : $0 }
-                }
-                return nil
-            }()
-            let advertisedAPIPort: Int? = {
-                if case .bonjour(let txt) = first.metadata {
-                    return txt["apiport"].flatMap { Int($0) }
-                }
-                return nil
-            }()
+            var txtDictionary: [String: String] = [:]
+            if case .bonjour(let txt) = first.metadata { txtDictionary = txt.dictionary }
+            let target = LANDiscoveryRouting.target(serviceEndpoint: first.endpoint, txt: txtDictionary)
+            let advertisedAPIPort = txtDictionary["apiport"].flatMap { Int($0) }
             self.queue.async {
-                self.lastDiscovered = (first.endpoint, name, advertisedIPv4, advertisedAPIPort)
-                self.connect(to: first.endpoint, masterName: name, advertisedIPv4: advertisedIPv4, advertisedAPIPort: advertisedAPIPort, isAssigned: false)
+                self.lastDiscovered = (target.endpoint, name, target.advertisedIPv4, advertisedAPIPort)
+                self.connect(to: target.endpoint, masterName: name, advertisedIPv4: target.advertisedIPv4, advertisedAPIPort: advertisedAPIPort, isAssigned: false)
             }
         }
         browser.stateUpdateHandler = { state in

@@ -58,6 +58,7 @@ struct ProducerMacApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     documents.saveOnClose(cueEngine)
+                    remoteHub.lan.shutdown()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     cueEngine.deviceDidBecomeActive()

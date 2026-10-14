@@ -76,7 +76,7 @@ struct MacRemoteWindow: View {
     var body: some View {
         Group {
             if let session = hub.session {
-                RemoteProducerContainerView(session: session) {
+                RemoteProducerContainerView(session: session, lan: hub.lan) {
                     hub.disconnect()
                     dismissWindow(id: RemoteWindowIDs.remote)
                 }
