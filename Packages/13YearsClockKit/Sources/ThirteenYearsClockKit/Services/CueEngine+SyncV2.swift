@@ -345,6 +345,7 @@ extension CueEngine {
         syncV2.held = nil
         syncV2.gate.reset()
         syncV2.estimator.reset()
+        refreshProducerClockOffset()
         syncV2.pendingSyncT0 = []
         syncV2.catchUpInFlight = false
         syncV2.messageMismatchStreak = 0
@@ -463,6 +464,38 @@ extension CueEngine {
         if recentMessages != sorted { recentMessages = sorted }
     }
 
+    public var producerClock: ProducerClockInfo {
+        ProducerClockInfo(offsetMs: producerClockOffsetMs, utcOffsetSeconds: producerUTCOffsetSeconds)
+    }
+
+    func refreshProducerClockOffset() {
+        let target: Double?
+        if isMasterServer && !isRemoteMirror {
+            target = 0
+            if producerUTCOffsetSeconds != nil { producerUTCOffsetSeconds = nil }
+        } else {
+            target = isRemoteMirror ? syncV2.mirrorOffsetMs : syncV2.estimator.offsetMs
+        }
+        if let target, let current = producerClockOffsetMs, abs(target - current) < 2 { return }
+        if target == nil && producerClockOffsetMs == nil { return }
+        producerClockOffsetMs = target
+    }
+
+    func noteProducerUTCOffset(_ packet: CuePacket) {
+        guard !isMasterServer, !isRemoteMirror, let utc = packet.utcOffsetSeconds else { return }
+        switch packet.type {
+        case .cueUpdate, .timerUpdate, .pong, .timerAnchor, .cueDelta, .digest, .syncReply:
+            if producerUTCOffsetSeconds != utc { producerUTCOffsetSeconds = utc }
+        default:
+            break
+        }
+    }
+
+    public func setRemoteUTCOffset(_ seconds: Int?) {
+        guard isRemoteMirror, producerUTCOffsetSeconds != seconds else { return }
+        producerUTCOffsetSeconds = seconds
+    }
+
     var syncedProducerNowMs: Double? {
         let local = timerClock().timeIntervalSince1970 * 1000
         let offset = isRemoteMirror ? syncV2.mirrorOffsetMs : syncV2.estimator.offsetMs
@@ -503,6 +536,7 @@ extension CueEngine {
               let t3 = packet.receivedAtMs, syncV2.pendingSyncT0.remove(t0) != nil else { return }
         let sample = ClockSyncSample(t0: Double(t0), t1: Double(t1), t2: Double(t2), t3: t3, monotonicMs: monotonicMs)
         guard syncV2.estimator.add(sample, nowMonotonicMs: monotonicMs) else { return }
+        refreshProducerClockOffset()
         refreshHeldTimer()
         armDisplayTick()
     }
@@ -591,6 +625,7 @@ extension CueEngine {
         cancelDisplayTick()
         syncV2.producerIsV2 = false
         syncV2.estimator.reset()
+        refreshProducerClockOffset()
         syncV2.pendingSyncT0 = []
         syncV2.held = nil
         syncV2.gate.reset()
@@ -613,6 +648,7 @@ extension CueEngine {
                 sendSyncSample()
             }
             syncV2.estimator.expire(nowMonotonicMs: monotonicMs)
+            refreshProducerClockOffset()
             refreshHeldTimer()
             if syncV2.displayWorkItem == nil { armDisplayTick() }
         }
@@ -626,6 +662,7 @@ extension CueEngine {
     public func setRemoteClockOffset(_ offsetMs: Double?) {
         guard isRemoteMirror else { return }
         syncV2.mirrorOffsetMs = offsetMs
+        refreshProducerClockOffset()
         refreshHeldTimer()
         armDisplayTick()
     }

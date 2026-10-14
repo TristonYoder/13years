@@ -11,7 +11,7 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
-  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
+  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
@@ -1141,4 +1141,30 @@ test("a role's own message is never standing and a reply clears the producer's m
     { id: "again", targetRoleId: "cg", timestamp: at(30) },
     { id: "reply", targetRoleId: "cg", senderRoleId: "cg", timestamp: at(20) },
   ]), "again");
+});
+
+test("msUntilNextProducerSecond applies the offset", () => {
+  assert.equal(core.msUntilNextProducerSecond(10200, 256), 544);
+  assert.equal(core.msUntilNextProducerSecond(10200, -300), 100);
+  assert.equal(core.msUntilNextProducerSecond(10200, null), 800);
+  assert.equal(core.msUntilNextProducerSecond(10999, 0), 1);
+  assert.equal(core.msUntilNextProducerSecond(11000, 0), 1000);
+  assert.equal(core.msUntilNextProducerSecond(10000, -1), 1);
+});
+
+test("formatProducerClock shifts by offset and renders in the producer UTC offset", () => {
+  const base = Date.UTC(2026, 0, 4, 15, 7, 8, 700);
+  assert.equal(core.formatProducerClock(base, 0, 0, "en-GB"), "15:07:08");
+  assert.equal(core.formatProducerClock(base, 400, 0, "en-GB"), "15:07:09");
+  assert.equal(core.formatProducerClock(base, -800, 0, "en-GB"), "15:07:07");
+  assert.equal(core.formatProducerClock(base, 0, -5 * 3600, "en-GB"), "10:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-GB"), "0:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 19800, "en-GB"), "20:37:08");
+  assert.match(core.formatProducerClock(base, 0, 0, "en-US"), /^3:07:08\s?PM$/);
+});
+
+test("formatProducerClock tolerates a missing offset", () => {
+  const base = Date.UTC(2026, 0, 4, 15, 7, 8, 0);
+  assert.equal(core.formatProducerClock(base, null, 0, "en-GB"), "15:07:08");
+  assert.equal(typeof core.formatProducerClock(base, null, null, "en-GB"), "string");
 });

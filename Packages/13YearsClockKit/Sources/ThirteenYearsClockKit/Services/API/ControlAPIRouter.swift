@@ -996,7 +996,8 @@ public final class ControlAPIRouter {
             settings: settingsStatus(),
             waypoints: waypointStatuses(),
             schedules: scheduleStatus(),
-            epoch: engine.syncV2.epoch
+            epoch: engine.syncV2.epoch,
+            utcOffsetSeconds: engine.timeZoneProvider().secondsFromGMT()
         )
     }
 

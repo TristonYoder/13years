@@ -177,7 +177,7 @@ The Swift pager stores it in app settings (`pagerCueDisplay`: `outline` or `full
 
 ## Producer time zone (v2.3)
 
-A pager with no wall clock of its own (the ESP32) shows the local time of day as the producer's time (its synced offset applied to its monotonic counter) plus the producer's UTC offset. The producer therefore adds an optional integer `utcOffsetSeconds` (its current offset from UTC including daylight saving, e.g. `-14400`) to `TIMER_ANCHOR` and to every `PONG` (and to the legacy `TIMER_UPDATE`). Pagers that have a clock (iOS, tvOS, web) keep using the device's own local time.
+A pager with no wall clock of its own (the ESP32) shows the local time of day as the producer's time (its synced offset applied to its monotonic counter) plus the producer's UTC offset. The producer therefore adds an optional integer `utcOffsetSeconds` (its current offset from UTC including daylight saving, e.g. `-14400`) to `TIMER_ANCHOR` and to every `PONG` (and to the legacy `TIMER_UPDATE`). Every pager's "LOCAL TIME" shows the producer's wall clock: device time plus the Sync v2 clock offset (the same offset the timer uses; the `sync` socket op on the Control API, including a remote mirror), rendered in the producer's `utcOffsetSeconds` (the Control API state carries `utcOffsetSeconds` as well). The displayed second flips at the local instant of the next whole producer second, not the device's own second. Before the first sync, or when no UTC offset is known, a pager falls back to its own clock and time zone. A producer shows its own local time.
 
 ## ESP32 panel
 

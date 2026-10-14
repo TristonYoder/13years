@@ -1415,6 +1415,34 @@ function msUntilNextSecond(nowMs) {
   return 1000 - (((nowMs % 1000) + 1000) % 1000);
 }
 
+function msUntilNextProducerSecond(nowMs, offsetMs) {
+  const producerMs = nowMs + (typeof offsetMs === "number" && isFinite(offsetMs) ? offsetMs : 0);
+  const into = producerMs - Math.floor(producerMs / 1000) * 1000;
+  return Math.max(1, Math.ceil(1000 - into));
+}
+
+const producerClockFormats = new Map();
+
+function formatProducerClock(nowMs, offsetMs, utcOffsetSeconds, locale) {
+  const hasOffset = typeof offsetMs === "number" && isFinite(offsetMs);
+  const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);
+  const producerMs = nowMs + (hasOffset ? offsetMs : 0);
+  const options = { hour: "numeric", minute: "2-digit", second: "2-digit" };
+  const shifted = hasUtc ? producerMs + utcOffsetSeconds * 1000 : producerMs;
+  if (hasUtc) options.timeZone = "UTC";
+  const key = String(locale) + "|" + (hasUtc ? "utc" : "local");
+  try {
+    let format = producerClockFormats.get(key);
+    if (!format) {
+      format = new Intl.DateTimeFormat(locale === undefined ? [] : locale, options);
+      producerClockFormats.set(key, format);
+    }
+    return format.format(new Date(shifted));
+  } catch (_) {
+    return new Date(shifted).toLocaleTimeString([], options);
+  }
+}
+
 function countdownEmWidth(text) {
   let width = 0;
   for (const ch of String(text)) {
@@ -1858,6 +1886,7 @@ let snapshot = null;
 let lastLtKey = "";
 let lastMessageMode = null;
 let lastClockText = "";
+let producerUtcOffsetSeconds = null;
 let lastWaitKey = "";
 let snapshotAt = 0;
 let producerName = "";
@@ -2006,11 +2035,11 @@ function tickLocalTime() {
   if (layout === "lowerthird") {
     paintClock();
   } else if (layout === "landscape" || layout === "standard") {
-    setText(layout === "landscape" ? el.lsTimeValue : el.ptTimeValue, formatClock(new Date()));
+    setText(layout === "landscape" ? el.lsTimeValue : el.ptTimeValue, formatClock());
   } else {
     return;
   }
-  localTimer = setTimeout(tickLocalTime, msUntilNextSecond(Date.now()) + 5);
+  localTimer = setTimeout(tickLocalTime, msUntilNextProducerSecond(Date.now(), clockOffsetMs()) + 3);
 }
 
 let lastFitKey = "";
@@ -2065,8 +2094,16 @@ function formatDuration(totalSeconds) {
   return totalSeconds < 0 ? "+" + core : core;
 }
 
-function formatClock(date) {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+function clockOffsetMs() {
+  try {
+    return link.clockReady ? link.offset : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function formatClock() {
+  return formatProducerClock(Date.now(), clockOffsetMs(), producerUtcOffsetSeconds);
 }
 
 function roles() { return (snapshot && snapshot.roles) || []; }
@@ -2341,7 +2378,7 @@ function renderLowerThird() {
     lastMessageMode = isMessage;
     el.lowerthird.classList.toggle("message", isMessage);
   }
-  const clockText = formatClock(new Date());
+  const clockText = formatClock();
   lastClockText = clockText;
   setText(el.ltClockValue, clockText);
   const slot = clockSlotFor(currentCue());
@@ -2376,7 +2413,7 @@ function renderLowerThird() {
 
 function paintClock() {
   if (root.dataset.layout !== "lowerthird" || !snapshot) return;
-  if (formatClock(new Date()) !== lastClockText) renderLowerThird();
+  if (formatClock() !== lastClockText) renderLowerThird();
 }
 
 function activeNotification() {
@@ -2551,7 +2588,7 @@ function renderConnection() {
 
 function fitWaiting() {
   const strip = el.lowerthird;
-  const clockText = formatClock(new Date());
+  const clockText = formatClock();
   const waitKey = clockText + "|" + window.innerWidth + "|" + window.innerHeight;
   if (waitKey === lastWaitKey) return;
   lastWaitKey = waitKey;
@@ -2614,6 +2651,7 @@ setInterval(() => {
 
 function adopt(state) {
   snapshot = state;
+  producerUtcOffsetSeconds = typeof state.utcOffsetSeconds === "number" ? state.utcOffsetSeconds : null;
   snapshotAt = Date.now();
   roleSel.adopt(state.roles);
   render();
@@ -2667,6 +2705,7 @@ const link = createLink({
   onClock: () => {
     paintCountdown();
     scheduleTick();
+    tickLocalTime();
   },
 });
 

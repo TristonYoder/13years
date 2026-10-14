@@ -73,6 +73,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     let sizes: PagerChromeSizes
     let state: CueState
     let style: CueDisplayStyle
+    let producerClock: ProducerClockInfo
     let roleName: String
     let roleColumnMaxWidth: CGFloat
     let hidesLeading: Bool
@@ -100,22 +101,19 @@ struct PagerTopRow<RoleMenu: View>: View {
     }
 
     private var clock: some View {
-        TimelineView(.wallClockSeconds) { context in
-            VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
-                Text(context.date, format: .dateTime.hour().minute().second())
-                    .font(.inter(size: sizes.timeFont, weight: .black))
-                    .monospacedDigit()
-                    .foregroundColor(Color(white: 0.96))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text("LOCAL TIME")
-                    .font(.inter(size: sizes.timeCaptionFont, weight: .bold))
-                    .tracking(sizes.timeCaptionFont * 0.25)
-                    .foregroundColor(.white.opacity(0.5))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
+            ProducerClockText(
+                info: producerClock,
+                font: .inter(size: sizes.timeFont, weight: .black),
+                color: Color(white: 0.96)
+            )
+            Text("LOCAL TIME")
+                .font(.inter(size: sizes.timeCaptionFont, weight: .bold))
+                .tracking(sizes.timeCaptionFont * 0.25)
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func badgeLabel(_ word: String) -> some View {
@@ -220,20 +218,45 @@ public enum PagerConnectionState: Equatable, Sendable {
     }
 }
 
-public struct WallClockSecondsSchedule: TimelineSchedule {
-    public init() {}
+public struct ProducerSecondsSchedule: TimelineSchedule {
+    public let offsetMs: Double?
+
+    public init(offsetMs: Double?) {
+        self.offsetMs = offsetMs
+    }
 
     public func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var next = Date(timeIntervalSinceReferenceDate: floor(startDate.timeIntervalSinceReferenceDate))
+        let first = ProducerClock.currentFlipDate(at: startDate, offsetMs: offsetMs)
+        var index = 0.0
         return AnyIterator {
-            defer { next = next.addingTimeInterval(1) }
-            return next
+            defer { index += 1 }
+            return first.addingTimeInterval(index)
         }
     }
 }
 
-public extension TimelineSchedule where Self == WallClockSecondsSchedule {
-    static var wallClockSeconds: WallClockSecondsSchedule { WallClockSecondsSchedule() }
+extension PagerPresentationState {
+    var producerClock: ProducerClockInfo {
+        ProducerClockInfo(offsetMs: producerClockOffsetMs, utcOffsetSeconds: producerUTCOffsetSeconds)
+    }
+}
+
+struct ProducerClockText: View {
+    let info: ProducerClockInfo
+    let font: Font
+    let color: Color
+
+    var body: some View {
+        TimelineView(ProducerSecondsSchedule(offsetMs: info.offsetMs)) { context in
+            Text(ProducerClock.producerDate(localNow: context.date.addingTimeInterval(0.002), offsetMs: info.offsetMs), format: ProducerClock.displayStyle(info))
+                .font(font)
+                .monospacedDigit()
+                .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .id(info.offsetBucket)
+    }
 }
 
 public enum PagerLinkIndicator: Equatable, Sendable {

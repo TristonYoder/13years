@@ -95,15 +95,17 @@ public final class CueEngine: ObservableObject {
     private static let notificationsClearedDefaultsKey = "notificationsClearedAt"
     private static let maxStoredMessages = 200
     @Published public var isMasterServer: Bool = true
+    @Published public internal(set) var producerClockOffsetMs: Double?
+    @Published public internal(set) var producerUTCOffsetSeconds: Int?
     @Published public var connectedMasterName: String?
     @Published public var connectedProducerHost: String?
     @Published public var connectedProducerAPIPort: Int?
     @Published public var isLANConnected: Bool = true
     @Published public private(set) var manualProducerHost: String? = LANUnicastClient.savedManualHost()
-    @Published public private(set) var producerLinkStatus: ProducerLinkStatus = .idle
+    @Published public internal(set) var producerLinkStatus: ProducerLinkStatus = .idle
     @Published public var isProducerLive: Bool = false
     @Published public var hasSyncedWithProducer: Bool = false
-    @Published public private(set) var producerSignal: ProducerSignal = .lost
+    @Published public internal(set) var producerSignal: ProducerSignal = .lost
     var lastProducerPacketMono: Double?
     @Published public var isProxyEnabled: Bool = false {
         didSet {
@@ -207,9 +209,9 @@ public final class CueEngine: ObservableObject {
 
     public init(isMasterServer: Bool = true, hostsControlAPI: Bool = false, startsNetworking: Bool = true, defersLANServing: Bool = false) {
         self.isMasterServer = isMasterServer
+        self.isLANServingHeld = defersLANServing
         self.hostsControlAPI = hostsControlAPI
         self.isRemoteMirror = false
-        self.isLANServingHeld = defersLANServing
         self.deviceId = Self.persistentDeviceId()
         self.pcoDefaultServiceTypeId = UserDefaults.standard.string(forKey: Self.defaultServiceTypeDefaultsKey)
         self.hourFormatThreshold = UserDefaults.standard.string(forKey: Self.hourFormatThresholdDefaultsKey)
@@ -293,13 +295,13 @@ public final class CueEngine: ObservableObject {
     }
 
     public private(set) var isLANServingSuspended = false
-
-    public func setLANServingSuspended(_ suspended: Bool) {
     public private(set) var isLANServingHeld = false
 
     public private(set) var isLANServing = false
 
     public var isLANServingBlocked: Bool { isLANServingSuspended || isLANServingHeld }
+
+    public func setLANServingSuspended(_ suspended: Bool) {
         guard !isRemoteMirror, isLANServingSuspended != suspended else { return }
         isLANServingSuspended = suspended
         applyLANServingGate()
@@ -314,9 +316,9 @@ public final class CueEngine: ObservableObject {
     private func applyLANServingGate() {
         if isLANServingBlocked {
             server.stop()
+            isLANServing = false
         } else if isMasterServer {
             startNetworking()
-            isLANServing = false
         }
     }
 
@@ -324,6 +326,7 @@ public final class CueEngine: ObservableObject {
         guard !isRemoteMirror else { return }
         AppLog.cue.info("startNetworking() — isMasterServer=\(self.isMasterServer, privacy: .public)")
         isProducerLive = false
+        refreshProducerClockOffset()
         hasSyncedWithProducer = false
         resetClientSyncState()
         syncV2.anchor = nil
@@ -338,14 +341,14 @@ public final class CueEngine: ObservableObject {
             client.stop()
             if isLANServingBlocked {
                 server.stop()
+                isLANServing = false
                 return
             }
             server.start()
-                isLANServing = false
+            isLANServing = true
             server.advertisedControlAPIPort = hostsControlAPI && isControlAPIEnabled ? controlAPIPort : nil
             server.advertisedDeviceId = deviceId
             server.onPacketReceived = { [weak self] packet, connection in
-            isLANServing = true
                 self?.handlePacket(packet, origin: .lanServer(connection))
             }
             server.onStatusChanged = { [weak self] isJoined in
@@ -353,10 +356,10 @@ public final class CueEngine: ObservableObject {
             }
         } else {
             server.stop()
+            isLANServing = false
             client.start()
             client.onPacketReceived = { [weak self] packet in
                 self?.handlePacket(packet, origin: .lanClient)
-            isLANServing = false
             }
             client.onStatusChanged = { [weak self] isJoined in
                 self?.lanClientStatusChanged(isJoined)
@@ -2250,6 +2253,7 @@ public final class CueEngine: ObservableObject {
 
         let epochChanged = processEpoch(packet)
         noteProducerCapabilities(packet)
+        noteProducerUTCOffset(packet)
         guard passesRevisionGate(packet, epochChanged: epochChanged) else { return }
 
         switch packet.type {

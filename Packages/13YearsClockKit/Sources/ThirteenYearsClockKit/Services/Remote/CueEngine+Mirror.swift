@@ -26,6 +26,7 @@ extension CueEngine {
         assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)
+        setRemoteUTCOffset(state.utcOffsetSeconds)
         assign(\.recentMessages, state.messages)
         assign(\.notificationsClearedAt, state.notificationsClearedAt)
         assign(\.hourFormatThreshold, HourFormatThreshold(rawValue: state.settings.hourFormatThreshold) ?? hourFormatThreshold)

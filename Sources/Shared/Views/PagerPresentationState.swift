@@ -15,6 +15,8 @@ public struct PagerPresentationState: Equatable, Sendable {
     public var connectedMasterName: String?
     public var hourFormatThreshold: HourFormatThreshold
     public var receivedNextItem: PCOTimerItem?
+    public var producerClockOffsetMs: Double?
+    public var producerUTCOffsetSeconds: Int?
 
     public init(
         roles: [RoleCue],
@@ -27,7 +29,9 @@ public struct PagerPresentationState: Equatable, Sendable {
         isLANConnected: Bool,
         connectedMasterName: String?,
         hourFormatThreshold: HourFormatThreshold,
-        receivedNextItem: PCOTimerItem? = nil
+        receivedNextItem: PCOTimerItem? = nil,
+        producerClockOffsetMs: Double? = nil,
+        producerUTCOffsetSeconds: Int? = nil
     ) {
         self.roles = roles
         self.planItems = planItems
@@ -40,6 +44,8 @@ public struct PagerPresentationState: Equatable, Sendable {
         self.connectedMasterName = connectedMasterName
         self.hourFormatThreshold = hourFormatThreshold
         self.receivedNextItem = receivedNextItem
+        self.producerClockOffsetMs = producerClockOffsetMs
+        self.producerUTCOffsetSeconds = producerUTCOffsetSeconds
     }
 
     public static func cueWordText(for state: CueState) -> String {

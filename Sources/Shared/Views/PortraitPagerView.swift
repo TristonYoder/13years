@@ -128,6 +128,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                     sizes: m.chrome,
                     state: state,
                     style: style,
+                    producerClock: presentation.producerClock,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
                     roleColumnMaxWidth: m.roleColumnMaxWidth,
                     hidesLeading: disconnectPhase == .extended,

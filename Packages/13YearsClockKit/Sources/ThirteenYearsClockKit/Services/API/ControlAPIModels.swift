@@ -35,6 +35,7 @@ public struct ControlAPIState: Codable, Sendable {
     public var waypoints: [WaypointStatus]
     public var schedules: ScheduleStatus
     public var epoch: Int? = nil
+    public var utcOffsetSeconds: Int? = nil
 
     public struct NetworkStatus: Codable, Sendable {
         public var isMasterServer: Bool
