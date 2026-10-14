@@ -2,7 +2,11 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 
 public enum OAuthConfig {
     public static var clientID: String {
@@ -28,7 +32,12 @@ public struct PKCEPair: Sendable {
 
     private static func randomURLSafeString(byteCount: Int) -> String {
         var bytes = [UInt8](repeating: 0, count: byteCount)
+        #if canImport(Security)
         _ = SecRandomCopyBytes(kSecRandomDefault, byteCount, &bytes)
+        #else
+        var generator = SystemRandomNumberGenerator()
+        for index in bytes.indices { bytes[index] = UInt8.random(in: .min ... .max, using: &generator) }
+        #endif
         return base64URLEncode(Data(bytes))
     }
 

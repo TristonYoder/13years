@@ -2,58 +2,11 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Network)
 import Network
 #if canImport(UIKit)
 import UIKit
 #endif
-
-enum LocalNetworkAddress {
-    static func ipv4String() -> String? {
-        var list: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&list) == 0, let first = list else { return nil }
-        defer { freeifaddrs(list) }
-        var enNames: [String] = []
-        var otherNames: [String] = []
-        var cursor: UnsafeMutablePointer<ifaddrs>? = first
-        while let current = cursor {
-            let ifa = current.pointee
-            if let addr = ifa.ifa_addr, addr.pointee.sa_family == sa_family_t(AF_INET) {
-                let flags = Int32(ifa.ifa_flags)
-                let isLoopback = (flags & IFF_LOOPBACK) != 0
-                let isUp = (flags & IFF_UP) != 0
-                if isUp && !isLoopback {
-                    let name = String(cString: ifa.ifa_name)
-                    var sa = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
-                    var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                    _ = inet_ntop(AF_INET, &sa.sin_addr, &buf, socklen_t(buf.count))
-                    let ip = String(cString: buf)
-                    if name.hasPrefix("en") { enNames.append(ip) } else { otherNames.append(ip) }
-                }
-            }
-            cursor = ifa.ifa_next
-        }
-        return enNames.first ?? otherNames.first
-    }
-}
-
-public struct LANConnectionID: Hashable, Sendable {
-    let raw: UInt64
-
-    init(raw: UInt64) {
-        self.raw = raw
-    }
-
-    init(raw: ObjectIdentifier) {
-        self.raw = UInt64(UInt(bitPattern: raw))
-    }
-}
-
-public enum LANAudience: Sendable {
-    case all
-    case legacy
-    case v2
-    case connection(LANConnectionID)
-}
 
 public final class LANUnicastServer: @unchecked Sendable {
     public static let port: UInt16 = 13380
@@ -639,3 +592,4 @@ public final class LANUnicastClient: @unchecked Sendable {
         }
     }
 }
+#endif

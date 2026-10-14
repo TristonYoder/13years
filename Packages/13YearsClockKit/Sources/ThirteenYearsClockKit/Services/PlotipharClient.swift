@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public final class PlotipharClient: @unchecked Sendable {
     public static let apiBase = URL(string: "https://plotiphar.com")!

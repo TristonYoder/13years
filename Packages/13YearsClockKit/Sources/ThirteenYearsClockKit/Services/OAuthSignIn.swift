@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+#if canImport(AuthenticationServices)
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
 import UIKit
 #endif
 import AuthenticationServices
-import Foundation
 
 public final class OAuthSignIn: NSObject, @unchecked Sendable {
     #if os(iOS) || os(macOS)
@@ -94,6 +99,21 @@ public final class OAuthSignIn: NSObject, @unchecked Sendable {
 extension OAuthSignIn: ASWebAuthenticationPresentationContextProviding {
     public nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         anchor
+    }
+}
+#endif
+#else
+public struct OAuthSignInUnavailableError: Error, LocalizedError {
+    public var errorDescription: String? { "Interactive OAuth sign-in is not available on this platform." }
+}
+
+public final class OAuthSignIn: NSObject, @unchecked Sendable {
+    public override init() {
+        super.init()
+    }
+
+    public nonisolated func signIn() async throws -> OAuthTokens {
+        throw OAuthSignInUnavailableError()
     }
 }
 #endif

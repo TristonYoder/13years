@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Network)
 import Network
+#endif
 
 public struct RemoteEndpoint: Equatable, Hashable, Sendable {
     public static let defaultPort = 13390
@@ -49,10 +51,10 @@ public struct RemoteEndpoint: Equatable, Hashable, Sendable {
                 guard tail.hasPrefix(":") else { return nil }
                 portText = String(tail.dropFirst())
             }
-            guard IPv6Address(host) != nil else { return nil }
+            guard Self.isValidIPv6(host) else { return nil }
         } else if rest.filter({ $0 == ":" }).count >= 2 {
             host = rest
-            guard IPv6Address(host) != nil else { return nil }
+            guard Self.isValidIPv6(host) else { return nil }
         } else {
             if let colon = rest.firstIndex(of: ":") {
                 host = String(rest[..<colon])
@@ -69,6 +71,15 @@ public struct RemoteEndpoint: Equatable, Hashable, Sendable {
             port = parsed
         }
         return RemoteEndpoint(host: host, port: port, name: name)
+    }
+
+    private static func isValidIPv6(_ host: String) -> Bool {
+        #if canImport(Network)
+        return IPv6Address(host) != nil
+        #else
+        var address = in6_addr()
+        return inet_pton(AF_INET6, host, &address) == 1
+        #endif
     }
 
     private static func isValidHostname(_ host: String) -> Bool {

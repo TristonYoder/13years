@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Network)
 import Network
 
 enum LANFraming {
@@ -46,3 +47,4 @@ enum LANFraming {
         }
     }
 }
+#endif

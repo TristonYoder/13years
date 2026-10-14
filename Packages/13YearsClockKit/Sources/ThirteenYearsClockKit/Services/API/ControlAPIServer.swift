@@ -2,9 +2,10 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Network)
 import Network
 
-public final class ControlAPIServer: @unchecked Sendable {
+public final class ControlAPIServer: ControlAPIBroadcaster, @unchecked Sendable {
     public static let defaultPort: UInt16 = 13390
 
     private static let quickRetryAttempts = 5
@@ -417,11 +418,7 @@ public final class ControlAPIServer: @unchecked Sendable {
         Int((Date().timeIntervalSince1970 * 1000).rounded())
     }
 
-    public enum BroadcastAudience: Sendable {
-        case all
-        case legacy
-        case v2
-    }
+    public typealias BroadcastAudience = ControlAPIBroadcastAudience
 
     public func broadcast(_ text: String, to audience: BroadcastAudience = .all) {
         queue.async { [self] in
@@ -449,3 +446,12 @@ public final class ControlAPIServer: @unchecked Sendable {
         DirectPeerChannel.localIPv4Addresses()
     }
 }
+#else
+public enum ControlAPIServer {
+    public static let defaultPort: UInt16 = 13390
+
+    public static func localAddresses() -> [String] {
+        DirectPeerChannel.localIPv4Addresses()
+    }
+}
+#endif

@@ -2,7 +2,11 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 
 public enum WebSocketOpcode: UInt8, Sendable {
     case continuation = 0x0

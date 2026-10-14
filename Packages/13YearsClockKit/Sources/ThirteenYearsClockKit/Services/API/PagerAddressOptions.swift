@@ -127,6 +127,14 @@ public enum PagerAddressOptions {
         return (rest, defaultPort)
     }
 
+    private static func socketLength(of addr: UnsafeMutablePointer<sockaddr>) -> socklen_t {
+        #if canImport(Darwin)
+        return socklen_t(addr.pointee.sa_len)
+        #else
+        return socklen_t(Int32(addr.pointee.sa_family) == AF_INET ? MemoryLayout<sockaddr_in>.size : MemoryLayout<sockaddr_in6>.size)
+        #endif
+    }
+
     public static func localAddresses(hostName: String = ProcessInfo.processInfo.hostName) -> [PagerAddress] {
         var found: [PagerAddress] = [PagerAddress(host: "127.0.0.1", kind: .loopback, interface: "lo0")]
         var head: UnsafeMutablePointer<ifaddrs>?
@@ -136,15 +144,15 @@ public enum PagerAddressOptions {
             while let current = pointer {
                 defer { pointer = current.pointee.ifa_next }
                 let entry = current.pointee
-                let flags = Int32(entry.ifa_flags)
-                guard (flags & IFF_UP) == IFF_UP, (flags & IFF_LOOPBACK) == 0 else { continue }
+                let flags = UInt32(entry.ifa_flags)
+                guard (flags & UInt32(IFF_UP)) == UInt32(IFF_UP), (flags & UInt32(IFF_LOOPBACK)) == 0 else { continue }
                 guard let addr = entry.ifa_addr else { continue }
                 let family = Int32(addr.pointee.sa_family)
                 guard family == AF_INET || family == AF_INET6 else { continue }
                 let name = String(cString: entry.ifa_name)
                 if ["awdl", "llw", "anpi", "ap", "gif", "stf"].contains(where: { name.hasPrefix($0) }) { continue }
                 var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                let status = getnameinfo(addr, socklen_t(addr.pointee.sa_len), &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST)
+                let status = getnameinfo(addr, Self.socketLength(of: addr), &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST)
                 guard status == 0 else { continue }
                 var host = String(cString: buffer)
                 if let percent = host.firstIndex(of: "%") { host = String(host[..<percent]) }

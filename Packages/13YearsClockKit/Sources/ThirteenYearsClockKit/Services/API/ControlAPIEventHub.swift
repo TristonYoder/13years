@@ -2,7 +2,11 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Combine)
 import Combine
+#else
+import OpenCombine
+#endif
 
 @MainActor
 public final class ControlAPIEventHub {
@@ -10,7 +14,7 @@ public final class ControlAPIEventHub {
     static let digestInterval: TimeInterval = 10
 
     private unowned let engine: CueEngine
-    private unowned let server: ControlAPIServer
+    private unowned let broadcaster: ControlAPIBroadcaster
     private let router: ControlAPIRouter
 
     private var cancellable: AnyCancellable?
@@ -18,15 +22,21 @@ public final class ControlAPIEventHub {
     private var announcedMessageIds: Set<String> = []
     private var lastFingerprint: Int?
     private var lastAnchor: TimerAnchor?
-    var hasClients: (() -> Bool)?
-    var outbound: ((String, ControlAPIServer.BroadcastAudience) -> Void)?
-    private var digestTimer: Timer?
+    public var hasClients: (() -> Bool)?
+    public var outbound: ((String, ControlAPIBroadcastAudience) -> Void)?
+    private var digestTimer: MainLoopTimer?
 
-    public init(engine: CueEngine, server: ControlAPIServer, router: ControlAPIRouter) {
+    public init(engine: CueEngine, broadcaster: ControlAPIBroadcaster, router: ControlAPIRouter) {
         self.engine = engine
-        self.server = server
+        self.broadcaster = broadcaster
         self.router = router
     }
+
+    #if canImport(Network)
+    public convenience init(engine: CueEngine, server: ControlAPIServer, router: ControlAPIRouter) {
+        self.init(engine: engine, broadcaster: server, router: router)
+    }
+    #endif
 
     public func start() {
         guard cancellable == nil else { return }
@@ -35,12 +45,12 @@ public final class ControlAPIEventHub {
             DispatchQueue.main.async { self?.scheduleFlush() }
         }
         flush()
-        digestTimer = Timer.scheduledTimer(withTimeInterval: Self.digestInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sendDigest() }
+        digestTimer = MainLoopTimer.repeating(every: Self.digestInterval) { [weak self] in
+            self?.sendDigest()
         }
     }
 
-    func sendDigest() {
+    public func sendDigest() {
         if let hasClients, !hasClients() { return }
         send(event: "digest", data: router.digest(), to: .v2)
     }
@@ -65,7 +75,7 @@ public final class ControlAPIEventHub {
         }
     }
 
-    func flush() {
+    public func flush() {
         let unannounced = engine.recentMessages.filter { !announcedMessageIds.contains($0.id) }
         if !unannounced.isEmpty {
             announcedMessageIds.formUnion(unannounced.map(\.id))
@@ -111,11 +121,11 @@ public final class ControlAPIEventHub {
         return previous.isEqual(current)
     }
 
-    private func send<T: Encodable>(event: String, data: T, to audience: ControlAPIServer.BroadcastAudience = .all) {
+    private func send<T: Encodable>(event: String, data: T, to audience: ControlAPIBroadcastAudience = .all) {
         if let hasClients, !hasClients() { return }
         guard let payload = try? ControlAPIJSON.encoder.encode(ControlAPIEvent(event: event, data: data)),
               let text = String(data: payload, encoding: .utf8) else { return }
         if let outbound { outbound(text, audience) }
-        server.broadcast(text, to: audience)
+        broadcaster.broadcast(text, to: audience)
     }
 }

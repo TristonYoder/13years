@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
     public var onPacketReceived: ((CuePacket) -> Void)?
@@ -74,6 +77,10 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
             }
         }
     }
+
+    #if !canImport(Darwin)
+    public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {}
+    #endif
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
         queue.async { [self] in

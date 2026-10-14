@@ -2,9 +2,17 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(Combine)
 import Combine
+#else
+import OpenCombine
+#endif
+#if canImport(Network)
 import Network
+#endif
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -142,6 +150,7 @@ public final class CueEngine: ObservableObject {
 
     nonisolated private static let deviceIdDefaultsKey = "cueEngineDeviceId"
     let deviceId: String
+    public var deviceIdentifier: String { deviceId }
     var timeZoneProvider: () -> TimeZone = { TimeZone.current }
 
     func stampUtcOffset(_ packet: inout CuePacket) {
@@ -166,14 +175,16 @@ public final class CueEngine: ObservableObject {
     let client = LocalCueClient()
     private let relayClient = PlotipharRelayClient()
     private let directPeerChannel = DirectPeerChannel()
+    #if canImport(Network)
     private var controlAPIServer: ControlAPIServer?
     private var controlAPIEventHub: ControlAPIEventHub?
+    #endif
     private let hostsControlAPI: Bool
     private let pcoClient = PCOClient()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
-    private var timerSubscription: AnyCancellable?
+    private var tickTimerHandle: MainLoopTimer?
     private var clockChangeObserver: NSObjectProtocol?
     var syncV2 = SyncV2State()
     var outboundObserver: ((CuePacket, OutboundTarget) -> Void)?
@@ -231,9 +242,11 @@ public final class CueEngine: ObservableObject {
         relayClient.onDisconnected = { [weak self] in
             self?.relayDidDisconnect()
         }
+        #if canImport(Darwin)
         clockChangeObserver = NotificationCenter.default.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.systemClockDidChange() }
         }
+        #endif
         relayClient.onTextMessageReceived = { [weak self] data in
             guard let peerHello = PeerHello.decode(from: data) else { return }
             self?.directPeerChannel.connect(to: peerHello)
@@ -577,8 +590,10 @@ public final class CueEngine: ObservableObject {
     private func plotipharDeviceName() -> String {
         #if os(macOS)
         return Host.current().localizedName ?? "13 Years Producer"
-        #else
+        #elseif canImport(UIKit)
         return UIDevice.current.name
+        #else
+        return ProcessInfo.processInfo.environment["THIRTEEN_NAME"] ?? ProcessInfo.processInfo.hostName
         #endif
     }
 
@@ -1785,6 +1800,7 @@ public final class CueEngine: ObservableObject {
             "type": "ASSIGN_PRODUCER",
             "host": selfAddress,
         ]) else { return false }
+        #if canImport(Network)
         guard let port = NWEndpoint.Port(rawValue: LANUnicastServer.assignPort) else { return false }
 
         let connection = NWConnection(host: NWEndpoint.Host(ipString), port: port, using: .udp)
@@ -1808,6 +1824,10 @@ public final class CueEngine: ObservableObject {
         }
         connection.start(queue: .global(qos: .utility))
         AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .private)) to \(ipString, privacy: .private)")
+        #else
+        guard Self.sendAssignPing(payload, to: ipString) else { return false }
+        AppLog.networking.info("pingDevice: sending ASSIGN_PRODUCER (host=\(selfAddress, privacy: .private)) to \(ipString, privacy: .private)")
+        #endif
         return true
     }
 
@@ -1965,11 +1985,10 @@ public final class CueEngine: ObservableObject {
     }
 
     private func setupDefaultPlan() {
-        timerSubscription = Timer.publish(every: 1.0, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.tickTimer()
-            }
+        tickTimerHandle?.invalidate()
+        tickTimerHandle = MainLoopTimer.repeating(every: 1.0) { [weak self] in
+            self?.tickTimer()
+        }
     }
 
     private var pcoLiveSyncTickCount = 0
@@ -1984,7 +2003,11 @@ public final class CueEngine: ObservableObject {
 
     private var legacyTimerAnchor: LegacyTimerAnchor?
     var timerClock: () -> Date = { Date() }
+    #if canImport(Darwin)
     var monotonicMsClock: () -> Double = { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000 }
+    #else
+    var monotonicMsClock: () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000 }
+    #endif
 
     func tickTimer() {
         guard !isRemoteMirror else { return }
@@ -2119,19 +2142,24 @@ public final class CueEngine: ObservableObject {
         if isControlAPIEnabled {
             server.advertisedControlAPIPort = controlAPIPort
             server.advertisingTXTDidChange()
+            #if canImport(Network)
             let apiserver = controlAPIServer ?? makeControlAPIServer()
             apiserver.start(port: UInt16(clamping: controlAPIPort))
             controlAPIEventHub?.start()
+            #endif
         } else {
             server.advertisedControlAPIPort = nil
             server.advertisingTXTDidChange()
+            #if canImport(Network)
             controlAPIServer?.stop()
             controlAPIEventHub?.stop()
+            #endif
             isControlAPIRunning = false
             controlAPIClientCount = 0
         }
     }
 
+    #if canImport(Network)
     private func makeControlAPIServer() -> ControlAPIServer {
         let router = ControlAPIRouter(engine: self, connectedClientCount: { [weak self] in
             self?.controlAPIClientCount ?? 0
@@ -2149,6 +2177,7 @@ public final class CueEngine: ObservableObject {
         controlAPIEventHub = hub
         return server
     }
+    #endif
 
     func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }

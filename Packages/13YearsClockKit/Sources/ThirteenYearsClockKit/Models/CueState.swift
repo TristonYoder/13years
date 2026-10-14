@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
 
 public enum CueState: String, Codable, CaseIterable, Sendable {
     case off = "OFF"
@@ -40,6 +42,7 @@ public enum CueState: String, Codable, CaseIterable, Sendable {
 
     public var isGo: Bool { self == .go }
 
+#if canImport(SwiftUI)
     public var color: Color {
         switch self {
         case .off:
@@ -61,4 +64,5 @@ public enum CueState: String, Codable, CaseIterable, Sendable {
             return Color.white
         }
     }
+#endif
 }

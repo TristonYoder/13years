@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
 
 public enum AppMode: String, Codable, CaseIterable, Sendable, Hashable {
     case producerControl = "PRODUCER_CONTROL"
@@ -28,12 +30,14 @@ public enum AppMode: String, Codable, CaseIterable, Sendable, Hashable {
         case custom(String)
     }
 
+#if canImport(SwiftUI)
     public var icon: Image {
         switch symbolName {
         case let .system(name): return Image(systemName: name)
         case let .custom(name): return Image(name)
         }
     }
+#endif
 
     public var symbolName: SymbolName {
         switch self {

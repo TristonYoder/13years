@@ -1073,8 +1073,10 @@ public final class ControlAPIRouter {
     private static func deviceName() -> String {
         #if os(macOS)
         return Host.current().localizedName ?? "13 Years Producer"
-        #else
+        #elseif canImport(UIKit)
         return UIDevice.current.name
+        #else
+        return ProcessInfo.processInfo.environment["THIRTEEN_NAME"] ?? ProcessInfo.processInfo.hostName
         #endif
     }
 

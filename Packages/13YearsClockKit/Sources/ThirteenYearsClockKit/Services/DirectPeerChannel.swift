@@ -2,8 +2,6 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
-import Network
-import Security
 
 public struct PeerHello: Codable, Sendable {
     public var addresses: [String]
@@ -24,6 +22,10 @@ public struct PeerHello: Codable, Sendable {
         try? JSONDecoder().decode(PeerHello.self, from: data)
     }
 }
+
+#if canImport(Network)
+import Network
+import Security
 
 public final class DirectPeerChannel: @unchecked Sendable {
     public var onPacketReceived: ((CuePacket) -> Void)?
@@ -349,3 +351,24 @@ public final class DirectPeerChannel: @unchecked Sendable {
         return addresses
     }
 }
+#else
+public final class DirectPeerChannel: @unchecked Sendable {
+    public var onPacketReceived: ((CuePacket) -> Void)?
+
+    public init() {}
+
+    public func start() {}
+
+    public func stop() {}
+
+    public func buildHelloPayload() -> Data? { nil }
+
+    public func send(packet: CuePacket) {}
+
+    public func connect(to peerHello: PeerHello) {}
+
+    public static func localIPv4Addresses() -> [String] {
+        LocalNetworkAddress.ipv4String().map { [$0] } ?? []
+    }
+}
+#endif
