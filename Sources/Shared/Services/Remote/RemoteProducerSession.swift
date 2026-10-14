@@ -637,7 +637,9 @@ public enum RemoteProducerError: LocalizedError, Equatable {
 public final class RemoteProducerHub: ObservableObject {
     @Published public var isConnectPresented = false
     @Published public private(set) var session: RemoteProducerSession?
+    @Published public var requestedEndpoint: RemoteEndpoint?
     public var pending: RemoteProducerSession?
+    public var onActivated: ((RemoteProducerSession) -> Void)?
     public let lan = RemoteLANCoordinator()
 
     public init() {}
@@ -647,7 +649,14 @@ public final class RemoteProducerHub: ObservableObject {
     public func activate(_ new: RemoteProducerSession) {
         session?.disconnect()
         session = new
+        requestedEndpoint = nil
         lan.attach(new)
+        onActivated?(new)
+    }
+
+    public func connect(to endpoint: RemoteEndpoint) {
+        requestedEndpoint = endpoint
+        isConnectPresented = true
     }
 
     public func promotePending() {

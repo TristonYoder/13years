@@ -26,13 +26,6 @@ enum DocumentBookmark {
     }
 }
 
-struct RecentEntry: Equatable {
-    let url: URL
-    let bookmark: Data
-
-    static func == (lhs: RecentEntry, rhs: RecentEntry) -> Bool { lhs.url == rhs.url }
-}
-
 enum RecentAvailability: Equatable {
     case present
     case missing
@@ -77,31 +70,5 @@ enum RecentDocuments {
         let placeholder = parent.appendingPathComponent(".\(url.lastPathComponent).icloud")
         if fileManager.fileExists(atPath: placeholder.path) { return .unavailable }
         return .missing
-    }
-
-    static func load(defaults: UserDefaults) -> (entries: [RecentEntry], changed: Bool) {
-        let stored = defaults.array(forKey: defaultsKey) as? [Data] ?? []
-        var changed = false
-        let entries: [RecentEntry] = stored.compactMap { data in
-            guard let resolved = try? DocumentBookmark.resolved(data) else {
-                changed = true
-                return nil
-            }
-            if availability(of: resolved.url) == .missing {
-                changed = true
-                return nil
-            }
-            if resolved.bookmark != data { changed = true }
-            return RecentEntry(url: resolved.url, bookmark: resolved.bookmark)
-        }
-        return (entries, changed)
-    }
-
-    static func persist(_ entries: [RecentEntry], defaults: UserDefaults) {
-        defaults.set(entries.map(\.bookmark), forKey: defaultsKey)
-    }
-
-    static func pruned(_ entries: [RecentEntry]) -> [RecentEntry] {
-        entries.filter { availability(of: $0.url) != .missing }
     }
 }

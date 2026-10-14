@@ -58,14 +58,19 @@ struct MacConnectWindow: View {
 
     var body: some View {
         ConnectToView(
+            prefill: hub.requestedEndpoint,
             onConnected: { session in
                 hub.activate(session)
                 openWindow(id: RemoteWindowIDs.remote)
                 dismissWindow(id: RemoteWindowIDs.connect)
             },
-            onCancel: { dismissWindow(id: RemoteWindowIDs.connect) }
+            onCancel: {
+                hub.requestedEndpoint = nil
+                dismissWindow(id: RemoteWindowIDs.connect)
+            }
         )
         .background(WindowIdentifierTag(identifier: RemoteWindowIDs.identifier(for: RemoteWindowIDs.connect)))
+        .onDisappear { hub.requestedEndpoint = nil }
     }
 }
 

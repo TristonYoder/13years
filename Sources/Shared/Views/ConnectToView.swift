@@ -8,6 +8,7 @@ import UIKit
 #endif
 
 struct ConnectToView: View {
+    var prefill: RemoteEndpoint?
     let onConnected: (RemoteProducerSession) -> Void
     let onCancel: () -> Void
 
@@ -81,7 +82,11 @@ struct ConnectToView: View {
         #if os(macOS)
         .frame(width: 460)
         #endif
-        .onAppear { discovery.start() }
+        .onAppear {
+            discovery.start()
+            connectToPrefill()
+        }
+        .onChange(of: prefill) { _, _ in connectToPrefill() }
         .onDisappear {
             discovery.stop()
             attempt?.disconnect()
@@ -169,6 +174,12 @@ struct ConnectToView: View {
         case .unreachable: return "Can't reach that device on the network"
         default: return producer.endpoint.address
         }
+    }
+
+    private func connectToPrefill() {
+        guard let prefill, !isConnecting else { return }
+        address = prefill.address
+        connect(to: prefill, name: prefill.name)
     }
 
     private func connectManually() {

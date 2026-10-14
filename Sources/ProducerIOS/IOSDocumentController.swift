@@ -32,15 +32,17 @@ final class IOSDocumentController: ObservableObject {
     }
     @Published private(set) var canRevert = false
     @Published var isConfirmingRevert = false
-    @Published private(set) var recents: [RecentEntry] = [] {
-        didSet { DocumentMenuBridge.recentTitles = recents.map { RecentDocuments.title(for: $0.url) } }
+    @Published private(set) var items: [RecentItem] = [] {
+        didSet { DocumentMenuBridge.recentTitles = recents.map(\.title) }
     }
     let saveIndicator = DocumentSaveIndicator()
     private var observers: [AnyCancellable] = []
 
     private let defaults: UserDefaults
 
-    var recentURLs: [URL] { recents.map(\.url) }
+    var recents: [RecentItem] { items.filter { $0.kind == .document && $0.url != nil } }
+
+    var recentURLs: [URL] { recents.compactMap(\.url) }
 
     var isDocumentActionsEnabled: Bool { !isLauncherPresented && !isRemoteActive }
 
@@ -53,10 +55,10 @@ final class IOSDocumentController: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let loaded = RecentDocuments.load(defaults: defaults)
-        recents = loaded.entries
-        if loaded.changed { RecentDocuments.persist(recents, defaults: defaults) }
-        DocumentMenuBridge.recentTitles = recents.map { RecentDocuments.title(for: $0.url) }
+        let loaded = RecentItems.load(defaults: defaults)
+        items = loaded.items
+        if loaded.changed { RecentItems.persist(items, defaults: defaults) }
+        DocumentMenuBridge.recentTitles = recents.map(\.title)
         publishMenuState()
     }
 
@@ -181,30 +183,46 @@ final class IOSDocumentController: ObservableObject {
     }
 
     func clearRecents() {
-        recents = []
-        RecentDocuments.persist(recents, defaults: defaults)
+        items = []
+        RecentItems.persist(items, defaults: defaults)
     }
 
     func pruneRecents() {
-        let kept = RecentDocuments.pruned(recents)
-        guard kept.count != recents.count else { return }
-        recents = kept
-        RecentDocuments.persist(recents, defaults: defaults)
+        let kept = RecentItems.pruned(items)
+        guard kept.count != items.count else { return }
+        items = kept
+        RecentItems.persist(items, defaults: defaults)
     }
 
-    private func noteRecent(_ url: URL) {
+    private func noteRecent(_ url: URL, kind: RecentKind = .document) {
         do {
             let data = try DocumentBookmark.make(for: url)
-            recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: data))
-            RecentDocuments.persist(recents, defaults: defaults)
+            items = RecentItems.updated(items, adding: .file(url, bookmark: data, kind: kind))
+            RecentItems.persist(items, defaults: defaults)
         } catch {
             errorMessage = "Couldn’t add “\(url.lastPathComponent)” to Open Recent. \(error.localizedDescription)"
         }
     }
 
-    private func forget(_ url: URL) {
-        recents.removeAll { $0.url == url }
-        RecentDocuments.persist(recents, defaults: defaults)
+    private func forget(_ url: URL, kind: RecentKind = .document) {
+        items.removeAll { $0.kind == kind && $0.url == url }
+        RecentItems.persist(items, defaults: defaults)
+    }
+
+    func removeRecent(_ item: RecentItem) {
+        items.removeAll { $0.identity == item.identity }
+        RecentItems.persist(items, defaults: defaults)
+    }
+
+    func noteRemote(_ session: RemoteProducerSession) {
+        items = RecentItems.updated(items, adding: .remote(session.endpoint, name: session.displayName))
+        RecentItems.persist(items, defaults: defaults)
+    }
+
+    func openRecent(_ item: RecentItem, in engine: CueEngine) {
+        guard item.isFile, let url = item.url else { return }
+        let target = item.bookmark.flatMap { try? DocumentBookmark.resolved($0).url } ?? url
+        open(target, in: engine)
     }
 
     var importTypes: [UTType] {
@@ -311,12 +329,13 @@ final class IOSDocumentController: ObservableObject {
     func openRecent(at index: Int, in engine: CueEngine) {
         guard recents.indices.contains(index) else { return }
         let entry = recents[index]
+        guard let entryURL = entry.url, let bookmark = entry.bookmark else { return }
         do {
-            let resolved = try DocumentBookmark.resolved(entry.bookmark)
+            let resolved = try DocumentBookmark.resolved(bookmark)
             open(resolved.url, in: engine)
         } catch {
-            if RecentDocuments.isFileNotFound(error) { forget(entry.url) }
-            errorMessage = "Couldn’t open “\(entry.url.lastPathComponent)”. \(error.localizedDescription)"
+            if RecentDocuments.isFileNotFound(error) { forget(entryURL) }
+            errorMessage = "Couldn’t open “\(entryURL.lastPathComponent)”. \(error.localizedDescription)"
         }
     }
 
@@ -327,6 +346,7 @@ final class IOSDocumentController: ObservableObject {
         do {
             let document = try ProducerDocument.read(from: url)
             pendingTemplate = document
+            noteRecent(url, kind: .template)
             exportFile = ProducerDocumentFile(document)
             exportFilename = RecentDocuments.title(for: url)
             exportPurpose = .newFromTemplate

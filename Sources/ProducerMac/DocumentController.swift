@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class DocumentController: ObservableObject {
-    @Published private(set) var recents: [RecentEntry] = []
+    @Published private(set) var items: [RecentItem] = []
     @Published var isLauncherPresented = true
     @Published private(set) var canRevert = false
     let saveIndicator = DocumentSaveIndicator()
@@ -20,7 +20,9 @@ final class DocumentController: ObservableObject {
     private var openedByURL = false
     private let defaults: UserDefaults
 
-    var recentURLs: [URL] { recents.map(\.url) }
+    var recents: [RecentItem] { items.filter { $0.kind == .document && $0.url != nil } }
+
+    var recentURLs: [URL] { recents.compactMap(\.url) }
 
     private var contentType: UTType {
         .thirteenYearsDocument
@@ -32,9 +34,9 @@ final class DocumentController: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let loaded = RecentDocuments.load(defaults: defaults)
-        recents = loaded.entries
-        if loaded.changed { RecentDocuments.persist(recents, defaults: defaults) }
+        let loaded = RecentItems.load(defaults: defaults)
+        items = loaded.items
+        if loaded.changed { RecentItems.persist(items, defaults: defaults) }
     }
 
     func attach(_ engine: CueEngine) {
@@ -234,7 +236,9 @@ final class DocumentController: ObservableObject {
             return false
         }
         guard let destination = chooseNewDocumentLocation(name: RecentDocuments.title(for: url)) else { return false }
-        return create(engine, content: document, at: destination)
+        let created = create(engine, content: document, at: destination)
+        if created { noteRecent(url, kind: .template) }
+        return created
     }
 
     func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
@@ -304,20 +308,41 @@ final class DocumentController: ObservableObject {
 
     func openRecent(_ url: URL, in engine: CueEngine) {
         let target = recents.first { $0.url == url }
-            .flatMap { try? DocumentBookmark.resolved($0.bookmark).url } ?? url
+            .flatMap { $0.bookmark }
+            .flatMap { try? DocumentBookmark.resolved($0).url } ?? url
         open(target, in: engine)
     }
 
+    func openRecent(_ item: RecentItem, in engine: CueEngine) {
+        guard item.isFile, let url = item.url else { return }
+        let target = item.bookmark.flatMap { try? DocumentBookmark.resolved($0).url } ?? url
+        if item.kind == .template {
+            if !openTemplate(target, in: engine), RecentDocuments.availability(of: target) == .missing { forget(target, kind: .template) }
+        } else {
+            open(target, in: engine)
+        }
+    }
+
+    func removeRecent(_ item: RecentItem) {
+        items.removeAll { $0.identity == item.identity }
+        RecentItems.persist(items, defaults: defaults)
+    }
+
+    func noteRemote(_ session: RemoteProducerSession) {
+        items = RecentItems.updated(items, adding: .remote(session.endpoint, name: session.displayName))
+        RecentItems.persist(items, defaults: defaults)
+    }
+
     func pruneRecents() {
-        let kept = RecentDocuments.pruned(recents)
-        guard kept.count != recents.count else { return }
-        recents = kept
-        RecentDocuments.persist(recents, defaults: defaults)
+        let kept = RecentItems.pruned(items)
+        guard kept.count != items.count else { return }
+        items = kept
+        RecentItems.persist(items, defaults: defaults)
     }
 
     func clearRecents() {
-        recents = []
-        RecentDocuments.persist(recents, defaults: defaults)
+        items = []
+        RecentItems.persist(items, defaults: defaults)
     }
 
     @discardableResult
@@ -335,11 +360,11 @@ final class DocumentController: ObservableObject {
         return true
     }
 
-    private func noteRecent(_ url: URL) {
+    private func noteRecent(_ url: URL, kind: RecentKind = .document) {
         do {
             let bookmark = try DocumentBookmark.make(for: url)
-            recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: bookmark))
-            RecentDocuments.persist(recents, defaults: defaults)
+            items = RecentItems.updated(items, adding: .file(url, bookmark: bookmark, kind: kind))
+            RecentItems.persist(items, defaults: defaults)
         } catch {
             let alert = NSAlert()
             alert.alertStyle = .informational
@@ -349,9 +374,9 @@ final class DocumentController: ObservableObject {
         }
     }
 
-    private func forget(_ url: URL) {
-        recents.removeAll { $0.url == url }
-        RecentDocuments.persist(recents, defaults: defaults)
+    private func forget(_ url: URL, kind: RecentKind = .document) {
+        items.removeAll { $0.kind == kind && $0.url == url }
+        RecentItems.persist(items, defaults: defaults)
     }
 
     private func present(_ error: Error, action: String, url: URL) {

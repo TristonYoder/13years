@@ -27,12 +27,19 @@ struct ProducerIOSApp: App {
                 .overlay {
                     if documents.isLauncherPresented {
                         LauncherView(
-                            recentURLs: documents.recentURLs,
+                            recents: documents.items,
                             actions: LauncherActions(
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.beginImport(template: true) },
                                 open: { documents.beginImport(template: false) },
-                                openRecent: { documents.openRecent($0, in: cueEngine) },
+                                openRecent: { item in
+                                    if let endpoint = item.endpoint {
+                                        remoteHub.connect(to: endpoint)
+                                    } else {
+                                        documents.openRecent(item, in: cueEngine)
+                                    }
+                                },
+                                removeRecent: { documents.removeRecent($0) },
                                 connect: { remoteHub.isConnectPresented = true },
                                 refreshRecents: { documents.pruneRecents() }
                             )
@@ -44,6 +51,7 @@ struct ProducerIOSApp: App {
                 .splashScreen(isPresented: splash.isPresented)
                 .task {
                     splash.markReady()
+                    remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
@@ -78,14 +86,21 @@ struct ProducerIOSApp: App {
                     guard !remoteHub.isRemoteActive else { return }
                     documents.clearRecents()
                 }
-                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.promotePending() }) {
+                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: {
+                    remoteHub.requestedEndpoint = nil
+                    remoteHub.promotePending()
+                }) {
                     ConnectToView(
+                        prefill: remoteHub.requestedEndpoint,
                         onConnected: { session in
                             documents.flushForBackground()
                             remoteHub.pending = session
                             remoteHub.isConnectPresented = false
                         },
-                        onCancel: { remoteHub.isConnectPresented = false }
+                        onCancel: {
+                            remoteHub.requestedEndpoint = nil
+                            remoteHub.isConnectPresented = false
+                        }
                     )
                 }
                 .fullScreenCover(isPresented: Binding(

@@ -27,12 +27,19 @@ struct ProducerMacApp: App {
                 .overlay {
                     if documents.isLauncherPresented {
                         LauncherView(
-                            recentURLs: documents.recentURLs,
+                            recents: documents.items,
                             actions: LauncherActions(
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.newFromTemplate(cueEngine) },
                                 open: { documents.open(cueEngine) },
-                                openRecent: { documents.openRecent($0, in: cueEngine) },
+                                openRecent: { item in
+                                    if let endpoint = item.endpoint {
+                                        remoteHub.connect(to: endpoint)
+                                    } else {
+                                        documents.openRecent(item, in: cueEngine)
+                                    }
+                                },
+                                removeRecent: { documents.removeRecent($0) },
                                 connect: { remoteHub.isConnectPresented = true },
                                 refreshRecents: { documents.pruneRecents() }
                             )
@@ -55,6 +62,7 @@ struct ProducerMacApp: App {
                 }
                 .task {
                     splash.markReady()
+                    remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
