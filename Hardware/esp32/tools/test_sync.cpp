@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 #include "../src/sync/sync_core.h"
+#include "../src/net/endpoint_parse.h"
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -20,6 +21,65 @@ static int checks = 0;
 #define CHECK(cond) do { checks++; if (!(cond)) { failures++; printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #cond); } } while (0)
 #define CHECK_STR(a, b) do { checks++; std::string _a = (a), _b = (b); if (_a != _b) { failures++; printf("FAIL %s:%d got %s want %s\n", __FILE__, __LINE__, _a.c_str(), _b.c_str()); } } while (0)
 #define CHECK_NEAR(a, b, eps) do { checks++; double _a = (a), _b = (b); if (fabs(_a - _b) > (eps)) { failures++; printf("FAIL %s:%d got %f want %f\n", __FILE__, __LINE__, _a, _b); } } while (0)
+
+static void testEndpointParse() {
+  std::string host;
+  uint16_t port = 1;
+  CHECK(endpointparse::splitHostPort("100.75.81.4", host, port));
+  CHECK_STR(host, "100.75.81.4");
+  CHECK(port == 0);
+  CHECK(endpointparse::splitHostPort("192.168.1.20:9000", host, port));
+  CHECK_STR(host, "192.168.1.20");
+  CHECK(port == 9000);
+  CHECK(endpointparse::splitHostPort("10.0.0.5:65535", host, port));
+  CHECK(port == 65535);
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:0", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:70000", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:abc", host, port));
+  CHECK(!endpointparse::splitHostPort("10.0.0.5:", host, port));
+  CHECK(!endpointparse::splitHostPort(":9000", host, port));
+  CHECK(!endpointparse::splitHostPort("", host, port));
+  CHECK(!endpointparse::splitHostPort("1.2.3.4:5:6", host, port));
+  {
+    using namespace endpointparse;
+    AssignDecision d = decideAssign("192.168.1.5", false, 0, "", "192.168.1.5");
+    CHECK(d.accept && d.host == "192.168.1.5" && d.port == 13380);
+    d = decideAssign("10.0.0.9", true, 9001, "introducer", "192.168.1.5");
+    CHECK(d.accept && d.host == "10.0.0.9" && d.port == 9001);
+    CHECK(!decideAssign("10.0.0.9", true, 9001, "", "192.168.1.5").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 9001, "relay", "192.168.1.5").accept);
+    CHECK(decideAssign("8.8.8.8", false, 0, "", "8.8.8.8").accept);
+    CHECK(decideAssign("203.0.113.7", true, 9001, "introducer", "8.8.8.8").accept);
+    CHECK(!decideAssign("203.0.113.7", true, 9001, "", "8.8.8.8").accept);
+    CHECK(!decideAssign("999.1.1.1", false, 0, "introducer", "8.8.8.8").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 0, "", "10.0.0.9").accept);
+    CHECK(!decideAssign("10.0.0.9", true, 70000, "", "10.0.0.9").accept);
+    CHECK(!decideAssign("10.0.0.9", true, -5, "", "10.0.0.9").accept);
+    CHECK(decideAssign("10.0.0.9", true, 65535, "", "10.0.0.9").port == 65535);
+    CHECK(!decideAssign("mac.local", false, 0, "", "10.0.0.9").accept);
+  }
+  {
+    using namespace endpointparse;
+    IntroducerTarget t = decideIntroducer("mac.local", "9000", "10.0.0.7", "introducer");
+    CHECK(t.kind == IntroducerKind::Direct && t.ip == "10.0.0.7" && t.port == 9000);
+    t = decideIntroducer("10.0.0.9", "9001", "", "introducer");
+    CHECK(t.kind == IntroducerKind::Direct && t.ip == "10.0.0.9" && t.port == 9001);
+    t = decideIntroducer("mac.local", "9000", "bad", "introducer");
+    CHECK(t.kind == IntroducerKind::NeedsResolve && t.host == "mac.local" && t.port == 9000);
+    t = decideIntroducer("mac.local", "9000", "", "");
+    CHECK(t.kind == IntroducerKind::NeedsResolve);
+    CHECK(decideIntroducer("mac.local", "0", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "70000", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "abc", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("", "9000", "10.0.0.7", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("mac.local", "9000", "10.0.0.7", "relay").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("0.0.0.0", "9000", "", "introducer").kind == IntroducerKind::None);
+    CHECK(decideIntroducer("10.0.0.256", "9000", "", "introducer").kind == IntroducerKind::NeedsResolve);
+    t = decideIntroducer("mac.local", "9000", "0.0.0.0", "introducer");
+    CHECK(t.kind == IntroducerKind::NeedsResolve);
+  }
+}
 
 static void testHashVectors() {
   CHECK_STR(pagersync::hashHex(""), "cbf29ce484222325");
@@ -485,6 +545,22 @@ static std::string len(int64_t s) {
 }
 
 static void testTimeOfDay() {
+  {
+    pagersync::OffsetEstimator ce;
+    ce.setMaxAbsOffsetMs(4.2e12);
+    ce.addSample(1000, 1760000000000LL + 20, 1760000000000LL + 20, 1040);
+    int64_t off = (int64_t)llround(ce.offsetMs());
+    int64_t base = 1760000000000LL;
+    int64_t localAtSecond = (base / 1000 + 1) * 1000 - off;
+    CHECK_STR(tod(ce.producerNow(localAtSecond - 1), 0), tod(base, 0));
+    CHECK_STR(tod(ce.producerNow(localAtSecond), 0), tod(base + 1000, 0));
+    CHECK_STR(tod(ce.producerNow(localAtSecond), -5 * 3600), tod(base + 1000 - 5 * 3600000LL, 0));
+  }
+  CHECK_STR(tod(999, 0), "12:00:00 AM");
+  CHECK_STR(tod(1000, 0), "12:00:01 AM");
+  CHECK_STR(tod(0, -3600), "11:00:00 PM");
+  CHECK_STR(tod(0, 19800), "5:30:00 AM");
+  CHECK_STR(tod(-1, 0), "11:59:59 PM");
   CHECK_STR(tod(0, 0), "12:00:00 AM");
   CHECK_STR(tod(12 * 3600 * 1000LL, 0), "12:00:00 PM");
   CHECK_STR(tod(11 * 3600 * 1000LL + 59 * 60000LL + 59000LL, 0), "11:59:59 AM");
@@ -532,11 +608,18 @@ static void testCueDisplay() {
 static void testLinkPhase() {
   using pagersync::LinkPhase;
   CHECK(pagersync::linkPhase(0) == LinkPhase::Live);
-  CHECK(pagersync::linkPhase(11999) == LinkPhase::Live);
-  CHECK(pagersync::linkPhase(12000) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(4999) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(5000) == LinkPhase::Stale);
   CHECK(pagersync::linkPhase(19999) == LinkPhase::Stale);
-  CHECK(pagersync::linkPhase(20000) == LinkPhase::Extended);
-  CHECK(pagersync::linkPhase(600000) == LinkPhase::Extended);
+  CHECK(pagersync::linkPhase(20000) == LinkPhase::Lost);
+  CHECK(pagersync::linkPhase(600000) == LinkPhase::Lost);
+  CHECK(pagersync::STALE_AFTER_MS == 5000 && pagersync::LOST_AFTER_MS == 20000);
+  CHECK(pagersync::msSince(10, 4294967290u) == 16);
+  CHECK(pagersync::linkPhase(pagersync::msSince(4998, 4294967295u)) == LinkPhase::Live);
+  CHECK(pagersync::linkPhase(pagersync::msSince(4999, 4294967295u)) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(pagersync::msSince(19998, 0xFFFFFFFFu)) == LinkPhase::Stale);
+  CHECK(pagersync::linkPhase(pagersync::msSince(19999, 0xFFFFFFFFu)) == LinkPhase::Lost);
+  CHECK(pagersync::linkPhase(pagersync::msSince(100, 0xFFFFFF00u)) == LinkPhase::Live);
   CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Live), "Live");
   CHECK_STR(pagersync::linkStatusText(true, true, LinkPhase::Stale), "Disconnected - retrying");
   CHECK_STR(pagersync::linkStatusText(true, false, LinkPhase::Live), "Disconnected - retrying");
@@ -558,7 +641,54 @@ static void testUtcOffsetFilter() {
 #endif
 }
 
+static void testReconnectKeepsState() {
+  using namespace pagersync;
+  CHECK(keepStateOnReconnect(0));
+  CHECK(keepStateOnReconnect(STALE_AFTER_MS));
+  CHECK(keepStateOnReconnect(LOST_AFTER_MS - 1));
+  CHECK(!keepStateOnReconnect(LOST_AFTER_MS));
+
+  Anchor a;
+  a.valid = true;
+  a.itemId = "t1";
+  a.lengthInSeconds = 600;
+  a.elapsedMs = 0;
+  a.anchorMs = 1000000;
+  a.isRunning = true;
+  RevGuard rev;
+  EpochTracker epoch;
+  OffsetEstimator clock;
+  CHECK(rev.accept(40));
+  CHECK(!epoch.observe(7));
+  CHECK(clock.addSample(1000, 1500, 1500, 1000));
+  double held = clock.offsetMs();
+
+  CHECK(a.valid);
+  CHECK_STR(a.itemId, "t1");
+  CHECK(clock.hasOffset());
+  CHECK_NEAR(clock.offsetMs(), held, 0.001);
+  CHECK(anchorRemainingSeconds(a, clock.producerNow(1000000 - held + 12000)) == 588);
+  CHECK(rev.highest == 40);
+
+  CHECK(rev.accept(40, RevKind::Rebase));
+  CHECK(rev.accept(41, RevKind::Rebase));
+  CHECK(rev.accept(41, RevKind::NotLower));
+  CHECK(!epoch.observe(7));
+  CHECK(a.valid);
+
+  CHECK(epoch.observe(8));
+  rev.reset();
+  clock.reset();
+  a = Anchor();
+  CHECK(!a.valid);
+  CHECK(!clock.hasOffset());
+  CHECK(rev.accept(1, RevKind::Strict, true));
+
+  CHECK(!keepStateOnReconnect(LOST_AFTER_MS + 1));
+}
+
 int main() {
+  testEndpointParse();
   testHashVectors();
   testOffsetFormula();
   testMinRtt();
@@ -568,6 +698,7 @@ int main() {
   testAnchor();
   testRevGuard();
   testEpoch();
+  testReconnectKeepsState();
   testAnchorBounds();
   testMessageOrder();
   testSampleAging();

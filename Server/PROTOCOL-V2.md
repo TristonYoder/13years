@@ -5,7 +5,7 @@ Normative spec for the clock-synchronised, hash-checked, delta-based update prot
 ## Principles
 
 - The producer's system clock (`Date()`, epoch milliseconds) is the one reference clock. Every other device measures its offset to it and converts every producer timestamp through that offset. A device's own clock is irrelevant once it has an offset.
-- The producer pushes only when something changes. Each device runs the timer locally from an anchor, and a small digest every 10 seconds is the consistency check and the heartbeat.
+- The producer pushes only when something changes. Each device runs the timer locally from an anchor, and a small digest every 2 seconds is the consistency check and the heartbeat.
 - On any digest mismatch the device asks for a full catch-up (the existing PING which the producer answers with a full PONG). On a reconnect it does the same.
 
 ## Capability
@@ -47,7 +47,7 @@ The Control API timer event and `ActiveTimer` carry the same `anchor` object (ad
 
 ## Digest
 
-`DIGEST` (producer to v2 clients) every 10 s and immediately after a catch-up reply. CuePacket: `{"type":"DIGEST","senderId":"…","rev":N,"digestMs":<producer now>,"hashes":{"roles":"…","timer":"…","messages":"…"}}`. Control API v2 socket event `digest`: `{"event":"digest","data":{"rev":N,"serverNowMs":…,"hashes":{"roles","timer","plan","messages"}}}`. A v2 client treats any received packet as liveness and considers the producer lost after 25 s of silence (legacy stays 12 s).
+`DIGEST` (producer to v2 clients) every 2 s and immediately after a catch-up reply. CuePacket: `{"type":"DIGEST","senderId":"…","rev":N,"digestMs":<producer now>,"hashes":{"roles":"…","timer":"…","messages":"…"}}`. Control API v2 socket event `digest`: `{"event":"digest","data":{"rev":N,"serverNowMs":…,"hashes":{"roles","timer","plan","messages"}}}`. A v2 client treats any received packet as liveness and follows the signal thresholds of the v2.4 amendment.
 
 A client hashes its local copy of each section the same way and compares. Any difference triggers one catch-up (PING for CuePacket, `GET /v1/state` for the Control API) and the section is replaced. Equal digests need no action.
 
@@ -177,7 +177,7 @@ The Swift pager stores it in app settings (`pagerCueDisplay`: `outline` or `full
 
 ## Producer time zone (v2.3)
 
-A pager with no wall clock of its own (the ESP32) shows the local time of day as the producer's time (its synced offset applied to its monotonic counter) plus the producer's UTC offset. The producer therefore adds an optional integer `utcOffsetSeconds` (its current offset from UTC including daylight saving, e.g. `-14400`) to `TIMER_ANCHOR` and to every `PONG` (and to the legacy `TIMER_UPDATE`). Pagers that have a clock (iOS, tvOS, web) keep using the device's own local time.
+A pager with no wall clock of its own (the ESP32) shows the local time of day as the producer's time (its synced offset applied to its monotonic counter) plus the producer's UTC offset. The producer therefore adds an optional integer `utcOffsetSeconds` (its current offset from UTC including daylight saving, e.g. `-14400`) to `TIMER_ANCHOR` and to every `PONG` (and to the legacy `TIMER_UPDATE`). Every pager's "LOCAL TIME" shows the producer's wall clock: device time plus the Sync v2 clock offset (the same offset the timer uses; the `sync` socket op on the Control API, including a remote mirror), rendered in the producer's `utcOffsetSeconds` (the Control API state carries `utcOffsetSeconds` as well). The displayed second flips at the local instant of the next whole producer second, not the device's own second. Before the first sync, or when no UTC offset is known, a pager falls back to its own clock and time zone. A producer shows its own local time.
 
 ## ESP32 panel
 
@@ -187,7 +187,19 @@ The 240 by 320 panel follows the portrait framed layout and the cue display sett
 
 - Connection notice: the connection state text ("Live — <producer>") is no longer shown on the main pager screens (portrait, landscape, the ESP32 panel). The top-right column holds only the role chooser. The connection state, the producer name and, where available, the clock sync quality appear in the settings screen (the web pager's settings sheet, the Swift pager's settings screen, the ESP32's role picker screen). A lost connection is still always visible on the main screens: the existing "No connection — last update N s ago" strip (web) or equivalent keeps showing, and the extended-disconnect rule below applies.
 - Header icons (Swift and web pagers): the chat button and the settings button are icon-only buttons (chat bubble and gear, accessible names "Messages" and "Settings", at least 44 pt tall) in a row directly BELOW the role chooser in the top-right column. The row is exactly as wide as the role chooser dropdown, and the buttons share that width equally (a single remaining button takes the whole width). There is no footer strip: nothing is reserved at the bottom edge, so the bottom row (cards, message) runs to the bottom of the frame. The icons never move the centre block. In portrait the same rule applies to the top-right column. The lower third keeps its own controls.
-- Extended disconnect: when no packet has arrived from the producer for 20 seconds, every full layout (portrait and landscape) replaces its content with the logo animation: the animated stoplight mark and the text "Waiting for Producer…" on the near-black ground (the same loader the pager shows before it first connects), until the connection returns, when the normal screen comes back. During the first 20 seconds the last known screen stays up, dimmed, with the "No connection" strip.
+- Extended disconnect: when no packet has arrived from the producer for 20 seconds, every full layout (portrait and landscape) replaces its content with the logo animation: the animated stoplight mark and the text "Waiting for Producer…" on the near-black ground (the same loader the pager shows before it first connects), until the connection returns, when the normal screen comes back. From 5 to 20 seconds the last known screen stays up, greyed and dimmed (v2.4), with the "Reconnecting" strip.
+
+## Signal loss and heartbeat (v2.4)
+
+Every pager (iOS, Mac, tvOS, watch, web, ESP32) uses the same signal-loss behaviour, measured as time since the last accepted producer packet on a monotonic clock. Any producer packet counts: DIGEST, PONG, SYNC_REPLY, TIMER_ANCHOR, CUE_DELTA, legacy updates, or on the watch and the web fallback a successful state poll.
+
+- Heartbeat: the producer sends `DIGEST` (LAN and relay) and the Control API v2 socket sends the `digest` event every 2 seconds. Legacy peers are unchanged (CUE_UPDATE and TIMER_UPDATE every 5 seconds).
+- Live: under 5 seconds of silence.
+- Stale: from 5 seconds. The display greys and dims. The timer keeps counting from its anchor and the cues stay visible, with a small "Reconnecting" tag. A client talking to a legacy producer (5-second beat) uses 8 seconds so the beat does not flicker the display.
+- Lost: from 20 seconds. The connection-error screen ("Waiting for Producer…") replaces the content. A client also forces a reconnect at this point.
+- Recovery is immediate on the next producer packet. A socket disconnect does not jump to lost; it follows the same clock, because a reconnect normally lands inside the window.
+- A producer (master) is always live.
+- Bandwidth: a digest packet is about 60 bytes, so an idle pager receives roughly 30 bytes per second.
 
 ## Standing message on pagers (v2.3)
 
@@ -202,3 +214,17 @@ Role messages remain in the thread; this rule only decides what a pager screen s
 
 The Swift pager offers the lower third described for the web pager: one strip with the clock (replaced by the cue word while STANDBY or GO), the element name and the countdown with its PROJECTED/ACTUAL tag; a standing message replaces the clock and the title. It is used when the viewer chooses Lower third in settings, or automatically when the window is at least 3:1 wide. Tapping the strip reveals the role chooser, messages and settings for six seconds. Not offered on tvOS.
 
+
+## Assigning a pager to a producer (ASSIGN_PRODUCER)
+
+A producer (or any app) can point a pager at a clock server with one UDP datagram to the pager's port 13381:
+
+```json
+{"type":"ASSIGN_PRODUCER","host":"192.168.1.20","port":13380,"mode":"introducer"}
+```
+
+- `host` (required): IPv4 address or hostname of the server the pager should connect to. Any well-formed host is accepted, public or private.
+- `port` (optional): the pager TCP port, 1-65535, default 13380. A packet with a port outside that range is ignored.
+- `mode` (optional): `"introducer"` marks a packet whose `host` is not the sender, as when a Producer in a remote session introduces a pager to the remote clock server. Without it the pager only accepts a packet whose `host` equals the datagram's source address, so a third party cannot redirect it.
+
+The pager remembers the host and port and reconnects to them until it is told to forget the assignment. A Producer sends its own address (no `port`, no `mode`) when it serves the pager itself, including a remote session in Local Relay mode; in Introducer or Control Only mode it sends the remote server's IPv4, its `network.lanPort`, and `"mode":"introducer"`.

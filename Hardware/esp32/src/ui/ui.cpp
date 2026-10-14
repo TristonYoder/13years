@@ -304,7 +304,7 @@ static void buildPagerScreen() {
 
   noConnLabel = lv_label_create(pagerScreen);
   lv_obj_set_style_text_font(noConnLabel, &inter_regular_14, 0);
-  lv_label_set_text(noConnLabel, "No connection");
+  lv_label_set_text(noConnLabel, "Reconnecting...");
   lv_obj_align(noConnLabel, LV_ALIGN_TOP_RIGHT, -kMargin, kTopY + 31);
   lv_obj_add_flag(noConnLabel, LV_OBJ_FLAG_HIDDEN);
 
@@ -447,14 +447,22 @@ static void updateCueToggleLabel();
 
 static lv_obj_t *cueToggleLabel = nullptr;
 
+static bool gStaleLook = false;
+
+static lv_color_t staleTint(uint32_t hex) {
+  lv_color_t c = lv_color_hex(hex);
+  if (!gStaleLook) return c;
+  return lv_color_mix(lv_color_hex(0x7A7A7A), c, 160);
+}
+
 static void applyTheme(CueState state, pagersync::CueDisplay display) {
   bool cue = state != CueState::Off;
   bool full = display == pagersync::CueDisplay::Fullscreen;
-  lv_color_t cueColor = lv_color_hex(cueStateBgColor(state));
-  lv_color_t ground = lv_color_hex(kGroundHex);
-  lv_color_t ink = (full && cue) ? ground : lv_color_hex(kInkHex);
+  lv_color_t cueColor = staleTint(cueStateBgColor(state));
+  lv_color_t ground = staleTint(kGroundHex);
+  lv_color_t ink = (full && cue) ? ground : staleTint(kInkHex);
 
-  lv_color_t screenBg = cue ? cueColor : (full ? ground : lv_color_hex(kNeutralFrameHex));
+  lv_color_t screenBg = cue ? cueColor : (full ? ground : staleTint(kNeutralFrameHex));
   lv_obj_set_style_bg_color(pagerScreen, screenBg, 0);
   if (full) lv_obj_add_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
   else lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
@@ -466,7 +474,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
     lv_obj_set_style_bg_color(c, cardColor, 0);
     lv_obj_set_style_bg_opa(c, cardOpa, 0);
   }
-  lv_obj_set_style_bg_color(msgPanel, lv_color_hex(kMessageHex), 0);
+  lv_obj_set_style_bg_color(msgPanel, staleTint(kMessageHex), 0);
   lv_obj_set_style_border_width(msgPanel, full && cue ? 2 : 0, 0);
   lv_obj_set_style_border_color(msgPanel, ground, 0);
 
@@ -523,7 +531,7 @@ static void addNoteSpans(lv_obj_t *sg, const char *category, const char *text, b
 static lv_color_t currentInk() {
   bool cue = pc.state != CueState::Off;
   bool full = pc.display == pagersync::CueDisplay::Fullscreen;
-  return (full && cue) ? lv_color_hex(kGroundHex) : lv_color_hex(kInkHex);
+  return (full && cue) ? staleTint(kGroundHex) : staleTint(kInkHex);
 }
 
 static void relayoutPager(bool timerShown, bool header, bool stackShown) {
@@ -565,7 +573,9 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   const cue::RoleView *role = engine.activeRoleRef();
   CueState state = role ? role->state : CueState::Off;
 
-  if (!pc.valid || state != pc.state || gCueDisplay != pc.display) {
+  int link = linkLost ? 1 : 0;
+  gStaleLook = linkLost;
+  if (!pc.valid || state != pc.state || gCueDisplay != pc.display || link != pc.link) {
     pc.state = state;
     pc.display = gCueDisplay;
     applyTheme(state, gCueDisplay);
@@ -577,7 +587,6 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
     lv_label_set_text(roleBtnLabel, pc.role.c_str());
   }
 
-  int link = linkLost ? 1 : 0;
   if (!pc.valid || link != pc.link) {
     pc.link = link;
     setHidden(noConnLabel, !linkLost);
@@ -593,6 +602,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   if (!pc.valid || !pc.clockText.equals(clockBuf)) {
     pc.clockText = clockBuf;
     lv_label_set_text(clockLabel, clockBuf);
+    if (pc.valid) lv_refr_now(NULL);
   }
   int utc = engine.hasUtcOffset() ? 0 : 1;
   if (!pc.valid || utc != pc.clockUtc) {
@@ -964,7 +974,7 @@ void update(Phase phase, cue::Engine &engine, bool wifiConnected, bool lanConnec
   }
 
   pagersync::LinkPhase lp = pagersync::linkPhase((int64_t)engine.silenceMs());
-  if (!engine.hasSyncedWithProducer() || lp == pagersync::LinkPhase::Extended) {
+  if (!engine.hasSyncedWithProducer() || lp == pagersync::LinkPhase::Lost) {
     showWaitingForDataScreen(wifiConnected);
     return;
   }

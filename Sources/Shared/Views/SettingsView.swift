@@ -107,13 +107,6 @@ public struct SettingsView: View {
                 Text("Builds an address for the built-in web pager, for a screen that can't run the app: a laptop, an OBS browser source, a lobby display. Open it in a browser on that screen.")
             }
 
-            if engine.isRemoteMirror {
-                Section {
-                    Label("Display, network, startup and Control API settings belong to \(engine.remoteProducerName ?? "the remote Producer") and can only be changed on that device.", systemImage: "lock")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
             Section {
                 HStack(spacing: 10) {
                     ForEach([HourFormatThreshold.never, .over90Minutes, .over60Minutes]) { threshold in
@@ -121,7 +114,7 @@ public struct SettingsView: View {
                             threshold: threshold,
                             isSelected: threshold == engine.hourFormatThreshold
                         ) {
-                            engine.hourFormatThreshold = threshold
+                            engine.setHourFormatThreshold(threshold)
                         }
                     }
                 }
@@ -132,30 +125,9 @@ public struct SettingsView: View {
                 Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
             }
 
-            Section {
-                Toggle("Act as Master Controller", isOn: $engine.isMasterServer)
-                    .onChange(of: engine.isMasterServer) { _, _ in
-                        engine.toggleMasterMode()
-                    }
-
-                if !engine.isMasterServer, let master = engine.connectedMasterName {
-                    LabeledContent("Discovered Master") {
-                        Text(master)
-                            .foregroundStyle(.green)
-                            .fontWeight(.medium)
-                    }
-                }
-
-                LabeledContent("LAN Service") {
-                    Text("_13years._tcp : \(String(LANUnicastServer.port))")
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Local Network")
-            } footer: {
-                Text("Devices on the same LAN — Pager apps and ESP32 hardware pagers — discover this device via Bonjour and connect directly for real-time cue delivery.")
-            }
+            #if os(macOS) || os(iOS)
+            RemoteProducerSettingsSection()
+            #endif
 
             #if os(macOS) || os(iOS)
             Section {
@@ -168,7 +140,13 @@ public struct SettingsView: View {
             #endif
 
             Section {
-                ControlAPISettingsSection()
+                if SettingsGating.isLocalControlAPIConfigurable(isRemoteSession: engine.isRemoteMirror) {
+                    ControlAPISettingsSection()
+                } else {
+                    Label("This device’s Control API is off while you control \(engine.remoteProducerName ?? "a remote Producer"). It returns when you disconnect.", systemImage: "lock")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Control API")
             } footer: {
@@ -201,15 +179,10 @@ public struct SettingsView: View {
                         .id(sentAt)
                 }
 
-                if !engine.isMasterServer {
-                    Button("Forget Assigned Producer", role: .destructive) {
-                        engine.forgetAssignedProducer()
-                    }
-                }
             } header: {
                 Text("13 Years Pager & App Connect")
             } footer: {
-                Text("If an ESP32 hardware pager or another 13 Years app can't find this device on its own (some venue Wi-Fi blocks the discovery it normally uses), type its IP address — shown on its own waiting screen — and send it this device's address directly. It remembers this and skips discovery from then on; \"producer auto\" on an ESP32's Serial console, or \"Forget Assigned Producer\" on another app, undoes that.")
+                Text("If an ESP32 hardware pager or another 13 Years app can't find this device on its own (some venue Wi-Fi blocks the discovery it normally uses), type its IP address — shown on its own waiting screen — and send it the address to connect to. It remembers this and skips discovery from then on; \"producer auto\" on an ESP32's Serial console, or \"Forget Assigned Producer\" on another app, undoes that.")
             }
 
             if Self.showsPlotipharIntegration {
@@ -239,7 +212,6 @@ public struct SettingsView: View {
                 }
             }
             #endif
-            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingPlanPicker) {

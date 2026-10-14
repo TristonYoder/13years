@@ -73,6 +73,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     let sizes: PagerChromeSizes
     let state: CueState
     let style: CueDisplayStyle
+    let producerClock: ProducerClockInfo
     let roleName: String
     let roleColumnMaxWidth: CGFloat
     let hidesLeading: Bool
@@ -100,22 +101,19 @@ struct PagerTopRow<RoleMenu: View>: View {
     }
 
     private var clock: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
-                Text(context.date, format: .dateTime.hour().minute().second())
-                    .font(.inter(size: sizes.timeFont, weight: .black))
-                    .monospacedDigit()
-                    .foregroundColor(Color(white: 0.96))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text("LOCAL TIME")
-                    .font(.inter(size: sizes.timeCaptionFont, weight: .bold))
-                    .tracking(sizes.timeCaptionFont * 0.25)
-                    .foregroundColor(.white.opacity(0.5))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
+            ProducerClockText(
+                info: producerClock,
+                font: .inter(size: sizes.timeFont, weight: .black),
+                color: Color(white: 0.96)
+            )
+            Text("LOCAL TIME")
+                .font(.inter(size: sizes.timeCaptionFont, weight: .bold))
+                .tracking(sizes.timeCaptionFont * 0.25)
+                .foregroundColor(.white.opacity(0.5))
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func badgeLabel(_ word: String) -> some View {
@@ -180,14 +178,21 @@ public enum DisconnectPhase: Equatable, Sendable {
     case dimmed
     case extended
 
-    public static let extendedThreshold: TimeInterval = 20
-
-    public init(elapsedSinceLive: TimeInterval?) {
-        guard let elapsed = elapsedSinceLive, elapsed > 0 else {
-            self = .live
-            return
+    public init(signal: ProducerSignal) {
+        switch signal {
+        case .live: self = .live
+        case .stale: self = .dimmed
+        case .lost: self = .extended
         }
-        self = elapsed >= Self.extendedThreshold ? .extended : .dimmed
+    }
+}
+
+extension View {
+    func pagerStaleLook(_ phase: DisconnectPhase) -> some View {
+        self
+            .saturation(phase == .dimmed ? 0.05 : 1)
+            .brightness(phase == .dimmed ? -0.08 : 0)
+            .animation(.easeInOut(duration: 0.45), value: phase)
     }
 }
 
@@ -209,6 +214,100 @@ public enum PagerConnectionState: Equatable, Sendable {
         case .live: return "Live"
         case .disconnected: return "Disconnected — retrying…"
         case .notConnected: return "Not connected"
+        }
+    }
+}
+
+public struct ProducerSecondsSchedule: TimelineSchedule {
+    public let offsetMs: Double?
+
+    public init(offsetMs: Double?) {
+        self.offsetMs = offsetMs
+    }
+
+    public func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        let first = ProducerClock.currentFlipDate(at: startDate, offsetMs: offsetMs)
+        var index = 0.0
+        return AnyIterator {
+            defer { index += 1 }
+            return first.addingTimeInterval(index)
+        }
+    }
+}
+
+extension PagerPresentationState {
+    var producerClock: ProducerClockInfo {
+        ProducerClockInfo(offsetMs: producerClockOffsetMs, utcOffsetSeconds: producerUTCOffsetSeconds)
+    }
+}
+
+struct ProducerClockText: View {
+    let info: ProducerClockInfo
+    let font: Font
+    let color: Color
+
+    var body: some View {
+        TimelineView(ProducerSecondsSchedule(offsetMs: info.offsetMs)) { context in
+            Text(ProducerClock.producerDate(localNow: context.date.addingTimeInterval(0.002), offsetMs: info.offsetMs), format: ProducerClock.displayStyle(info))
+                .font(font)
+                .monospacedDigit()
+                .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .id(info.offsetBucket)
+    }
+}
+
+public enum PagerLinkIndicator: Equatable, Sendable {
+    case live
+    case waitingForProducer
+    case connecting(host: String)
+    case problem(String)
+    case notConnected
+
+    public init(isMasterServer: Bool, isLANConnected: Bool, isProducerLive: Bool, link: ProducerLinkStatus) {
+        if isMasterServer {
+            self = .live
+            return
+        }
+        if link.isProblem, let message = link.message {
+            self = .problem(message)
+            return
+        }
+        guard isLANConnected else {
+            if case .connecting(let host) = link {
+                self = .connecting(host: host)
+            } else {
+                self = .notConnected
+            }
+            return
+        }
+        self = isProducerLive ? .live : .waitingForProducer
+    }
+
+    public var title: String {
+        switch self {
+        case .live: return "Live"
+        case .waitingForProducer: return "Connected, waiting for producer"
+        case .connecting(let host): return "Connecting to \(host)…"
+        case .problem(let message): return message
+        case .notConnected: return "Not connected"
+        }
+    }
+
+    public var tint: Color {
+        switch self {
+        case .live: return .green
+        case .waitingForProducer, .connecting: return .orange
+        case .problem, .notConnected: return .red
+        }
+    }
+
+    public var isLinked: Bool {
+        switch self {
+        case .live, .waitingForProducer: return true
+        default: return false
         }
     }
 }
@@ -277,7 +376,7 @@ struct PagerNoConnectionNotice: View {
     var body: some View {
         VStack {
             Spacer(minLength: 0)
-            Label("No connection", systemImage: "wifi.slash")
+            Label("Reconnecting…", systemImage: "wifi.slash")
                 .font(.inter(size: font, weight: .bold))
                 .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
                 .lineLimit(1)
@@ -296,9 +395,10 @@ struct PagerDisconnectOverlay: View {
         case .live:
             EmptyView()
         case .dimmed:
-            Color.black.opacity(0.55)
+            Color.gray.opacity(0.45)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+                .transition(.opacity)
         case .extended:
             PagerWaitingView()
         }

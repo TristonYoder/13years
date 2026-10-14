@@ -8,13 +8,14 @@ struct LauncherActions {
     var newDocument: () -> Void
     var newFromTemplate: () -> Void
     var open: () -> Void
-    var openRecent: (URL) -> Void
+    var openRecent: (RecentItem) -> Void
+    var removeRecent: (RecentItem) -> Void = { _ in }
     var connect: () -> Void
     var refreshRecents: () -> Void = {}
 }
 
 struct LauncherView: View {
-    let recentURLs: [URL]
+    let recents: [RecentItem]
     let actions: LauncherActions
     @Environment(\.colorScheme) private var colorScheme
 
@@ -61,7 +62,7 @@ struct LauncherView: View {
                 VStack(spacing: 12) { cards }
             }
 
-            recents
+            recentsSection
         }
         .padding(36)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -145,7 +146,7 @@ struct LauncherView: View {
         .buttonStyle(LauncherCardButtonStyle())
     }
 
-    private var recents: some View {
+    private var recentsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("RECENT")
                 .font(.caption.weight(.semibold))
@@ -153,8 +154,8 @@ struct LauncherView: View {
                 .tracking(1)
                 .padding(.horizontal, 4)
 
-            if recentURLs.isEmpty {
-                Text("Documents you open or save will show up here.")
+            if recents.isEmpty {
+                Text("Documents, templates, and Producers you open or connect to will show up here.")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -162,12 +163,12 @@ struct LauncherView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(recentURLs, id: \.self) { url in
-                            RecentRow(url: url) { actions.openRecent(url) }
+                        ForEach(recents) { item in
+                            RecentRow(item: item, open: { actions.openRecent(item) }, remove: { actions.removeRecent(item) })
                         }
                     }
                 }
-                .frame(minHeight: 54, maxHeight: min(CGFloat(recentURLs.count) * 54, 240))
+                .frame(minHeight: 54, maxHeight: min(CGFloat(recents.count) * 54, 240))
             }
         }
     }
@@ -183,41 +184,32 @@ private struct LauncherCardButtonStyle: ButtonStyle {
 }
 
 private struct RecentRow: View {
-    let url: URL
-    let action: () -> Void
+    let item: RecentItem
+    let open: () -> Void
+    let remove: () -> Void
     @State private var isHovering = false
 
-    private var folder: String {
-        (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
-    }
-
-    private var modified: Date? {
-        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-    }
-
     var body: some View {
-        Button(action: action) {
+        Button(action: open) {
             HStack(spacing: 12) {
-                Image(systemName: "doc.text.fill")
+                Image(systemName: item.systemImage)
                     .font(.system(size: 18))
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(RecentDocuments.title(for: url))
+                    Text(item.title)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
-                    Text(folder)
+                    Text(item.subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
                 Spacer(minLength: 8)
-                if let modified {
-                    Text(modified, format: .relative(presentation: .named))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text(item.lastUsed, format: .relative(presentation: .named))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -229,7 +221,10 @@ private struct RecentRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help(url.path)
+        .help(item.url?.path ?? item.subtitle)
+        .contextMenu {
+            Button("Remove from Recents", systemImage: "xmark", action: remove)
+        }
     }
 }
 #endif

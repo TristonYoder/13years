@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import XCTest
+@testable import ThirteenYearsClockKit
 
 enum RemoteFixtures {
     static func stateJSON(
@@ -54,7 +55,13 @@ private extension String {
 @MainActor
 final class RecordingCommands: RemoteProducerCommanding {
     var sent: [RemoteCommand] = []
+    var requested: [RemoteCommand] = []
+    var requestReply = Data()
     func send(_ command: RemoteCommand) { sent.append(command) }
+    func request(_ command: RemoteCommand) async throws -> Data {
+        requested.append(command)
+        return requestReply
+    }
 }
 
 final class RemoteEndpointTests: XCTestCase {
@@ -173,7 +180,7 @@ final class RemoteCommandTests: XCTestCase {
         XCTAssertTrue(sink.sent.contains(.planNext(startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.waypointGo(ref: "w1", startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.planReorder(itemIds: ["b", "a"])))
-        XCTAssertTrue(sink.sent.contains(.planImport(text: "A/B | Song | 2:05", title: "T")))
+        XCTAssertTrue(sink.sent.contains { if case .loadDocument = $0 { return true } else { return false } })
         XCTAssertTrue(sink.sent.contains(.waypointCreateAndAssign(name: "Song 2", itemId: "a")))
         XCTAssertTrue(sink.sent.contains(.pcoSelectServiceType(id: nil)))
         XCTAssertEqual(sink.sent.count, 31)
@@ -242,7 +249,7 @@ final class MirrorEngineTests: XCTestCase {
         engine.tickTimer()
         let after = defaults.dictionaryRepresentation() as NSDictionary
         XCTAssertEqual(before, after)
-        XCTAssertTrue(sink.sent.isEmpty)
+        XCTAssertEqual(sink.sent, [.pcoSignOut])
     }
 
     func testMirrorDoesNotDisturbLocalEnginePersistence() {

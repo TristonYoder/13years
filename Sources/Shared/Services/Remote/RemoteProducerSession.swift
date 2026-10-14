@@ -73,6 +73,10 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
     public let id = UUID()
 
     public let endpoint: RemoteEndpoint
+
+    public var assignContext: RemoteAssignContext? {
+        RemoteAssignContext(endpointHost: endpoint.host, lanPort: state?.network.lanPort, lanMode: RemoteLANCoordinator.shared.mode)
+    }
     public let engine: CueEngine
 
     private let http: RemoteProducerHTTP
@@ -476,6 +480,16 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
         }
     }
 
+    public func request(_ command: RemoteCommand) async throws -> Data {
+        guard isLive else { throw RemoteProducerError.rejected("Not connected to \(displayName).") }
+        let (status, data) = try await send(command.request, idempotent: command.isIdempotent)
+        guard (200..<300).contains(status) else {
+            let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+            throw RemoteProducerError.rejected([body?.error ?? "\(displayName) refused the request (\(status)).", body?.detail].compactMap { $0 }.joined(separator: " "))
+        }
+        return data
+    }
+
     private func perform(_ queued: QueuedCommand) async {
         guard isLive, queued.epoch == connectionEpoch else {
             report("A command queued before the connection changed was dropped.", detail: "Check \(displayName) and try again.")
@@ -556,6 +570,10 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
         lastError = kept.last?.message
     }
 
+    public func noteFailure(_ message: String, detail: String? = nil) {
+        report(message, detail: detail)
+    }
+
     public func dismissError() {
         recentErrors = []
         lastError = nil
@@ -593,6 +611,7 @@ public enum RemoteProducerError: LocalizedError, Equatable {
     case notAProducer(String)
     case noHello(String)
     case refused(String)
+    case rejected(String)
     case differentProducer(String)
     case thisDevice
 
@@ -602,6 +621,8 @@ public enum RemoteProducerError: LocalizedError, Equatable {
             return "That address isn't valid."
         case .unreachable(let address):
             return "Couldn't reach \(address). Check the address, and that both devices are on the same network."
+        case .rejected(let message):
+            return message
         case .refused(let address):
             return "\(address) refused the connection. Switch on the Control API in that Producer's Settings."
         case .differentProducer(let address):
@@ -620,7 +641,10 @@ public enum RemoteProducerError: LocalizedError, Equatable {
 public final class RemoteProducerHub: ObservableObject {
     @Published public var isConnectPresented = false
     @Published public private(set) var session: RemoteProducerSession?
+    @Published public var requestedEndpoint: RemoteEndpoint?
     public var pending: RemoteProducerSession?
+    public var onActivated: ((RemoteProducerSession) -> Void)?
+    public let lan = RemoteLANCoordinator.shared
 
     public init() {}
 
@@ -629,6 +653,52 @@ public final class RemoteProducerHub: ObservableObject {
     public func activate(_ new: RemoteProducerSession) {
         session?.disconnect()
         session = new
+        requestedEndpoint = nil
+        lan.attach(new)
+        onActivated?(new)
+    }
+
+    @Published public private(set) var connectingTo: String?
+    @Published public private(set) var failedEndpoint: RemoteEndpoint?
+    @Published public private(set) var failureMessage: String?
+    private var connectTask: Task<Void, Never>?
+
+    public func connect(to endpoint: RemoteEndpoint) {
+        connectTask?.cancel()
+        clearFailure()
+        let session = RemoteProducerSession(endpoint: endpoint)
+        connectingTo = endpoint.name.isEmpty ? endpoint.host : endpoint.name
+        connectTask = Task { [weak self] in
+            await session.connect()
+            guard let self else { return }
+            self.connectingTo = nil
+            self.connectTask = nil
+            if Task.isCancelled {
+                session.disconnect()
+                return
+            }
+            if session.connection == .connected {
+                self.activate(session)
+            } else {
+                var message = "Couldn't connect to \(endpoint.address)."
+                if case .failed(let reason) = session.connection { message = reason }
+                session.disconnect()
+                self.failedEndpoint = endpoint
+                self.failureMessage = message
+                self.isConnectPresented = true
+            }
+        }
+    }
+
+    public func cancelConnect() {
+        connectTask?.cancel()
+        connectTask = nil
+        connectingTo = nil
+    }
+
+    public func clearFailure() {
+        failedEndpoint = nil
+        failureMessage = nil
     }
 
     public func promotePending() {
@@ -640,6 +710,7 @@ public final class RemoteProducerHub: ObservableObject {
     public func disconnect() {
         session?.disconnect()
         session = nil
+        lan.shutdown()
     }
 }
 #endif

@@ -151,14 +151,11 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
     private func clockBlock(_ m: LowerThirdMetrics, primary: Color) -> some View {
         VStack(alignment: .leading, spacing: m.tagFontSize * 0.3) {
             ZStack(alignment: .leading) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(context.date, format: .dateTime.hour().minute().second())
-                        .font(.inter(size: m.fontSize, weight: .black))
-                        .monospacedDigit()
-                        .foregroundColor(primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                }
+                ProducerClockText(
+                    info: presentation.producerClock,
+                    font: .inter(size: m.fontSize, weight: .black),
+                    color: primary
+                )
                 .opacity(cueWord.isEmpty ? 1 : 0)
 
                 if !cueWord.isEmpty {

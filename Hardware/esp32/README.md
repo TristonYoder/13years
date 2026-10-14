@@ -40,7 +40,10 @@ and friends for the canonical schema and [`LANUnicastChannel.swift`](../../Sourc
 for the Swift side's implementation. Discovery is via mDNS (`_13years._tcp`
 service type), with a manually-configured static IP as a fallback for networks
 where mDNS is filtered (see `storage/nvs_store.h`'s `getProducerHost()` and the
-`producer <ip>|auto` Serial command). This device is always a *client*: it never
+`producer <ip>[:port]|auto` Serial command). The Producer can also point the pager at a server with a UDP
+"magic packet" on port 13381, `{"type":"ASSIGN_PRODUCER","host":"<ipv4>","port":<optional, 1-65535, default 13380>,"mode":"introducer"}`;
+it is persisted like a static Producer. The host must be a well-formed IPv4 address (public or private), an invalid port drops
+the packet, and a host different from the UDP sender's address requires `"mode":"introducer"`. This device is always a *client*: it never
 acts as the hub (that's whichever app has `isMasterServer = true`), so it never
 replies to another peer's `PING` and never broadcasts `CUE_UPDATE` — it
 sends exactly one `PING` after connecting, requesting the hub's catch-up
@@ -61,7 +64,7 @@ everything it sends is handled exactly as before. Against a v2 producer
 - applies `CUE_DELTA` per role id, ignores packets with a lower `rev`
   (reset on every reconnect), and checks each `DIGEST` (FNV-1a 64 over roles,
   timer and message ids). A mismatch sends one catch-up `PING`.
-- treats the producer as lost after 25 s of silence (12 s for a legacy one).
+- treats the producer as lost after 20 s without any packet and shows the stale (dimmed, "Reconnecting...") look after 5 s; the next packet restores it at once.
 
 Spec v2.1 on the device: a changed `epoch` discards the anchor, rev gate and
 clock samples and triggers a sync burst plus one catch-up `PING`; packets with a
@@ -78,9 +81,8 @@ fallback when free heap is short; see `kRxBufPreferred` in `lan_client.cpp`).
 Larger frames are consumed and discarded without dropping the connection and a
 catch-up `PING` follows after 5 s. Packets are parsed with an ArduinoJson filter
 that keeps only the fields the pager uses. A parse failure is logged and
-requests a (rate-limited) catch-up. If the producer is silent for the
-staleness limit plus 5 s the pager sends one `PING`, and closes the socket if
-nothing arrives within another 5 s. `status` also prints free, minimum free and
+requests a (rate-limited) catch-up. If the producer is silent for
+5 s the pager sends one `PING`, and closes the socket to reconnect at 20 s. `status` also prints free, minimum free and
 largest-block heap.
 
 The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly) lives in
@@ -132,7 +134,7 @@ role <id>          assign this pager's role (host, keys, speaker, lead_vocal, pr
 status              device id / role / WiFi+LAN state / active cue+timer/note/message
 testpacket <json>   inject a raw CuePacket JSON string directly into the engine — debug aid,
                     bypasses WiFi/network entirely
-producer <ip>|auto  override Producer host: <ip> for static IP fallback, or 'auto' to use mDNS discovery
+producer <ip>[:port]|auto  override Producer host: <ip>[:port] (default port 13380) for static IP fallback, or 'auto' to use mDNS discovery
 reset               wipe all stored config (WiFi, device id, role, Producer host) and restart
 ```
 
@@ -177,7 +179,7 @@ Only `ssid` is required. `pass` may be omitted for an open network, and `role`,
 `producer` and `rotate180` left out to keep whatever is already stored. Left
 out is not the same as `false`: a pager already mounted upside-down must not be
 righted by a provision that never mentioned orientation. `producer` takes an IP
-or the literal `auto` (mDNS discovery), same as the `producer` command.
+or the literal `auto` (mDNS discovery), same as the `producer` command. An optional `"port"` (1-65535, default 13380) or an `ip:port` form of `producer` points the pager at a clock server on a non-default port.
 
 It replies with exactly one line, and that line is a contract — everything
 else this firmware prints is prose for a human, but these two are meant to be
@@ -195,7 +197,7 @@ those stay plain.
 
 The error reasons are fixed strings: `malformed-json`, `expected-json-object`,
 `missing-ssid`, `bad-ssid-length`, `bad-password-length`, `bad-role`,
-`bad-producer-ip`, `bad-rotate180`. Every field is validated before anything is written, so a
+`bad-producer-ip`, `bad-producer-port`, `bad-rotate180`. Every field is validated before anything is written, so a
 rejected `provision` changes nothing rather than leaving the unit on a new
 network under an old role. The `deviceId` in the ok line is there so the app
 can tell which physical unit it just provisioned without a second round trip —
@@ -431,8 +433,8 @@ fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
   under it while the link is lost. There is no `FOR: person`.
 - **Connection state.** The connection state (`Live`, `Disconnected - retrying`,
   `Not connected`), the producer name or address and the clock offset are shown
-  at the top of the role picker screen. After 12 s without a packet the pager
-  screen shows the marker; after 20 s without any packet it shows the
+  at the top of the role picker screen. After 5 s without a packet the pager
+  screen dims and shows `Reconnecting...`; after 20 s without any packet it shows the
   `Waiting for Producer...` logo screen until packets resume
   (`pagersync::linkPhase` in `src/sync/sync_core.h`, host-tested).
 - **Local time of day.** The producer's epoch time (synced offset applied to

@@ -381,15 +381,23 @@ inline const char *cueDisplayName(CueDisplay d) {
 }
 
 
-enum class LinkPhase { Live, Stale, Extended };
+enum class LinkPhase { Live, Stale, Lost };
 
-static const int64_t kLinkStaleAfterMs = 12000;
-static const int64_t kLinkExtendedAfterMs = 20000;
+static const int64_t STALE_AFTER_MS = 5000;
+static const int64_t LOST_AFTER_MS = 20000;
 
-inline LinkPhase linkPhase(int64_t silenceMs) {
-  if (silenceMs >= kLinkExtendedAfterMs) return LinkPhase::Extended;
-  if (silenceMs >= kLinkStaleAfterMs) return LinkPhase::Stale;
+inline LinkPhase linkPhase(int64_t msSinceLastPacket) {
+  if (msSinceLastPacket >= LOST_AFTER_MS) return LinkPhase::Lost;
+  if (msSinceLastPacket >= STALE_AFTER_MS) return LinkPhase::Stale;
   return LinkPhase::Live;
+}
+
+inline bool keepStateOnReconnect(int64_t msSinceLastPacket) {
+  return linkPhase(msSinceLastPacket) != LinkPhase::Lost;
+}
+
+inline int64_t msSince(uint32_t nowMs, uint32_t thenMs) {
+  return (int64_t)(uint32_t)(nowMs - thenMs);
 }
 
 inline const char *linkStatusText(bool wifiUp, bool lanUp, LinkPhase phase) {

@@ -15,8 +15,13 @@ public struct PagerSettingsView: View {
 
     public init() {}
 
-    private var connectionState: PagerConnectionState {
-        PagerConnectionState(isProducerLive: engine.isMasterServer || engine.isProducerLive, isLANConnected: engine.isLANConnected)
+    private var linkIndicator: PagerLinkIndicator {
+        PagerLinkIndicator(
+            isMasterServer: engine.isMasterServer,
+            isLANConnected: engine.isLANConnected,
+            isProducerLive: engine.isProducerLive,
+            link: engine.producerLinkStatus
+        )
     }
 
     static func syncText(offsetMs: Double, rttMs: Double?) -> String {
@@ -99,22 +104,22 @@ public struct PagerSettingsView: View {
                 } header: {
                     Text("Producer")
                 } footer: {
-                    Text("Automatic finds the producer on this network. Enter an IP address or hostname to connect to one directly, for example when discovery is blocked.")
+                    Text("Automatic finds the producer on this network. Enter an IP address or hostname, optionally followed by :port (default 13380), to connect to one directly, for example when discovery is blocked or the clock server is hosted elsewhere.")
                 }
 
                 Section {
                     LabeledContent("Status") {
-                        Text(connectionState.title)
-                            .foregroundStyle(connectionState == .live ? Color.green : Color.red)
+                        Text(linkIndicator.title)
+                            .foregroundStyle(linkIndicator.tint)
                             .fontWeight(.medium)
                     }
                     LabeledContent("Producer") {
-                        Text(engine.connectedMasterName ?? "—")
+                        Text(linkIndicator.isLinked ? (engine.connectedMasterName ?? "—") : "—")
                             .foregroundStyle(.secondary)
                     }
-                    if let offset = engine.syncV2.estimator.offsetMs {
+                    if let offset = engine.clockEstimator.offsetMs {
                         LabeledContent("Clock sync") {
-                            Text(Self.syncText(offsetMs: offset, rttMs: engine.syncV2.estimator.best?.effectiveRtt))
+                            Text(Self.syncText(offsetMs: offset, rttMs: engine.clockEstimator.best?.effectiveRtt))
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
@@ -124,7 +129,7 @@ public struct PagerSettingsView: View {
                 }
 
                 Section {
-                    if let master = engine.connectedMasterName {
+                    if let master = engine.connectedMasterName, linkIndicator.isLinked {
                         LabeledContent("Connected Master") {
                             Text(master)
                                 .foregroundStyle(.green)

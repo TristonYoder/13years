@@ -9,6 +9,8 @@
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include <string.h>
+#include <string>
+#include "endpoint_parse.h"
 #include <stdlib.h>
 
 static cue::Engine *engineRef = nullptr;
@@ -52,9 +54,7 @@ static const unsigned long kOversizeCatchUpBackoffMs = 5000;
 static bool oversizeCatchUpPending = false;
 static unsigned long oversizeCatchUpAt = 0;
 
-static const unsigned long kWatchdogGraceMs = 5000;
 static bool watchdogPinged = false;
-static unsigned long watchdogPingAt = 0;
 
 static const int kConnectTimeoutMs = 3000;
 
@@ -153,10 +153,11 @@ static bool discoverViaStaticIp() {
     return false;
   }
   targetIp = ip;
-  targetPort = kServerPort;
+  uint16_t savedPort = store::getProducerPort();
+  targetPort = savedPort != 0 ? savedPort : kServerPort;
   targetIsStatic = true;
   haveTarget = true;
-  targetLabel = host;
+  targetLabel = savedPort != 0 ? host + ":" + String(savedPort) : host;
   return true;
 }
 
@@ -166,11 +167,35 @@ static bool discoverViaMdns() {
     Serial.printf("[lan] mDNS query for _13years._tcp returned %d results\n", n);
     return false;
   }
+  targetIsStatic = false;
+  String advertiser = MDNS.hostname(0);
+  std::string txtHost = MDNS.hasTxt(0, "host") ? MDNS.txt(0, "host").c_str() : "";
+  std::string txtPort = MDNS.hasTxt(0, "port") ? MDNS.txt(0, "port").c_str() : "";
+  std::string txtHostIp = MDNS.hasTxt(0, "hostip") ? MDNS.txt(0, "hostip").c_str() : "";
+  std::string txtMode = MDNS.hasTxt(0, "mode") ? MDNS.txt(0, "mode").c_str() : "";
+  endpointparse::IntroducerTarget intro = endpointparse::decideIntroducer(txtHost, txtPort, txtHostIp, txtMode);
+  IPAddress introIp;
+  bool introduced = false;
+  if (intro.kind == endpointparse::IntroducerKind::Direct) {
+    introduced = introIp.fromString(intro.ip.c_str());
+  } else if (intro.kind == endpointparse::IntroducerKind::NeedsResolve) {
+    introduced = WiFi.hostByName(intro.host.c_str(), introIp) == 1 && introIp != IPAddress(0, 0, 0, 0);
+    if (!introduced) Serial.printf("[lan] introducer host \"%s\" did not resolve — using advertiser\n", intro.host.c_str());
+  }
+  if (introduced) {
+    targetIp = introIp;
+    targetPort = intro.port;
+    targetLabel = advertiser;
+    if (targetLabel.length() == 0) targetLabel = intro.host.c_str();
+    haveTarget = true;
+    Serial.printf("[lan] introduced to producer by %s: %s:%u\n",
+                  advertiser.c_str(), targetIp.toString().c_str(), targetPort);
+    return true;
+  }
   targetIp = MDNS.IP(0);
   targetPort = MDNS.port(0);
-  targetIsStatic = false;
   haveTarget = true;
-  targetLabel = MDNS.hostname(0);
+  targetLabel = advertiser;
   if (targetLabel.length() == 0) targetLabel = targetIp.toString();
   Serial.printf("[lan] discovered producer via mDNS: %s (%s:%u)\n",
                 MDNS.hostname(0).c_str(), targetIp.toString().c_str(), targetPort);
@@ -245,25 +270,24 @@ static void serviceReceive() {
 
 static void serviceWatchdog() {
   if (!engineRef) return;
-  unsigned long limit = engineRef->stalenessLimitMs() + kWatchdogGraceMs;
   unsigned long silence = engineRef->silenceMs();
-  if (silence <= limit) {
+  pagersync::LinkPhase phase = pagersync::linkPhase((int64_t)silence);
+  if (phase == pagersync::LinkPhase::Live) {
     watchdogPinged = false;
     return;
   }
   unsigned long now = millis();
+  if (phase == pagersync::LinkPhase::Lost) {
+    Serial.printf("[lan] producer silent for %lums — closing socket to reconnect\n", silence);
+    watchdogPinged = false;
+    client.stop();
+    return;
+  }
   if (!watchdogPinged) {
     Serial.printf("[lan] producer silent for %lums — sending catch-up PING\n", silence);
     sendPing();
     lastPingAt = now;
     watchdogPinged = true;
-    watchdogPingAt = now;
-    return;
-  }
-  if (now - watchdogPingAt >= kWatchdogGraceMs) {
-    Serial.println("[lan] no answer to watchdog PING — closing socket to reconnect");
-    watchdogPinged = false;
-    client.stop();
   }
 }
 
@@ -280,19 +304,32 @@ static void serviceAssignPing() {
   if (strcmp(type, "ASSIGN_PRODUCER") != 0) return;
   const char *host = doc["host"] | "";
   if (strlen(host) == 0) return;
+  JsonVariantConst portVar = doc["port"];
+  bool hasPort = !portVar.isNull();
+  if (hasPort && !portVar.is<long long>()) {
+    Serial.println("[lan] ASSIGN_PRODUCER carried a non-integer port — ignoring");
+    return;
+  }
+  const char *mode = doc["mode"] | "";
+  String sender = assignUdp.remoteIP().toString();
 
-  IPAddress ip;
-  if (!ip.fromString(host)) {
-    Serial.printf("[lan] ASSIGN_PRODUCER carried an invalid host \"%s\" — ignoring\n", host);
+  endpointparse::AssignDecision decision = endpointparse::decideAssign(
+    host, hasPort, hasPort ? portVar.as<long long>() : 0, mode, sender.c_str());
+  if (!decision.accept) {
+    Serial.printf("[lan] ASSIGN_PRODUCER from %s for \"%s\" rejected\n", sender.c_str(), host);
     return;
   }
 
-  Serial.printf("[lan] producer assigned via network ping: %s\n", host);
-  store::setProducerHost(String(host));
+  IPAddress ip;
+  if (!ip.fromString(decision.host.c_str())) return;
+
+  Serial.printf("[lan] producer assigned via network ping: %s:%u\n", decision.host.c_str(), (unsigned)decision.port);
+  store::setProducerHost(String(decision.host.c_str()));
+  store::setProducerPort(decision.port == kServerPort ? 0 : decision.port);
   staticFallbackActive = false;
   staticFailureCount = 0;
   targetIp = ip;
-  targetPort = kServerPort;
+  targetPort = decision.port;
   targetIsStatic = true;
   haveTarget = true;
   if (client.connected()) client.stop();

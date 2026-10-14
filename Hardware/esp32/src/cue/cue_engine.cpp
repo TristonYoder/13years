@@ -46,15 +46,21 @@ bool Engine::wallClockMs(int64_t &ms) const {
 }
 
 void Engine::onConnected() {
+  catchUpWanted_ = true;
+  syncBurstWanted_ = true;
+  noOffsetBurstDone_ = true;
+  messageMismatchStreak_ = 0;
+  if (pagersync::keepStateOnReconnect(pagersync::msSince(millis(), lastRxAnyMillis_))) return;
   producerV2_ = false;
   rev_.reset();
   clock_.reset();
   epoch_.reset();
-  catchUpWanted_ = false;
-  syncBurstWanted_ = false;
-  noOffsetBurstDone_ = false;
-  messageMismatchStreak_ = 0;
+  anchor_ = pagersync::Anchor();
+  anchored_ = false;
   anchorKnown_ = false;
+  next_.found = false;
+  hasSyncedWithProducer_ = false;
+  noOffsetBurstDone_ = false;
   lastRxAnyMillis_ = millis();
 }
 

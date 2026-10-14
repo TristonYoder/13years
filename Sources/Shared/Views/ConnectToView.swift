@@ -8,6 +8,8 @@ import UIKit
 #endif
 
 struct ConnectToView: View {
+    var prefill: RemoteEndpoint?
+    var prefillError: String? = nil
     let onConnected: (RemoteProducerSession) -> Void
     let onCancel: () -> Void
 
@@ -81,7 +83,11 @@ struct ConnectToView: View {
         #if os(macOS)
         .frame(width: 460)
         #endif
-        .onAppear { discovery.start() }
+        .onAppear {
+            discovery.start()
+            connectToPrefill()
+        }
+        .onChange(of: prefill) { _, _ in connectToPrefill() }
         .onDisappear {
             discovery.stop()
             attempt?.disconnect()
@@ -171,6 +177,16 @@ struct ConnectToView: View {
         }
     }
 
+    private func connectToPrefill() {
+        guard let prefill, !isConnecting else { return }
+        address = prefill.address
+        if let prefillError {
+            errorText = prefillError
+            return
+        }
+        connect(to: prefill, name: prefill.name)
+    }
+
     private func connectManually() {
         guard let endpoint = RemoteEndpoint.parse(address) else {
             errorText = "That doesn't look like an address. Use a host name or IP, optionally followed by :port."
@@ -205,6 +221,7 @@ struct ConnectToView: View {
 
 struct RemoteProducerContainerView: View {
     @ObservedObject var session: RemoteProducerSession
+    @ObservedObject var lan: RemoteLANCoordinator
     let onDisconnect: () -> Void
 
     var body: some View {
@@ -221,6 +238,9 @@ struct RemoteProducerContainerView: View {
                 }
         }
         .id(session.id)
+        #if os(macOS)
+        .ignoresSafeArea(.container, edges: .top)
+        #endif
     }
 
     private var isWarning: Bool {
@@ -249,11 +269,31 @@ struct RemoteProducerContainerView: View {
                     Button("Reconnect now") { session.reconnectNow() }
                         .buttonStyle(.borderedProminent)
                         .tint(.black)
+                        #if os(macOS)
+                        .controlSize(.small)
+                        #endif
                 }
-                Button("Disconnect", action: onDisconnect)
-                    .producerSecondaryButton()
-                    .tint(foreground)
+                #if os(iOS)
+                Menu {
+                    Button("Disconnect", role: .destructive, action: onDisconnect)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.large)
+                }
+                .tint(foreground)
+                #endif
             }
+            .foregroundStyle(foreground)
+            #if os(macOS)
+            .padding(.leading, 78)
+            .padding(.trailing, 14)
+            .frame(height: 28)
+            #else
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            #endif
+            .background(background)
+
             if !session.recentErrors.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(session.recentErrors) { note in
@@ -271,14 +311,12 @@ struct RemoteProducerContainerView: View {
                         .foregroundStyle(.white)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(background)
                 .onTapGesture { session.dismissError() }
             }
         }
-        .foregroundStyle(foreground)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(background)
     }
 
     @ViewBuilder
@@ -311,6 +349,65 @@ struct RemoteProducerContainerView: View {
         case .refused: return "\(session.displayName) is there, but its Control API is off."
         case .noHello: return "\(session.displayName) didn't start a live connection."
         }
+    }
+}
+
+struct RemoteProducerSettingsSection: View {
+    var body: some View {
+        Section {
+            RemoteLANModePicker(lan: RemoteLANCoordinator.shared)
+        } header: {
+            Text("Remote Producer")
+        } footer: {
+            Text("Applies to the next remote session you start with Connect To…. It has no effect on this device’s own pagers.")
+        }
+    }
+}
+
+struct RemoteLANModePicker: View {
+    @ObservedObject var lan: RemoteLANCoordinator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Pagers on this network", selection: $lan.mode) {
+                ForEach(RemoteLANMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text(lan.mode.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let status = lan.statusText {
+                Text(status)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(lan.isError ? Color.red : Color.secondary)
+            }
+        }
+    }
+}
+#endif
+
+#if os(macOS) || os(iOS)
+struct RemoteConnectingOverlay: View {
+    let name: String
+    let cancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.25).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView()
+                Text("Connecting to \(name)…")
+                    .font(.headline)
+                Button("Cancel", action: cancel)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(24)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .transition(.opacity)
     }
 }
 #endif

@@ -2,21 +2,22 @@
 // Copyright (C) 2026 Triston Yoder
 
 import XCTest
+@testable import ThirteenYearsClockKit
 
 final class DisconnectPhaseTests: XCTestCase {
-    func testLiveWhenNoElapsedTime() {
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: nil), .live)
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: 0), .live)
+    func testPhaseFollowsSignal() {
+        XCTAssertEqual(DisconnectPhase(signal: .live), .live)
+        XCTAssertEqual(DisconnectPhase(signal: .stale), .dimmed)
+        XCTAssertEqual(DisconnectPhase(signal: .lost), .extended)
     }
 
-    func testDimmedBeforeTwentySeconds() {
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: 0.5), .dimmed)
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: 19.99), .dimmed)
-    }
-
-    func testExtendedFromTwentySeconds() {
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: 20), .extended)
-        XCTAssertEqual(DisconnectPhase(elapsedSinceLive: 300), .extended)
+    func testProducerSignalThresholds() {
+        XCTAssertEqual(ProducerSignal(silence: nil), .lost)
+        XCTAssertEqual(ProducerSignal(silence: 0), .live)
+        XCTAssertEqual(ProducerSignal(silence: 4.9), .live)
+        XCTAssertEqual(ProducerSignal(silence: 5), .stale)
+        XCTAssertEqual(ProducerSignal(silence: 19.9), .stale)
+        XCTAssertEqual(ProducerSignal(silence: 20), .lost)
     }
 
     func testConnectionStateTitles() {

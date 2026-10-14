@@ -8,9 +8,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class DocumentController: ObservableObject {
-    @Published private(set) var recents: [RecentEntry] = []
+    @Published private(set) var items: [RecentItem] = []
     @Published var isLauncherPresented = true
     @Published private(set) var canRevert = false
+    var remoteSession: RemoteProducerSession?
     let saveIndicator = DocumentSaveIndicator()
     private var observers: [AnyCancellable] = []
 
@@ -20,7 +21,9 @@ final class DocumentController: ObservableObject {
     private var openedByURL = false
     private let defaults: UserDefaults
 
-    var recentURLs: [URL] { recents.map(\.url) }
+    var recents: [RecentItem] { items.filter { $0.kind == .document && $0.url != nil } }
+
+    var recentURLs: [URL] { recents.compactMap(\.url) }
 
     private var contentType: UTType {
         .thirteenYearsDocument
@@ -32,9 +35,9 @@ final class DocumentController: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let loaded = RecentDocuments.load(defaults: defaults)
-        recents = loaded.entries
-        if loaded.changed { RecentDocuments.persist(recents, defaults: defaults) }
+        let loaded = RecentItems.load(defaults: defaults)
+        items = loaded.items
+        if loaded.changed { RecentItems.persist(items, defaults: defaults) }
     }
 
     func attach(_ engine: CueEngine) {
@@ -153,12 +156,13 @@ final class DocumentController: ObservableObject {
         panel.allowedContentTypes = [contentType]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = engine.currentDocumentURL?.lastPathComponent
-            ?? "Untitled.\(ProducerDocument.fileExtension)"
+            ?? "\(engine.isRemoteMirror ? (engine.remoteProducerName ?? "Remote Producer") : "Untitled").\(ProducerDocument.fileExtension)"
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return write(engine, to: url)
     }
 
     func newDocument(_ engine: CueEngine) {
+        guard remoteSession == nil else { return }
         guard settle(engine, closing: false) else { return }
         guard let url = chooseNewDocumentLocation(name: "Untitled") else { return }
         create(engine, content: nil, at: url)
@@ -210,7 +214,7 @@ final class DocumentController: ObservableObject {
     }
 
     func newFromTemplate(_ engine: CueEngine) {
-        guard settle(engine, closing: false) else { return }
+        guard remoteSession != nil || settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [templateType]
         panel.allowsMultipleSelection = false
@@ -223,6 +227,10 @@ final class DocumentController: ObservableObject {
 
     @discardableResult
     func openTemplate(_ url: URL, in engine: CueEngine, reportErrors: Bool = true) -> Bool {
+        if let session = remoteSession {
+            RemoteDocumentLoader.send(url, to: session)
+            return true
+        }
         guard settle(engine, closing: false) else { return false }
         let document: ProducerDocument
         do {
@@ -234,23 +242,27 @@ final class DocumentController: ObservableObject {
             return false
         }
         guard let destination = chooseNewDocumentLocation(name: RecentDocuments.title(for: url)) else { return false }
-        return create(engine, content: document, at: destination)
+        let created = create(engine, content: document, at: destination)
+        if created { noteRecent(url, kind: .template) }
+        return created
     }
 
-    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
+    func applyLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine, connectRemote: @escaping (RemoteEndpoint) -> Void) {
         guard !hasScheduledLaunchBehavior else { return }
         hasScheduledLaunchBehavior = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard let self, !self.openedByURL, self.isLauncherPresented else { return }
-            self.runLaunchBehavior(preferences, engine: engine)
+            self.runLaunchBehavior(preferences, engine: engine, connectRemote: connectRemote)
         }
     }
 
-    private func runLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine) {
-        switch preferences.behavior {
+    private func runLaunchBehavior(_ preferences: LaunchPreferences, engine: CueEngine, connectRemote: (RemoteEndpoint) -> Void) {
+        switch preferences.action {
         case .showLauncher:
             return
+        case .connectRemote(let endpoint):
+            connectRemote(endpoint)
         case .reopenLast:
             guard let url = recentURLs.first else { return }
             open(url, in: engine)
@@ -274,9 +286,9 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ engine: CueEngine) {
-        guard settle(engine, closing: false) else { return }
+        guard remoteSession != nil || settle(engine, closing: false) else { return }
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [contentType]
+        panel.allowedContentTypes = remoteSession != nil ? RemoteDocumentLoader.contentTypes : [contentType]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -284,6 +296,10 @@ final class DocumentController: ObservableObject {
     }
 
     func open(_ url: URL, in engine: CueEngine) {
+        if let session = remoteSession {
+            RemoteDocumentLoader.send(url, to: session)
+            return
+        }
         guard settle(engine, closing: false) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -304,20 +320,41 @@ final class DocumentController: ObservableObject {
 
     func openRecent(_ url: URL, in engine: CueEngine) {
         let target = recents.first { $0.url == url }
-            .flatMap { try? DocumentBookmark.resolved($0.bookmark).url } ?? url
+            .flatMap { $0.bookmark }
+            .flatMap { try? DocumentBookmark.resolved($0).url } ?? url
         open(target, in: engine)
     }
 
+    func openRecent(_ item: RecentItem, in engine: CueEngine) {
+        guard item.isFile, let url = item.url else { return }
+        let target = item.bookmark.flatMap { try? DocumentBookmark.resolved($0).url } ?? url
+        if item.kind == .template {
+            if !openTemplate(target, in: engine), RecentDocuments.availability(of: target) == .missing { forget(target, kind: .template) }
+        } else {
+            open(target, in: engine)
+        }
+    }
+
+    func removeRecent(_ item: RecentItem) {
+        items.removeAll { $0.identity == item.identity }
+        RecentItems.persist(items, defaults: defaults)
+    }
+
+    func noteRemote(_ session: RemoteProducerSession) {
+        items = RecentItems.updated(items, adding: .remote(session.endpoint, name: session.displayName))
+        RecentItems.persist(items, defaults: defaults)
+    }
+
     func pruneRecents() {
-        let kept = RecentDocuments.pruned(recents)
-        guard kept.count != recents.count else { return }
-        recents = kept
-        RecentDocuments.persist(recents, defaults: defaults)
+        let kept = RecentItems.pruned(items)
+        guard kept.count != items.count else { return }
+        items = kept
+        RecentItems.persist(items, defaults: defaults)
     }
 
     func clearRecents() {
-        recents = []
-        RecentDocuments.persist(recents, defaults: defaults)
+        items = []
+        RecentItems.persist(items, defaults: defaults)
     }
 
     @discardableResult
@@ -327,19 +364,20 @@ final class DocumentController: ObservableObject {
             return false
         }
         engine.currentDocumentURL = url
+        noteRecent(url)
+        if engine.isRemoteMirror { return true }
         discardedOnClose = false
         isLauncherPresented = false
-        noteRecent(url)
         autosaver?.reseed()
         autosaver?.markManualSave()
         return true
     }
 
-    private func noteRecent(_ url: URL) {
+    private func noteRecent(_ url: URL, kind: RecentKind = .document) {
         do {
             let bookmark = try DocumentBookmark.make(for: url)
-            recents = RecentDocuments.updated(recents, adding: RecentEntry(url: url, bookmark: bookmark))
-            RecentDocuments.persist(recents, defaults: defaults)
+            items = RecentItems.updated(items, adding: .file(url, bookmark: bookmark, kind: kind))
+            RecentItems.persist(items, defaults: defaults)
         } catch {
             let alert = NSAlert()
             alert.alertStyle = .informational
@@ -349,9 +387,9 @@ final class DocumentController: ObservableObject {
         }
     }
 
-    private func forget(_ url: URL) {
-        recents.removeAll { $0.url == url }
-        RecentDocuments.persist(recents, defaults: defaults)
+    private func forget(_ url: URL, kind: RecentKind = .document) {
+        items.removeAll { $0.kind == kind && $0.url == url }
+        RecentItems.persist(items, defaults: defaults)
     }
 
     private func present(_ error: Error, action: String, url: URL) {

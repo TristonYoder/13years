@@ -3,6 +3,7 @@
 
 import UniformTypeIdentifiers
 import XCTest
+@testable import ThirteenYearsClockKit
 
 @MainActor
 final class DocumentFileTypesTests: XCTestCase {

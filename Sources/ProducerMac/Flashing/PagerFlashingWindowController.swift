@@ -7,15 +7,18 @@ import SwiftUI
 @MainActor
 final class PagerFlashingWindowController {
     private var window: NSWindow?
+    private var hosting: NSHostingController<AnyView>?
 
     func present(cueEngine: CueEngine) {
-        if let window {
+        if let window, let hosting {
+            hosting.rootView = AnyView(PagerFlashingView().environmentObject(cueEngine))
             window.makeKeyAndOrderFront(nil)
             return
         }
 
         let controller = NSHostingController(
-            rootView: PagerFlashingView().environmentObject(cueEngine))
+            rootView: AnyView(PagerFlashingView().environmentObject(cueEngine)))
+        hosting = controller
         let window = NSWindow(contentViewController: controller)
         window.title = "Flash a Pager"
         window.styleMask = [.titled, .closable, .miniaturizable]

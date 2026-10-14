@@ -17,8 +17,15 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
 
+packages:
+  ThirteenYearsClockKit:
+    path: Packages/13YearsClockKit
+
 targets:
   ProducerMac:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: application
     platform: macOS
     deploymentTarget: "14.0"
@@ -47,6 +54,9 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
 
   ProducerIOS:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: application
     platform: iOS
     deploymentTarget: "17.0"
@@ -70,6 +80,9 @@ targets:
         INFOPLIST_FILE: Sources/ProducerIOS/Info.plist
 
   PagerIOS:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: application
     platform: iOS
     deploymentTarget: "17.0"
@@ -93,6 +106,9 @@ targets:
         INFOPLIST_FILE: Sources/PagerIOS/Info.plist
 
   PagerMac:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: application
     platform: macOS
     deploymentTarget: "14.0"
@@ -120,6 +136,9 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
 
   PagerTV:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: application
     platform: tvOS
     deploymentTarget: "17.0"
@@ -144,6 +163,9 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   ThirteenYearsTests:
+    dependencies:
+      - package: ThirteenYearsClockKit
+        product: ThirteenYearsClockKit
     type: bundle.unit-test
     platform: macOS
     deploymentTarget: "14.0"
@@ -167,18 +189,22 @@ targets:
       - path: Sources/ProducerWatch
         excludes:
           - "ExtensionInfo.plist"
-      - path: Sources/Shared/Models/CueState.swift
-      - path: Sources/Shared/Models/HourFormatThreshold.swift
-      - path: Sources/Shared/Models/InterTeamMessage.swift
-      - path: Sources/Shared/Models/PCOTimerItem.swift
-      - path: Sources/Shared/Models/RoleCue.swift
-      - path: Sources/Shared/Models/TimerAnchor.swift
-      - path: Sources/Shared/Models/TimerLimits.swift
-      - path: Sources/Shared/Services/SyncHash.swift
-      - path: Sources/Shared/Services/API/ControlAPILimits.swift
-      - path: Sources/Shared/Services/API/ControlAPIModels.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/CueState.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/HourFormatThreshold.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/InterTeamMessage.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOTimerItem.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/RoleCue.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerAnchor.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerLimits.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerDocument.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/Waypoint.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ServiceSchedule.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/ProducerSignal.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/SyncHash.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/API/ControlAPILimits.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/API/ControlAPIModels.swift
       - path: Sources/Shared/Services/AppFonts.swift
-      - path: Sources/Shared/Services/AppLog.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Services/AppLog.swift
       - path: Sources/Shared/Services/PagerHaptics.swift
       - path: Sources/Shared/Views/PagerPresentationState.swift
       - path: Sources/Shared/Views/StoplightMarkView.swift

@@ -279,6 +279,7 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/plan/items/{id}/duration-actual` | POST | Toggle whether the item displays as Projected or Actual. Body: `{"isActual": boolean}`. Returns the plan section of state. |
 | `POST /v1/plan/items/reorder` | POST | Reorder the items in the plan. Body: `{"itemIds": ["string"]}`. List must contain every current item id exactly once. Returns the plan section of state. |
 | `POST /v1/plan/import` | POST | Parse and import a service flow. Body: `{"text": "string", "title": "string?"}`. Text is `Title | Type | Duration` (one per line, duration in seconds). If parsing succeeds, a new plan titled `title` (or auto-generated) is created and imported. Returns the plan section (201). |
+| `PUT /v1/document` | PUT, POST | Load a whole plan or document with full fidelity (also socket op `document`). Body: `{"title": "string?", "items": [PlanItem], "activeItemIndex": 0, "roles": [Role], "replaceRoles": true, "selectedRoleIds": ["id"], "waypoints": [{"id","name"}], "schedules": [Schedule], "settings": {"hourFormatThreshold": "never"}, "pco": {"serviceTypeId","planId","noteCategories": [{"id","name"}]}}`. Only `items` is required. Items carry `notes`, `noteIds`, `waypointIds`, `pcoServiceTypeId`, `pcoPlanId`, `isDurationActual`, `lengthInSeconds` and the rest of the plan item shape; ids must be unique. With `activeItemIndex` it behaves like opening a document (that item becomes active, paused). Without it, it behaves like importing a plan: items are renumbered, elapsed time resets, `title` becomes the plan title and the first non-header item becomes active. `roles` replace the existing roles (cues reset to off) when `replaceRoles` is true; otherwise they are merged by id (name, person and note categories updated, unknown roles appended) and current cue states are kept. `waypoints` and `schedules` replace the existing ones when present. `pco` sets the note categories shown in PCO status and fills in missing item PCO ids. An empty `items` clears the plan. Same limits as the other routes (400 for a bad body or an over-long field, 409 for too many items, roles, waypoints or schedules); the body can be at most 1 MiB. Returns the full state snapshot (200). |
 
 ### Waypoints
 
@@ -327,7 +328,9 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/pco` | GET | The PCO connection status, selected service type, available plans, available note categories. |
-| `POST /v1/pco/sign-in` | POST | Open a browser to start PCO OAuth (202). The sign-in completes on the device; there is no way to complete an OAuth grant through this endpoint. Watch the socket for `pco.isConnected` to change. |
+| `POST /v1/pco/sign-in` | POST | Open a browser to start PCO OAuth (202). The sign-in completes on the device; to complete the grant from another device use `pco/authorize` instead. Watch the socket for `pco.isConnected` to change. |
+| `POST /v1/pco/authorize` | POST | Start a delegated PCO sign-in for a client that does the browser step itself (the Producer's "Connect To…" mode). Returns 200 `{"authorizeURL": "string", "state": "string", "redirectURI": "string"}`; open `authorizeURL` in a browser, and when PCO redirects to `redirectURI` pass the `code` and `state` it carries to `pco/authorize/complete`. Returns 409 if the host has no PCO OAuth client ID (bundle setting or the `THIRTEEN_PCO_CLIENT_ID` environment variable). One sign-in is pending at a time and expires after 10 minutes. |
+| `POST /v1/pco/authorize/complete` | POST | Finish a delegated sign-in. Body: `{"code": "string", "state": "string"}`. Returns 202 with the PCO section of state; the token exchange runs in the background, and a bad or expired `state` shows up in `pco.lastError`. Watch the socket for `pco.isConnected`. Returns 400 for a malformed body. |
 | `POST /v1/pco/sign-out` | POST | Disconnect from PCO. Returns the PCO section of state. |
 | `GET /v1/pco/service-types` | GET | List available service types (calendar segments in PCO, e.g., Sunday Morning, Wednesday Evening). Returns an array of `{"id": "string", "name": "string"}`. |
 | `POST /v1/pco/service-types/refresh` | POST | Fetch the latest service types from PCO (202). Watch the socket for `pco.serviceTypes` to update. |
@@ -357,7 +360,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 |-------|--------|---------|
 | `POST /v1/network/ping` | POST | Send a UDP ping to a device on the LAN to wake it or signal the app to go live. Body: `{"ip": "string"}` (required, non-empty). Returns 202 (fire-and-forget; UDP has no acknowledgement). Returns 503 if this device cannot determine its own LAN address. |
 | `POST /v1/network/forget-producer` | POST | Clear the assigned producer (client mode only). Returns the full state snapshot. |
-| `POST /v1/network/master` | POST | Switch between master and client mode. Body: `{"isMaster": boolean}`. Returns the full state snapshot. |
+| `POST /v1/network/master` | POST | **Deprecated** (Producers are always master; follow another Producer with Connect To…). Switch between master and client mode. Body: `{"isMaster": boolean}`. Returns the full state snapshot. |
 
 ### App Navigation
 
@@ -450,7 +453,7 @@ Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PRO
 
 **Timer.** Every `timer` object carries `anchor` (see above). A v2 client runs its timer locally from `anchor` and `producerNow` and does not wait for ticks. On a v2 socket the `timer` event is sent only when something about the timer changes (start, pause, reset, adjust, item change, Projected/Actual change, live-sync correction), never once a second.
 
-**Digest.** Every 10 seconds a v2 socket receives
+**Digest.** Every 2 seconds a v2 socket receives
 
 ```json
 {
@@ -463,7 +466,7 @@ Protocol v2 is opt-in per socket and additive; the normative spec is [Server/PRO
 }
 ```
 
-Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets.
+Each hash is FNV-1a 64 (16 lowercase hex digits) over the canonical string defined in the spec for that section (`roles`, `timer` from the anchor, `plan`, `messages` newest first). A client hashes its own copy the same way; any difference means "fetch `GET /v1/state` and replace that section". Equal digests need no action, and a digest whose `rev` is lower than a snapshot the client already holds is stale and can be ignored. Digests are never sent to legacy sockets. The digest doubles as the heartbeat: a client treats 5 seconds without any frame as a stale signal (grey the display) and 20 seconds as lost (show the connection error and reconnect). See `Server/PROTOCOL-V2.md`, section Signal loss and heartbeat (v2.4).
 
 ### Sending (Client to Server)
 

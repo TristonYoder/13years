@@ -5,7 +5,7 @@ import SwiftUI
 
 @main
 struct ProducerMacApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true)
+    @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true, defersLANServing: true)
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = DocumentController()
     @StateObject private var launchPreferences = LaunchPreferences()
@@ -16,23 +16,34 @@ struct ProducerMacApp: App {
         AppFonts.registerIfNeeded()
     }
 
-    var body: some Scene {
-        WindowGroup {
+    @ViewBuilder
+    private var mainContent: some View {
+        if let session = remoteHub.session {
+            RemoteProducerContainerView(session: session, lan: remoteHub.lan) {
+                remoteHub.disconnect()
+            }
+            .navigationTitle("Remote: \(session.displayName)")
+        } else {
             ProducerRootView()
                 .environmentObject(cueEngine)
-                .environmentObject(launchPreferences)
                 .environment(\.documentSaveIndicator, documents.saveIndicator)
-                .frame(minWidth: 800, minHeight: 600)
                 .disabled(documents.isLauncherPresented)
                 .overlay {
                     if documents.isLauncherPresented {
                         LauncherView(
-                            recentURLs: documents.recentURLs,
+                            recents: documents.items,
                             actions: LauncherActions(
                                 newDocument: { documents.newDocument(cueEngine) },
                                 newFromTemplate: { documents.newFromTemplate(cueEngine) },
                                 open: { documents.open(cueEngine) },
-                                openRecent: { documents.openRecent($0, in: cueEngine) },
+                                openRecent: { item in
+                                    if let endpoint = item.endpoint {
+                                        remoteHub.connect(to: endpoint)
+                                    } else {
+                                        documents.openRecent(item, in: cueEngine)
+                                    }
+                                },
+                                removeRecent: { documents.removeRecent($0) },
                                 connect: { remoteHub.isConnectPresented = true },
                                 refreshRecents: { documents.pruneRecents() }
                             )
@@ -41,23 +52,68 @@ struct ProducerMacApp: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.25), value: documents.isLauncherPresented)
+        }
+    }
+
+    var body: some Scene {
+        Window("13 Years Producer", id: "main") {
+            mainContent
+                .background(WindowCloseHandler(
+                    decide: { WindowClosePolicy.decide(isRemoteActive: remoteHub.isRemoteActive, isLauncherPresented: documents.isLauncherPresented) },
+                    disconnect: { remoteHub.disconnect() }
+                ))
+                .frame(minWidth: 800, minHeight: 600)
+                .environmentObject(launchPreferences)
                 .splashScreen(isPresented: splash.isPresented)
-                .modifier(ConnectWindowOpener(hub: remoteHub))
+                .overlay {
+                    if let name = remoteHub.connectingTo {
+                        RemoteConnectingOverlay(name: name, cancel: remoteHub.cancelConnect)
+                    }
+                }
+                .sheet(isPresented: $remoteHub.isConnectPresented, onDismiss: { remoteHub.requestedEndpoint = nil; remoteHub.clearFailure() }) {
+                    ConnectToView(
+                        prefill: remoteHub.failedEndpoint ?? remoteHub.requestedEndpoint,
+                        prefillError: remoteHub.failureMessage,
+                        onConnected: { session in
+                            remoteHub.activate(session)
+                            remoteHub.isConnectPresented = false
+                        },
+                        onCancel: {
+                            remoteHub.requestedEndpoint = nil
+                            remoteHub.isConnectPresented = false
+                        }
+                    )
+                }
                 .onChange(of: remoteHub.isRemoteActive) { _, active in
                     cueEngine.setLANServingSuspended(active)
                 }
-                .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
+                .onChange(of: remoteHub.session?.id) { _, _ in
+                    documents.remoteSession = remoteHub.session
+                }
+                .onChange(of: documents.isLauncherPresented) { _, presented in
+                    cueEngine.setLANServingHeld(presented)
+                }
+                .onOpenURL { url in
+                    if let session = remoteHub.session {
+                        RemoteDocumentLoader.send(url, to: session)
+                    } else {
+                        documents.handleOpenURL(url, in: cueEngine)
+                    }
+                }
                 .task {
                     splash.markReady()
+                    remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
-                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
+                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet, !RemoteWindowIDs.isAuxiliary(identifier: window.identifier) else { return }
+                    guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }
+                    remoteHub.disconnect()
                     documents.saveOnClose(cueEngine)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     documents.saveOnClose(cueEngine)
+                    remoteHub.lan.shutdown()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     cueEngine.deviceDidBecomeActive()
@@ -72,16 +128,7 @@ struct ProducerMacApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            MacFileCommands(documents: documents, engine: cueEngine, flashingWindow: flashingWindow)
-        }
-
-        Window(RemoteWindowIDs.connectTitle, id: RemoteWindowIDs.connect) {
-            MacConnectWindow(hub: remoteHub)
-        }
-        .windowResizability(.contentSize)
-
-        Window("Remote Producer", id: RemoteWindowIDs.remote) {
-            MacRemoteWindow(hub: remoteHub)
+            MacFileCommands(documents: documents, hub: remoteHub, engine: cueEngine, flashingWindow: flashingWindow)
         }
 
         #if os(macOS)
@@ -105,18 +152,5 @@ struct ProducerMacApp: App {
             }
         }
         #endif
-    }
-}
-
-private struct ConnectWindowOpener: ViewModifier {
-    @ObservedObject var hub: RemoteProducerHub
-    @Environment(\.openWindow) private var openWindow
-
-    func body(content: Content) -> some View {
-        content.onChange(of: hub.isConnectPresented) { _, requested in
-            guard requested else { return }
-            hub.isConnectPresented = false
-            openWindow(id: RemoteWindowIDs.connect)
-        }
     }
 }

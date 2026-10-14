@@ -8,8 +8,6 @@ public struct HostPagerView: View {
     @AppStorage("pagerSelectedRoleId") private var selectedRoleId: String = "default"
     @State private var isShowingChat = false
     @State private var isShowingSettings = false
-    @State private var notLiveSince: Date?
-    @State private var now = Date()
     @State private var dismissedMessageId: String?
     @State private var lastSeenMessageId: String?
     @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
@@ -28,7 +26,9 @@ public struct HostPagerView: View {
             isLANConnected: engine.isLANConnected,
             connectedMasterName: engine.connectedMasterName,
             hourFormatThreshold: engine.hourFormatThreshold,
-            receivedNextItem: engine.nextItem
+            receivedNextItem: engine.nextItem,
+            producerClockOffsetMs: engine.producerClockOffsetMs,
+            producerUTCOffsetSeconds: engine.producerUTCOffsetSeconds
         )
     }
 
@@ -47,26 +47,12 @@ public struct HostPagerView: View {
     }
 
     private var disconnectPhase: DisconnectPhase {
-        guard !isConnectedNow, let since = notLiveSince else { return .live }
-        return DisconnectPhase(elapsedSinceLive: max(0.001, now.timeIntervalSince(since)))
-    }
-
-    private var isConnectedNow: Bool {
-        engine.isMasterServer || (engine.isProducerLive && engine.connectedMasterName != nil)
+        DisconnectPhase(signal: engine.isMasterServer ? .live : engine.producerSignal)
     }
 
     private var pagerView: some View {
         pagerLayouts
-            .onChange(of: isConnectedNow, initial: true) { _, live in
-                now = Date()
-                notLiveSince = live ? nil : (notLiveSince ?? now)
-            }
-            .task(id: isConnectedNow) {
-                while !Task.isCancelled && !isConnectedNow {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    now = Date()
-                }
-            }
+            .pagerStaleLook(disconnectPhase)
             .sheet(isPresented: $isShowingSettings) {
                 PagerSettingsView()
             }

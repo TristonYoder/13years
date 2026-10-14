@@ -76,6 +76,16 @@ void store::setProducerHost(const String &host) {
 
 void store::clearProducerHost() {
   prefs.remove("producer_host");
+  prefs.remove("producer_port");
+}
+
+uint16_t store::getProducerPort() {
+  return prefs.getUShort("producer_port", 0);
+}
+
+void store::setProducerPort(uint16_t port) {
+  if (port == 0) prefs.remove("producer_port");
+  else prefs.putUShort("producer_port", port);
 }
 
 bool store::getDisplayFlipped() {
