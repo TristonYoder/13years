@@ -252,6 +252,7 @@ struct RemoteProducerContainerView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(.black)
                 }
+                RemoteLoadFileButton(session: session, tint: foreground)
                 Button("Disconnect", action: onDisconnect)
                     .producerSecondaryButton()
                     .tint(foreground)

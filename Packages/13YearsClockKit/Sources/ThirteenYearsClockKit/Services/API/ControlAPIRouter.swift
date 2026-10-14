@@ -130,6 +130,13 @@ public final class ControlAPIRouter {
             engine.selectedRoleIds = Set(request.roleIds)
             return json(snapshot())
 
+        case "document":
+            guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.DocumentLoadBody.self, body) else { return badBody() }
+            if let rejection = validate(request) { return rejection }
+            engine.loadDocument(request)
+            return json(snapshot())
+
         case "plan":
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(planStatus())
@@ -742,6 +749,96 @@ public final class ControlAPIRouter {
         default:
             return Self.error(404, "Unknown path")
         }
+    }
+
+    private func validate(_ request: ControlAPIRequests.DocumentLoadBody) -> HTTPResponse? {
+        if let tooLong = tooLong(request.title ?? "", ContentLimits.title, "Plan title") { return tooLong }
+        guard request.items.count <= ContentLimits.maxPlanItems else { return limitReached("plan items", ContentLimits.maxPlanItems) }
+        guard Set(request.items.map(\.id)).count == request.items.count else {
+            return Self.error(400, "Duplicate plan item ids")
+        }
+        for item in request.items {
+            if let tooLong = tooLong(item.id, ContentLimits.identifier, "Item id") { return tooLong }
+            if let tooLong = tooLong(item.title, ContentLimits.title, "Item title") { return tooLong }
+            if let tooLong = tooLong(item.itemType, ContentLimits.name, "itemType") { return tooLong }
+            if let tooLong = tooLong(item.servicePlanTitle ?? "", ContentLimits.title, "servicePlanTitle") { return tooLong }
+            if let tooLong = tooLong(item.pcoServiceTypeId ?? "", ContentLimits.identifier, "pcoServiceTypeId") { return tooLong }
+            if let tooLong = tooLong(item.pcoPlanId ?? "", ContentLimits.identifier, "pcoPlanId") { return tooLong }
+            guard item.notes.count <= ContentLimits.maxNoteCategories, item.noteIds.count <= ContentLimits.maxNoteCategories else {
+                return Self.error(400, "Too many notes", detail: "At most \(ContentLimits.maxNoteCategories) categories per item.")
+            }
+            for (key, value) in item.notes {
+                if let tooLong = tooLong(key, ContentLimits.identifier, "Note category") { return tooLong }
+                if let tooLong = tooLong(value, ContentLimits.noteValue, "Note value") { return tooLong }
+            }
+            for (key, value) in item.noteIds {
+                if let tooLong = tooLong(key, ContentLimits.identifier, "Note category") { return tooLong }
+                if let tooLong = tooLong(value, ContentLimits.identifier, "Note id") { return tooLong }
+            }
+            guard item.waypointIds.count <= ContentLimits.maxWaypoints else { return limitReached("waypoints per item", ContentLimits.maxWaypoints) }
+            for waypointId in item.waypointIds {
+                if let tooLong = tooLong(waypointId, ContentLimits.identifier, "Waypoint id") { return tooLong }
+            }
+        }
+        if let index = request.activeItemIndex, !request.items.isEmpty, !request.items.indices.contains(index) {
+            return Self.error(400, "activeItemIndex out of range", detail: "Between 0 and \(request.items.count - 1).")
+        }
+        if let roles = request.roles {
+            guard roles.count <= ContentLimits.maxRoles else { return limitReached("roles", ContentLimits.maxRoles) }
+            guard Set(roles.map(\.id)).count == roles.count else { return Self.error(400, "Duplicate role ids") }
+            for role in roles {
+                if let tooLong = tooLong(role.id, ContentLimits.identifier, "Role id") { return tooLong }
+                if let tooLong = tooLong(role.name, ContentLimits.name, "Role name") { return tooLong }
+                if let tooLong = tooLong(role.personName ?? "", ContentLimits.name, "personName") { return tooLong }
+                if let tooLong = tooLong(role.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+                guard role.assignedNoteCategories.count <= ContentLimits.maxNoteCategories else {
+                    return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
+                }
+                for category in role.assignedNoteCategories {
+                    if let tooLong = tooLong(category, ContentLimits.identifier, "Note category") { return tooLong }
+                }
+            }
+        }
+        if let selected = request.selectedRoleIds {
+            guard selected.count <= ContentLimits.maxRoles else { return limitReached("role ids", ContentLimits.maxRoles) }
+            for id in selected {
+                if let tooLong = tooLong(id, ContentLimits.identifier, "Role id") { return tooLong }
+            }
+        }
+        if let waypoints = request.waypoints {
+            guard waypoints.count <= ContentLimits.maxWaypoints else { return limitReached("waypoints", ContentLimits.maxWaypoints) }
+            guard Set(waypoints.map(\.id)).count == waypoints.count else { return Self.error(400, "Duplicate waypoint ids") }
+            for waypoint in waypoints {
+                if let tooLong = tooLong(waypoint.id, ContentLimits.identifier, "Waypoint id") { return tooLong }
+                if let tooLong = tooLong(waypoint.name, ContentLimits.name, "Waypoint name") { return tooLong }
+            }
+        }
+        if let schedules = request.schedules {
+            guard schedules.count <= ContentLimits.maxSchedules else { return limitReached("schedules", ContentLimits.maxSchedules) }
+            guard Set(schedules.map(\.id)).count == schedules.count else { return Self.error(400, "Duplicate schedule ids") }
+            for schedule in schedules {
+                if let tooLong = tooLong(schedule.id, ContentLimits.identifier, "Schedule id") { return tooLong }
+                if let tooLong = tooLong(schedule.title, ContentLimits.title, "Schedule title") { return tooLong }
+                if let tooLong = tooLong(schedule.pcoServiceTypeId ?? "", ContentLimits.identifier, "pcoServiceTypeId") { return tooLong }
+                if let tooLong = tooLong(schedule.pcoPlanId ?? "", ContentLimits.identifier, "pcoPlanId") { return tooLong }
+                guard TimerLimits.isValidLength(schedule.goLiveOffsetSeconds) else { return offsetOutOfRange() }
+            }
+        }
+        if let raw = request.settings?.hourFormatThreshold, HourFormatThreshold(rawValue: raw) == nil {
+            return Self.error(400, "Unknown hourFormatThreshold", detail: HourFormatThreshold.allCases.map(\.rawValue).joined(separator: ", "))
+        }
+        if let context = request.pco {
+            if let tooLong = tooLong(context.serviceTypeId ?? "", ContentLimits.identifier, "pco.serviceTypeId") { return tooLong }
+            if let tooLong = tooLong(context.planId ?? "", ContentLimits.identifier, "pco.planId") { return tooLong }
+            if let categories = context.noteCategories {
+                guard categories.count <= ContentLimits.maxNoteCategories else { return limitReached("note categories", ContentLimits.maxNoteCategories) }
+                for category in categories {
+                    if let tooLong = tooLong(category.id, ContentLimits.identifier, "Note category id") { return tooLong }
+                    if let tooLong = tooLong(category.name, ContentLimits.identifier, "Note category name") { return tooLong }
+                }
+            }
+        }
+        return nil
     }
 
     private func updateRole(id: String, with request: ControlAPIRequests.RoleUpdateBody) -> HTTPResponse {

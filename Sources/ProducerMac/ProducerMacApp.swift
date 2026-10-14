@@ -46,9 +46,16 @@ struct ProducerMacApp: App {
                 .onChange(of: remoteHub.isRemoteActive) { _, active in
                     cueEngine.setLANServingSuspended(active)
                 }
-                .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
+                .onOpenURL { url in
+                    if let session = remoteHub.session {
+                        RemoteDocumentLoader.send(url, to: session)
+                    } else {
+                        documents.handleOpenURL(url, in: cueEngine)
+                    }
+                }
                 .task {
                     splash.markReady()
+                    remoteHub.localEngine = cueEngine
                     documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }

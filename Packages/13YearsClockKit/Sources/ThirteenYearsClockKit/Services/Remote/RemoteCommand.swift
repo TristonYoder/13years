@@ -54,11 +54,12 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoPlanFilter(String)
     case pcoDefaultServiceType(id: String?)
     case pcoLiveSync(Bool)
+    case loadDocument(body: Data)
 
     public var isIdempotent: Bool {
         switch self {
         case .planNext, .planPrevious, .timerAdjust, .message, .roleCreate, .scheduleCreate, .planItemAdd,
-             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .planImport:
+             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .planImport, .loadDocument:
             return false
         default:
             return true
@@ -166,6 +167,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/default-service-type", ["id": id ?? NSNull()])
         case .pcoLiveSync(let enabled):
             return Self.post("pco/live-sync", ["enabled": enabled])
+        case .loadDocument(let body):
+            return Request(method: "PUT", path: "/v1/document", body: body)
         }
     }
 

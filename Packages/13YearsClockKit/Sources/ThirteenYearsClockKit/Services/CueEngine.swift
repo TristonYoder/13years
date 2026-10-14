@@ -168,6 +168,10 @@ public final class CueEngine: ObservableObject {
 
     public let isRemoteMirror: Bool
     public weak var remoteCommands: RemoteProducerCommanding?
+    public weak var localPCOAuthority: CueEngine? {
+        didSet { bindLocalPCOAuthority() }
+    }
+    var localPCOObservers: [AnyCancellable] = []
     @Published public var remoteProducerName: String?
     @Published public var remoteControllerCount: Int = 0
 
@@ -180,7 +184,7 @@ public final class CueEngine: ObservableObject {
     private var controlAPIEventHub: ControlAPIEventHub?
     #endif
     private let hostsControlAPI: Bool
-    private let pcoClient = PCOClient()
+    let pcoClient = PCOClient()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
@@ -369,7 +373,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func signInWithPCO() {
-        guard !isRemoteMirror else { return }
+        if isRemoteMirror {
+            localPCOAuthority?.signInWithPCO()
+            return
+        }
         Task {
             do {
                 let signIn = OAuthSignIn()
@@ -391,7 +398,10 @@ public final class CueEngine: ObservableObject {
     }
 
     public func signOutOfPCO() {
-        guard !isRemoteMirror else { return }
+        if isRemoteMirror {
+            localPCOAuthority?.signOutOfPCO()
+            return
+        }
         isPCOLiveSyncEnabled = false
         pcoOAuthTokens = nil
         pcoUserName = nil
@@ -403,7 +413,11 @@ public final class CueEngine: ObservableObject {
 
     public func fetchPCOPlan(serviceTypeId: String, planId: String) {
         if isRemoteMirror {
-            remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
+            if localPCOAuthority == nil {
+                remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
+            } else {
+                fetchPCOPlanForRemote(serviceTypeId: serviceTypeId, planId: planId)
+            }
             return
         }
         if planId != currentPCOPlanId {
@@ -427,7 +441,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func clearPCOServiceTypeSelection() {
-        if isRemoteMirror {
+        if isRemoteMirror, localPCOAuthority == nil {
             remoteCommands?.send(.pcoSelectServiceType(id: nil))
             return
         }
@@ -435,7 +449,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func fetchPCOServiceTypes() {
-        if isRemoteMirror {
+        if isRemoteMirror, localPCOAuthority == nil {
             remoteCommands?.send(.pcoRefreshServiceTypes)
             return
         }
@@ -444,7 +458,7 @@ public final class CueEngine: ObservableObject {
 
     private func fetchPCOServiceTypesAsync() async {
         do {
-            pcoServiceTypes = try await pcoClient.fetchServiceTypes()
+            pcoServiceTypes = try await pcoBrowseClient.fetchServiceTypes()
             pcoLastError = nil
         } catch {
             AppLog.cue.error("CueEngine: fetchPCOServiceTypes error: \(error.localizedDescription, privacy: .private)")
@@ -453,7 +467,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func selectPCOServiceType(_ serviceTypeId: String) {
-        if isRemoteMirror {
+        if isRemoteMirror, localPCOAuthority == nil {
             remoteCommands?.send(.pcoSelectServiceType(id: serviceTypeId))
             return
         }
@@ -462,14 +476,14 @@ public final class CueEngine: ObservableObject {
     }
 
     public func fetchPCOPlans() {
-        if isRemoteMirror {
+        if isRemoteMirror, localPCOAuthority == nil {
             remoteCommands?.send(.pcoRefreshPlans)
             return
         }
         guard let serviceTypeId = pcoSelectedServiceTypeId else { return }
         Task {
             do {
-                pcoPlans = try await pcoClient.fetchPlans(serviceTypeId: serviceTypeId, filter: pcoPlanFilter)
+                pcoPlans = try await pcoBrowseClient.fetchPlans(serviceTypeId: serviceTypeId, filter: pcoPlanFilter)
                 pcoLastError = nil
             } catch {
                 AppLog.cue.error("CueEngine: fetchPCOPlans: FAILED — \(String(describing: error), privacy: .private)")
@@ -479,7 +493,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPlanFilter(_ filter: PCOClient.PCOPlanFilter) {
-        if isRemoteMirror {
+        if isRemoteMirror, localPCOAuthority == nil {
             remoteCommands?.send(.pcoPlanFilter(filter.rawValue))
             return
         }
@@ -628,6 +642,12 @@ public final class CueEngine: ObservableObject {
 
     public func apply(_ document: ProducerDocument) {
         guard !isRemoteMirror else { return }
+        applyConfiguration(of: document)
+        applyPlan(of: document)
+        broadcastTimerUpdate()
+    }
+
+    func applyConfiguration(of document: ProducerDocument) {
         roles = document.roles.isEmpty
             ? RoleCue.defaultRoles
             : document.roles.map { role in
@@ -644,7 +664,9 @@ public final class CueEngine: ObservableObject {
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
+    }
 
+    func applyPlan(of document: ProducerDocument) {
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false }
         planItems = items
@@ -655,21 +677,11 @@ public final class CueEngine: ObservableObject {
             activeItemIndex = min(max(document.activeItemIndex, 0), items.count - 1)
             activeTimerItem = items[activeItemIndex]
         }
-        broadcastTimerUpdate()
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
         if isRemoteMirror {
-            let lines = items.map { item -> String in
-                let total = item.lengthInSeconds
-                let duration = total >= 3600
-                    ? String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-                    : String(format: "%d:%02d", total / 60, total % 60)
-                let cleanTitle = item.title.replacingOccurrences(of: "|", with: "/").replacingOccurrences(of: "\n", with: " ")
-                let cleanType = item.itemType.replacingOccurrences(of: "|", with: "/")
-                return "\(cleanTitle) | \(cleanType) | \(duration)"
-            }
-            remoteCommands?.send(.planImport(text: lines.joined(separator: "\n"), title: title))
+            _ = loadPlanIntoRemote(title: title, items: items)
             return
         }
         var stamped = items
@@ -1242,11 +1254,11 @@ public final class CueEngine: ObservableObject {
         }
     }
 
-    private var currentPCOServiceTypeId: String? {
+    var currentPCOServiceTypeId: String? {
         activeTimerItem?.pcoServiceTypeId ?? planItems.first?.pcoServiceTypeId
     }
 
-    private var currentPCOPlanId: String? {
+    var currentPCOPlanId: String? {
         activeTimerItem?.pcoPlanId ?? planItems.first?.pcoPlanId
     }
 
@@ -1489,7 +1501,11 @@ public final class CueEngine: ObservableObject {
 
     public func loadNextService() {
         if isRemoteMirror {
-            remoteCommands?.send(.planNextService)
+            if localPCOAuthority == nil {
+                remoteCommands?.send(.planNextService)
+            } else {
+                loadNextServiceForRemote()
+            }
             return
         }
         guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
@@ -2116,7 +2132,7 @@ public final class CueEngine: ObservableObject {
         emit(packet, .relay)
     }
 
-    private func broadcastTimerUpdate() {
+    func broadcastTimerUpdate() {
         refreshTimerAnchor()
         publishTimerAnchorToV2()
         guard let item = activeTimerItemForBroadcast else { return }

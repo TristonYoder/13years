@@ -556,6 +556,10 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
         lastError = kept.last?.message
     }
 
+    public func noteFailure(_ message: String, detail: String? = nil) {
+        report(message, detail: detail)
+    }
+
     public func dismissError() {
         recentErrors = []
         lastError = nil
@@ -622,6 +626,7 @@ public final class RemoteProducerHub: ObservableObject {
     @Published public private(set) var session: RemoteProducerSession?
     public var pending: RemoteProducerSession?
     public let lan = RemoteLANCoordinator()
+    public weak var localEngine: CueEngine?
 
     public init() {}
 
@@ -630,6 +635,7 @@ public final class RemoteProducerHub: ObservableObject {
     public func activate(_ new: RemoteProducerSession) {
         session?.disconnect()
         session = new
+        new.engine.localPCOAuthority = localEngine
         lan.attach(new)
     }
 

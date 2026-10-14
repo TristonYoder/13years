@@ -174,7 +174,7 @@ final class RemoteCommandTests: XCTestCase {
         XCTAssertTrue(sink.sent.contains(.planNext(startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.waypointGo(ref: "w1", startTimer: true)))
         XCTAssertTrue(sink.sent.contains(.planReorder(itemIds: ["b", "a"])))
-        XCTAssertTrue(sink.sent.contains(.planImport(text: "A/B | Song | 2:05", title: "T")))
+        XCTAssertTrue(sink.sent.contains { if case .loadDocument = $0 { return true } else { return false } })
         XCTAssertTrue(sink.sent.contains(.waypointCreateAndAssign(name: "Song 2", itemId: "a")))
         XCTAssertTrue(sink.sent.contains(.pcoSelectServiceType(id: nil)))
         XCTAssertEqual(sink.sent.count, 31)

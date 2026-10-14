@@ -298,6 +298,88 @@ public enum ControlAPIRequests {
         public var title: String?
     }
 
+    public struct DocumentLoadBody: Codable, Equatable, Sendable {
+        public struct Settings: Codable, Equatable, Sendable {
+            public var hourFormatThreshold: String?
+
+            public init(hourFormatThreshold: String? = nil) {
+                self.hourFormatThreshold = hourFormatThreshold
+            }
+        }
+
+        public struct PCOContext: Codable, Equatable, Sendable {
+            public struct Category: Codable, Equatable, Sendable {
+                public var id: String
+                public var name: String
+
+                public init(id: String, name: String) {
+                    self.id = id
+                    self.name = name
+                }
+            }
+
+            public var serviceTypeId: String?
+            public var planId: String?
+            public var noteCategories: [Category]?
+
+            public init(serviceTypeId: String? = nil, planId: String? = nil, noteCategories: [Category]? = nil) {
+                self.serviceTypeId = serviceTypeId
+                self.planId = planId
+                self.noteCategories = noteCategories
+            }
+        }
+
+        public var title: String?
+        public var items: [PCOTimerItem]
+        public var activeItemIndex: Int?
+        public var roles: [RoleCue]?
+        public var replaceRoles: Bool?
+        public var selectedRoleIds: [String]?
+        public var waypoints: [Waypoint]?
+        public var schedules: [ServiceSchedule]?
+        public var settings: Settings?
+        public var pco: PCOContext?
+
+        public init(
+            title: String? = nil,
+            items: [PCOTimerItem],
+            activeItemIndex: Int? = nil,
+            roles: [RoleCue]? = nil,
+            replaceRoles: Bool? = nil,
+            selectedRoleIds: [String]? = nil,
+            waypoints: [Waypoint]? = nil,
+            schedules: [ServiceSchedule]? = nil,
+            settings: Settings? = nil,
+            pco: PCOContext? = nil
+        ) {
+            self.title = title
+            self.items = items
+            self.activeItemIndex = activeItemIndex
+            self.roles = roles
+            self.replaceRoles = replaceRoles
+            self.selectedRoleIds = selectedRoleIds
+            self.waypoints = waypoints
+            self.schedules = schedules
+            self.settings = settings
+            self.pco = pco
+        }
+
+        public init(document: ProducerDocument) {
+            self.init(
+                title: nil,
+                items: document.planItems,
+                activeItemIndex: document.activeItemIndex,
+                roles: document.roles,
+                replaceRoles: true,
+                selectedRoleIds: document.selectedRoleIds,
+                waypoints: document.waypoints,
+                schedules: document.serviceSchedules,
+                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue),
+                pco: nil
+            )
+        }
+    }
+
     public struct PCOSyncBody: Decodable, Sendable {
         public var serviceTypeId: String
         public var planId: String

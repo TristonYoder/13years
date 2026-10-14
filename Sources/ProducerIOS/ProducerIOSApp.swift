@@ -44,6 +44,7 @@ struct ProducerIOSApp: App {
                 .splashScreen(isPresented: splash.isPresented)
                 .task {
                     splash.markReady()
+                    remoteHub.localEngine = cueEngine
                     documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }
@@ -59,7 +60,13 @@ struct ProducerIOSApp: App {
                     documents.isRemoteActive = active
                     cueEngine.setLANServingSuspended(active)
                 }
-                .onOpenURL { documents.handleOpenURL($0, in: cueEngine) }
+                .onOpenURL { url in
+                    if let session = remoteHub.session {
+                        RemoteDocumentLoader.send(url, to: session)
+                    } else {
+                        documents.handleOpenURL(url, in: cueEngine)
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .producerOpenDocument)) { _ in
                     guard !remoteHub.isRemoteActive else { return }
                     documents.beginImport(template: false)
