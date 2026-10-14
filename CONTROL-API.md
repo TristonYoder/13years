@@ -328,7 +328,9 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/pco` | GET | The PCO connection status, selected service type, available plans, available note categories. |
-| `POST /v1/pco/sign-in` | POST | Open a browser to start PCO OAuth (202). The sign-in completes on the device; there is no way to complete an OAuth grant through this endpoint. Watch the socket for `pco.isConnected` to change. |
+| `POST /v1/pco/sign-in` | POST | Open a browser to start PCO OAuth (202). The sign-in completes on the device; to complete the grant from another device use `pco/authorize` instead. Watch the socket for `pco.isConnected` to change. |
+| `POST /v1/pco/authorize` | POST | Start a delegated PCO sign-in for a client that does the browser step itself (the Producer's "Connect To…" mode). Returns 200 `{"authorizeURL": "string", "state": "string", "redirectURI": "string"}`; open `authorizeURL` in a browser, and when PCO redirects to `redirectURI` pass the `code` and `state` it carries to `pco/authorize/complete`. Returns 409 if the host has no PCO OAuth client ID (bundle setting or the `THIRTEEN_PCO_CLIENT_ID` environment variable). One sign-in is pending at a time and expires after 10 minutes. |
+| `POST /v1/pco/authorize/complete` | POST | Finish a delegated sign-in. Body: `{"code": "string", "state": "string"}`. Returns 202 with the PCO section of state; the token exchange runs in the background, and a bad or expired `state` shows up in `pco.lastError`. Watch the socket for `pco.isConnected`. Returns 400 for a malformed body. |
 | `POST /v1/pco/sign-out` | POST | Disconnect from PCO. Returns the PCO section of state. |
 | `GET /v1/pco/service-types` | GET | List available service types (calendar segments in PCO, e.g., Sunday Morning, Wednesday Evening). Returns an array of `{"id": "string", "name": "string"}`. |
 | `POST /v1/pco/service-types/refresh` | POST | Fetch the latest service types from PCO (202). Watch the socket for `pco.serviceTypes` to update. |

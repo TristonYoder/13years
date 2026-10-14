@@ -96,25 +96,6 @@ final class DocumentLoadRouterTests: XCTestCase {
         XCTAssertEqual(engine.planItems[1].elapsedSeconds, 0)
     }
 
-    func testPCOContextSetsNoteCategoriesAndFillsMissingIds() throws {
-        let engine = CueEngine()
-        let items = [PCOTimerItem(id: "x", title: "One"), PCOTimerItem(id: "y", title: "Two", pcoServiceTypeId: "own", pcoPlanId: "ownplan")]
-        let context = ControlAPIRequests.DocumentLoadBody.PCOContext(
-            serviceTypeId: "st", planId: "plan", noteCategories: [.init(id: "c1", name: "Lights"), .init(id: "c2", name: "Audio")]
-        )
-        let response = try put(engine, ControlAPIRequests.DocumentLoadBody(title: "T", items: items, pco: context))
-        XCTAssertEqual(response.status, 200)
-        XCTAssertEqual(engine.pcoNoteCategories.map(\.name), ["Lights", "Audio"])
-        XCTAssertEqual(engine.pcoNoteCategories.map(\.id), ["c1", "c2"])
-        XCTAssertEqual(engine.planItems[0].pcoServiceTypeId, "st")
-        XCTAssertEqual(engine.planItems[0].pcoPlanId, "plan")
-        XCTAssertEqual(engine.planItems[1].pcoServiceTypeId, "own")
-
-        let state = try ControlAPIJSON.decoder.decode(ControlAPIState.self, from: response.body)
-        XCTAssertEqual(state.pco.noteCategories.map(\.name), ["Lights", "Audio"])
-        XCTAssertEqual(state.plan.pcoPlanId, "plan")
-    }
-
     func testRolesReplacedOnlyWhenAskedAndOtherwiseMerged() throws {
         let engine = CueEngine()
         engine.roles = [RoleCue(id: "keep", name: "Keep", state: .go), RoleCue(id: "other", name: "Other")]
@@ -282,21 +263,6 @@ final class DocumentLoadMirrorTests: XCTestCase {
         XCTAssertFalse(sink.sent.contains { if case .planImport = $0 { return true } else { return false } })
     }
 
-    func testPCOPlanResultIsPushedWithContext() throws {
-        let sink = RecordingCommands()
-        let engine = CueEngine(mirroring: sink)
-        let context = ControlAPIRequests.DocumentLoadBody.PCOContext(serviceTypeId: "st", planId: "p", noteCategories: [.init(id: "c", name: "Lights")])
-
-        XCTAssertTrue(engine.loadPlanIntoRemote(title: "Plan", items: [PCOTimerItem(id: "x", title: "X", notes: ["Lights": "l"])], pco: context))
-
-        let body = try decodeBody(sink.sent.first)
-        XCTAssertEqual(body.pco, context)
-        XCTAssertEqual(body.title, "Plan")
-        XCTAssertEqual(body.items.first?.notes, ["Lights": "l"])
-        XCTAssertTrue(engine.planItems.isEmpty)
-        XCTAssertTrue(engine.pcoNoteCategories.isEmpty)
-    }
-
     func testOversizedPlansAreRefusedLocally() {
         let sink = RecordingCommands()
         let engine = CueEngine(mirroring: sink)
@@ -313,43 +279,39 @@ final class DocumentLoadMirrorTests: XCTestCase {
         }
     }
 
-    func testMirrorWithLocalPCOAuthorityDoesNotAskTheRemoteToFetch() {
+    func testMirrorPCOActionsAreRemoteCommandsNotLocalFetches() {
         let sink = RecordingCommands()
         let engine = CueEngine(mirroring: sink)
-        let local = CueEngine(mirroring: nil)
-        engine.localPCOAuthority = local
 
         engine.setPlanFilter(.past)
         engine.clearPCOServiceTypeSelection()
+        engine.selectPCOServiceType("st")
+        engine.fetchPCOServiceTypes()
+        engine.fetchPCOPlans()
         engine.loadNextService()
         engine.fetchPCOPlan(serviceTypeId: "st", planId: "p")
+        engine.signOutOfPCO()
 
-        XCTAssertTrue(sink.sent.isEmpty)
-        XCTAssertEqual(engine.pcoLastError, RemoteLoadError.notSignedIn.localizedDescription)
-        XCTAssertEqual(engine.pcoPlanFilter, .past)
+        XCTAssertEqual(sink.sent, [
+            .pcoPlanFilter(PCOClient.PCOPlanFilter.past.rawValue),
+            .pcoSelectServiceType(id: nil),
+            .pcoSelectServiceType(id: "st"),
+            .pcoRefreshServiceTypes,
+            .pcoRefreshPlans,
+            .planNextService,
+            .pcoSync(serviceTypeId: "st", planId: "p"),
+            .pcoSignOut
+        ])
+        XCTAssertNil(engine.pcoLastError)
     }
 
-    func testMirrorWithoutAuthorityStillDelegatesPCOToTheRemote() {
-        let sink = RecordingCommands()
-        let engine = CueEngine(mirroring: sink)
-        engine.fetchPCOPlan(serviceTypeId: "st", planId: "p")
-        XCTAssertEqual(sink.sent, [.pcoSync(serviceTypeId: "st", planId: "p")])
-    }
-
-    func testPCOStatusFollowsTheLocalLoginNotTheRemote() {
-        let sink = RecordingCommands()
-        let engine = CueEngine(mirroring: sink)
-        let local = CueEngine(mirroring: nil)
-        local.pcoUserName = "Local Person"
-        local.isPCOConnected = true
-        engine.localPCOAuthority = local
-
-        engine.apply(remoteState: RemoteFixtures.state(rev: 1))
+    func testMirrorPCOStatusComesFromTheRemoteState() {
+        let engine = CueEngine(mirroring: RecordingCommands())
+        var state = RemoteFixtures.state(rev: 1)
+        state.pco.isConnected = true
+        state.pco.userName = "Remote Person"
+        engine.apply(remoteState: state)
         XCTAssertTrue(engine.isPCOConnected)
-        XCTAssertEqual(engine.pcoUserName, "Local Person")
-        XCTAssertTrue(engine.pcoServiceTypes.isEmpty)
-
-        local.isPCOConnected = false
-        XCTAssertFalse(engine.isPCOConnected)
+        XCTAssertEqual(engine.pcoUserName, "Remote Person")
     }
 }

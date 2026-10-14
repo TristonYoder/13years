@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 public protocol RemoteProducerCommanding: AnyObject {
     func send(_ command: RemoteCommand)
+    func request(_ command: RemoteCommand) async throws -> Data
 }
 
 public enum RemoteCommand: Equatable, Sendable {
@@ -50,6 +51,9 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoSync(serviceTypeId: String, planId: String)
     case pcoSelectServiceType(id: String?)
     case pcoRefreshServiceTypes
+    case pcoSignOut
+    case pcoAuthorize
+    case pcoAuthorizeComplete(code: String, state: String)
     case pcoRefreshPlans
     case pcoPlanFilter(String)
     case pcoDefaultServiceType(id: String?)
@@ -157,6 +161,12 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/sync", ["serviceTypeId": serviceTypeId, "planId": planId])
         case .pcoSelectServiceType(let id):
             return Self.post("pco/service-type", ["id": id ?? NSNull()])
+        case .pcoSignOut:
+            return Self.post("pco/sign-out")
+        case .pcoAuthorize:
+            return Self.post("pco/authorize")
+        case .pcoAuthorizeComplete(let code, let state):
+            return Self.post("pco/authorize/complete", ["code": code, "state": state])
         case .pcoRefreshServiceTypes:
             return Self.post("pco/service-types/refresh")
         case .pcoRefreshPlans:

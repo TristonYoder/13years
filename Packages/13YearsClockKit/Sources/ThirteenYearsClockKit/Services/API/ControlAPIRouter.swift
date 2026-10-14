@@ -416,6 +416,19 @@ public final class ControlAPIRouter {
             engine.signInWithPCO()
             return accepted()
 
+        case ("pco", "authorize"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            do {
+                let grant = try engine.beginDelegatedPCOSignIn()
+                return json(ControlAPIRequests.PCOAuthorization(
+                    authorizeURL: grant.authorizeURL.absoluteString,
+                    state: grant.state,
+                    redirectURI: OAuthConfig.redirectURI
+                ))
+            } catch {
+                return Self.error(409, "Planning Center sign-in isn't configured", detail: error.localizedDescription)
+            }
+
         case ("pco", "sign-out"):
             guard allows(method, "POST", "DELETE") else { return methodNotAllowed() }
             engine.signOutOfPCO()
@@ -627,6 +640,22 @@ public final class ControlAPIRouter {
             engine.fetchPCOPlans()
             return accepted()
 
+        case ("pco", "authorize", "complete"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.PCOAuthorizeCompleteBody.self, body),
+                  !request.code.isEmpty, !request.state.isEmpty else { return badBody() }
+            if let tooLong = tooLong(request.code, ContentLimits.noteValue, "code") { return tooLong }
+            if let tooLong = tooLong(request.state, ContentLimits.identifier, "state") { return tooLong }
+            let engine = engine
+            Task { @MainActor in
+                do {
+                    try await engine.completeDelegatedPCOSignIn(code: request.code, state: request.state)
+                } catch {
+                    engine.pcoLastError = error.localizedDescription
+                }
+            }
+            return accepted(pcoStatus())
+
         case ("plotiphar", "pair", "start"):
             guard FeatureFlags.plotiphar else { return Self.error(404, "Unknown path") }
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -826,17 +855,6 @@ public final class ControlAPIRouter {
         }
         if let raw = request.settings?.hourFormatThreshold, HourFormatThreshold(rawValue: raw) == nil {
             return Self.error(400, "Unknown hourFormatThreshold", detail: HourFormatThreshold.allCases.map(\.rawValue).joined(separator: ", "))
-        }
-        if let context = request.pco {
-            if let tooLong = tooLong(context.serviceTypeId ?? "", ContentLimits.identifier, "pco.serviceTypeId") { return tooLong }
-            if let tooLong = tooLong(context.planId ?? "", ContentLimits.identifier, "pco.planId") { return tooLong }
-            if let categories = context.noteCategories {
-                guard categories.count <= ContentLimits.maxNoteCategories else { return limitReached("note categories", ContentLimits.maxNoteCategories) }
-                for category in categories {
-                    if let tooLong = tooLong(category.id, ContentLimits.identifier, "Note category id") { return tooLong }
-                    if let tooLong = tooLong(category.name, ContentLimits.identifier, "Note category name") { return tooLong }
-                }
-            }
         }
         return nil
     }

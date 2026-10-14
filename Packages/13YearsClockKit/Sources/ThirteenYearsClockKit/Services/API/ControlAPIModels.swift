@@ -307,28 +307,6 @@ public enum ControlAPIRequests {
             }
         }
 
-        public struct PCOContext: Codable, Equatable, Sendable {
-            public struct Category: Codable, Equatable, Sendable {
-                public var id: String
-                public var name: String
-
-                public init(id: String, name: String) {
-                    self.id = id
-                    self.name = name
-                }
-            }
-
-            public var serviceTypeId: String?
-            public var planId: String?
-            public var noteCategories: [Category]?
-
-            public init(serviceTypeId: String? = nil, planId: String? = nil, noteCategories: [Category]? = nil) {
-                self.serviceTypeId = serviceTypeId
-                self.planId = planId
-                self.noteCategories = noteCategories
-            }
-        }
-
         public var title: String?
         public var items: [PCOTimerItem]
         public var activeItemIndex: Int?
@@ -338,7 +316,6 @@ public enum ControlAPIRequests {
         public var waypoints: [Waypoint]?
         public var schedules: [ServiceSchedule]?
         public var settings: Settings?
-        public var pco: PCOContext?
 
         public init(
             title: String? = nil,
@@ -349,8 +326,7 @@ public enum ControlAPIRequests {
             selectedRoleIds: [String]? = nil,
             waypoints: [Waypoint]? = nil,
             schedules: [ServiceSchedule]? = nil,
-            settings: Settings? = nil,
-            pco: PCOContext? = nil
+            settings: Settings? = nil
         ) {
             self.title = title
             self.items = items
@@ -361,7 +337,6 @@ public enum ControlAPIRequests {
             self.waypoints = waypoints
             self.schedules = schedules
             self.settings = settings
-            self.pco = pco
         }
 
         public init(document: ProducerDocument) {
@@ -374,8 +349,7 @@ public enum ControlAPIRequests {
                 selectedRoleIds: document.selectedRoleIds,
                 waypoints: document.waypoints,
                 schedules: document.serviceSchedules,
-                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue),
-                pco: nil
+                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue)
             )
         }
     }
@@ -383,6 +357,28 @@ public enum ControlAPIRequests {
     public struct PCOSyncBody: Decodable, Sendable {
         public var serviceTypeId: String
         public var planId: String
+    }
+
+    public struct PCOAuthorization: Codable, Equatable, Sendable {
+        public var authorizeURL: String
+        public var state: String
+        public var redirectURI: String
+
+        public init(authorizeURL: String, state: String, redirectURI: String) {
+            self.authorizeURL = authorizeURL
+            self.state = state
+            self.redirectURI = redirectURI
+        }
+    }
+
+    public struct PCOAuthorizeCompleteBody: Codable, Equatable, Sendable {
+        public var code: String
+        public var state: String
+
+        public init(code: String, state: String) {
+            self.code = code
+            self.state = state
+        }
     }
 
     public struct IdBody: Decodable, Sendable {

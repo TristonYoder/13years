@@ -7,10 +7,6 @@ extension CueEngine {
     func loadDocument(_ body: ControlAPIRequests.DocumentLoadBody) {
         guard !isRemoteMirror else { return }
 
-        if let planId = body.pco?.planId, planId != currentPCOPlanId {
-            disablePCOLiveSync()
-        }
-
         var document = makeDocument()
         var keptRoles: [RoleCue]? = roles
         if let incoming = body.roles {
@@ -41,13 +37,7 @@ extension CueEngine {
             document.settings.hourFormatThreshold = threshold
         }
 
-        var items = body.items
-        if let context = body.pco {
-            for index in items.indices {
-                if items[index].pcoServiceTypeId == nil { items[index].pcoServiceTypeId = context.serviceTypeId }
-                if items[index].pcoPlanId == nil { items[index].pcoPlanId = context.planId }
-            }
-        }
+        let items = body.items
 
         applyConfiguration(of: document)
         if let keptRoles { roles = keptRoles }
@@ -59,13 +49,6 @@ extension CueEngine {
             broadcastTimerUpdate()
         } else {
             importFlow(title: body.title, items: items)
-        }
-
-        if let categories = body.pco?.noteCategories {
-            pcoNoteCategories = categories.map { PCOClient.PCONoteCategory(id: $0.id, name: $0.name) }
-        }
-        if body.pco != nil, !items.isEmpty {
-            syncPlotipharAssignments()
         }
     }
 }

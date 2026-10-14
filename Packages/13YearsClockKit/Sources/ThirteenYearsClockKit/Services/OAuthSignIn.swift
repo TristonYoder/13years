@@ -48,9 +48,13 @@ public final class OAuthSignIn: NSObject, @unchecked Sendable {
     }
 
     private nonisolated func authorize(pkce: PKCEPair) async throws -> String {
-        let url = authorizeURL(codeChallenge: pkce.challenge)
+        let callback = try await authenticate(url: OAuthConfig.authorizeURL(codeChallenge: pkce.challenge))
+        guard let code = Self.queryValue("code", in: callback) else { throw OAuthError.missingAuthorizationCode }
+        return code
+    }
 
-        return try await withCheckedThrowingContinuation { continuation in
+    public nonisolated func authenticate(url: URL) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url,
                 callbackURLScheme: OAuthConfig.callbackScheme
@@ -64,34 +68,19 @@ public final class OAuthSignIn: NSObject, @unchecked Sendable {
         }
     }
 
-    private nonisolated func authorizeURL(codeChallenge: String) -> URL {
-        var components = URLComponents(url: OAuthConfig.authorizeURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "client_id", value: OAuthConfig.clientID),
-            URLQueryItem(name: "redirect_uri", value: OAuthConfig.redirectURI),
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: OAuthConfig.scope),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        return components.url!
+    public nonisolated static func queryValue(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    private nonisolated static func result(from callbackURL: URL?, error: Error?) -> Result<String, Error> {
+    private nonisolated static func result(from callbackURL: URL?, error: Error?) -> Result<URL, Error> {
         if let error {
             if case ASWebAuthenticationSessionError.canceledLogin = error {
                 return .failure(OAuthError.userCancelled)
             }
             return .failure(error)
         }
-        guard
-            let callbackURL,
-            let code = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "code" })?.value
-        else {
-            return .failure(OAuthError.missingAuthorizationCode)
-        }
-        return .success(code)
+        guard let callbackURL else { return .failure(OAuthError.missingAuthorizationCode) }
+        return .success(callbackURL)
     }
 }
 
@@ -114,6 +103,14 @@ public final class OAuthSignIn: NSObject, @unchecked Sendable {
 
     public nonisolated func signIn() async throws -> OAuthTokens {
         throw OAuthSignInUnavailableError()
+    }
+
+    public nonisolated func authenticate(url: URL) async throws -> URL {
+        throw OAuthSignInUnavailableError()
+    }
+
+    public nonisolated static func queryValue(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == name })?.value
     }
 }
 #endif

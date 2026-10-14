@@ -55,7 +55,6 @@ struct ProducerMacApp: App {
                 }
                 .task {
                     splash.markReady()
-                    remoteHub.localEngine = cueEngine
                     documents.attach(cueEngine)
                     documents.applyLaunchBehavior(launchPreferences, engine: cueEngine)
                 }

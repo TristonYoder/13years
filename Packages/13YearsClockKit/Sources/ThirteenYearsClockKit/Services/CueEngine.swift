@@ -168,10 +168,12 @@ public final class CueEngine: ObservableObject {
 
     public let isRemoteMirror: Bool
     public weak var remoteCommands: RemoteProducerCommanding?
-    public weak var localPCOAuthority: CueEngine? {
-        didSet { bindLocalPCOAuthority() }
+    var pendingPCOSignIn: PendingPCOSignIn?
+    var pcoTokenExchange: @Sendable (_ code: String, _ verifier: String) async throws -> OAuthTokens = { code, verifier in
+        try await OAuthTokenExchange.exchange(code: code, verifier: verifier)
     }
-    var localPCOObservers: [AnyCancellable] = []
+    var pcoSignInClock: () -> Date = { Date() }
+    var pcoSignInFollowUp: ((CueEngine) async throws -> Void)?
     @Published public var remoteProducerName: String?
     @Published public var remoteControllerCount: Int = 0
 
@@ -184,7 +186,7 @@ public final class CueEngine: ObservableObject {
     private var controlAPIEventHub: ControlAPIEventHub?
     #endif
     private let hostsControlAPI: Bool
-    let pcoClient = PCOClient()
+    private let pcoClient = PCOClient()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
@@ -374,32 +376,42 @@ public final class CueEngine: ObservableObject {
 
     public func signInWithPCO() {
         if isRemoteMirror {
-            localPCOAuthority?.signInWithPCO()
+            signInWithPCOThroughRemote()
             return
         }
         Task {
             do {
                 let signIn = OAuthSignIn()
                 let tokens = try await signIn.signIn()
-                self.pcoOAuthTokens = tokens
-                self.isPCOConnected = true
-
-                let person = try await pcoClient.fetchCurrentPerson()
-                self.pcoUserName = person.name
-
-                await fetchPCOServiceTypesAsync()
-                if let defaultId = pcoDefaultServiceTypeId, pcoServiceTypes.contains(where: { $0.id == defaultId }) {
-                    selectPCOServiceType(defaultId)
-                }
+                try await finishPCOSignIn(with: tokens)
             } catch {
                 AppLog.cue.error("CueEngine: PCO OAuth sign-in error: \(error.localizedDescription, privacy: .private)")
+                if case OAuthError.userCancelled = error { return }
+                self.pcoLastError = error.localizedDescription
             }
+        }
+    }
+
+    func finishPCOSignIn(with tokens: OAuthTokens) async throws {
+        pcoOAuthTokens = tokens
+        isPCOConnected = true
+        pcoLastError = nil
+        if let pcoSignInFollowUp {
+            try await pcoSignInFollowUp(self)
+            return
+        }
+        let person = try await pcoClient.fetchCurrentPerson()
+        pcoUserName = person.name
+
+        await fetchPCOServiceTypesAsync()
+        if let defaultId = pcoDefaultServiceTypeId, pcoServiceTypes.contains(where: { $0.id == defaultId }) {
+            selectPCOServiceType(defaultId)
         }
     }
 
     public func signOutOfPCO() {
         if isRemoteMirror {
-            localPCOAuthority?.signOutOfPCO()
+            remoteCommands?.send(.pcoSignOut)
             return
         }
         isPCOLiveSyncEnabled = false
@@ -413,11 +425,7 @@ public final class CueEngine: ObservableObject {
 
     public func fetchPCOPlan(serviceTypeId: String, planId: String) {
         if isRemoteMirror {
-            if localPCOAuthority == nil {
-                remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
-            } else {
-                fetchPCOPlanForRemote(serviceTypeId: serviceTypeId, planId: planId)
-            }
+            remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
             return
         }
         if planId != currentPCOPlanId {
@@ -441,7 +449,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func clearPCOServiceTypeSelection() {
-        if isRemoteMirror, localPCOAuthority == nil {
+        if isRemoteMirror {
             remoteCommands?.send(.pcoSelectServiceType(id: nil))
             return
         }
@@ -449,7 +457,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func fetchPCOServiceTypes() {
-        if isRemoteMirror, localPCOAuthority == nil {
+        if isRemoteMirror {
             remoteCommands?.send(.pcoRefreshServiceTypes)
             return
         }
@@ -458,7 +466,7 @@ public final class CueEngine: ObservableObject {
 
     private func fetchPCOServiceTypesAsync() async {
         do {
-            pcoServiceTypes = try await pcoBrowseClient.fetchServiceTypes()
+            pcoServiceTypes = try await pcoClient.fetchServiceTypes()
             pcoLastError = nil
         } catch {
             AppLog.cue.error("CueEngine: fetchPCOServiceTypes error: \(error.localizedDescription, privacy: .private)")
@@ -467,7 +475,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func selectPCOServiceType(_ serviceTypeId: String) {
-        if isRemoteMirror, localPCOAuthority == nil {
+        if isRemoteMirror {
             remoteCommands?.send(.pcoSelectServiceType(id: serviceTypeId))
             return
         }
@@ -476,14 +484,14 @@ public final class CueEngine: ObservableObject {
     }
 
     public func fetchPCOPlans() {
-        if isRemoteMirror, localPCOAuthority == nil {
+        if isRemoteMirror {
             remoteCommands?.send(.pcoRefreshPlans)
             return
         }
         guard let serviceTypeId = pcoSelectedServiceTypeId else { return }
         Task {
             do {
-                pcoPlans = try await pcoBrowseClient.fetchPlans(serviceTypeId: serviceTypeId, filter: pcoPlanFilter)
+                pcoPlans = try await pcoClient.fetchPlans(serviceTypeId: serviceTypeId, filter: pcoPlanFilter)
                 pcoLastError = nil
             } catch {
                 AppLog.cue.error("CueEngine: fetchPCOPlans: FAILED — \(String(describing: error), privacy: .private)")
@@ -493,7 +501,7 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPlanFilter(_ filter: PCOClient.PCOPlanFilter) {
-        if isRemoteMirror, localPCOAuthority == nil {
+        if isRemoteMirror {
             remoteCommands?.send(.pcoPlanFilter(filter.rawValue))
             return
         }
@@ -1501,11 +1509,7 @@ public final class CueEngine: ObservableObject {
 
     public func loadNextService() {
         if isRemoteMirror {
-            if localPCOAuthority == nil {
-                remoteCommands?.send(.planNextService)
-            } else {
-                loadNextServiceForRemote()
-            }
+            remoteCommands?.send(.planNextService)
             return
         }
         guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }

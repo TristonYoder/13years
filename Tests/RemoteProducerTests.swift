@@ -55,7 +55,13 @@ private extension String {
 @MainActor
 final class RecordingCommands: RemoteProducerCommanding {
     var sent: [RemoteCommand] = []
+    var requested: [RemoteCommand] = []
+    var requestReply = Data()
     func send(_ command: RemoteCommand) { sent.append(command) }
+    func request(_ command: RemoteCommand) async throws -> Data {
+        requested.append(command)
+        return requestReply
+    }
 }
 
 final class RemoteEndpointTests: XCTestCase {
@@ -243,7 +249,7 @@ final class MirrorEngineTests: XCTestCase {
         engine.tickTimer()
         let after = defaults.dictionaryRepresentation() as NSDictionary
         XCTAssertEqual(before, after)
-        XCTAssertTrue(sink.sent.isEmpty)
+        XCTAssertEqual(sink.sent, [.pcoSignOut])
     }
 
     func testMirrorDoesNotDisturbLocalEnginePersistence() {

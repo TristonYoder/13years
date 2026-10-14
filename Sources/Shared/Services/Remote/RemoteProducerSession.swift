@@ -476,6 +476,16 @@ public final class RemoteProducerSession: ObservableObject, Identifiable, Remote
         }
     }
 
+    public func request(_ command: RemoteCommand) async throws -> Data {
+        guard isLive else { throw RemoteProducerError.rejected("Not connected to \(displayName).") }
+        let (status, data) = try await send(command.request, idempotent: command.isIdempotent)
+        guard (200..<300).contains(status) else {
+            let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+            throw RemoteProducerError.rejected([body?.error ?? "\(displayName) refused the request (\(status)).", body?.detail].compactMap { $0 }.joined(separator: " "))
+        }
+        return data
+    }
+
     private func perform(_ queued: QueuedCommand) async {
         guard isLive, queued.epoch == connectionEpoch else {
             report("A command queued before the connection changed was dropped.", detail: "Check \(displayName) and try again.")
@@ -597,6 +607,7 @@ public enum RemoteProducerError: LocalizedError, Equatable {
     case notAProducer(String)
     case noHello(String)
     case refused(String)
+    case rejected(String)
     case differentProducer(String)
     case thisDevice
 
@@ -606,6 +617,8 @@ public enum RemoteProducerError: LocalizedError, Equatable {
             return "That address isn't valid."
         case .unreachable(let address):
             return "Couldn't reach \(address). Check the address, and that both devices are on the same network."
+        case .rejected(let message):
+            return message
         case .refused(let address):
             return "\(address) refused the connection. Switch on the Control API in that Producer's Settings."
         case .differentProducer(let address):
@@ -626,7 +639,6 @@ public final class RemoteProducerHub: ObservableObject {
     @Published public private(set) var session: RemoteProducerSession?
     public var pending: RemoteProducerSession?
     public let lan = RemoteLANCoordinator()
-    public weak var localEngine: CueEngine?
 
     public init() {}
 
@@ -635,7 +647,6 @@ public final class RemoteProducerHub: ObservableObject {
     public func activate(_ new: RemoteProducerSession) {
         session?.disconnect()
         session = new
-        new.engine.localPCOAuthority = localEngine
         lan.attach(new)
     }
 
