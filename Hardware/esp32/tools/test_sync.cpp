@@ -48,18 +48,14 @@ static void testEndpointParse() {
     CHECK(d.accept && d.host == "10.0.0.9" && d.port == 9001);
     CHECK(!decideAssign("10.0.0.9", true, 9001, "", "192.168.1.5").accept);
     CHECK(!decideAssign("10.0.0.9", true, 9001, "relay", "192.168.1.5").accept);
-    CHECK(!decideAssign("8.8.8.8", false, 0, "introducer", "8.8.8.8").accept);
-    CHECK(!decideAssign("10.0.0.9", true, 9001, "introducer", "8.8.8.8").accept);
+    CHECK(decideAssign("8.8.8.8", false, 0, "", "8.8.8.8").accept);
+    CHECK(decideAssign("203.0.113.7", true, 9001, "introducer", "8.8.8.8").accept);
+    CHECK(!decideAssign("203.0.113.7", true, 9001, "", "8.8.8.8").accept);
+    CHECK(!decideAssign("999.1.1.1", false, 0, "introducer", "8.8.8.8").accept);
     CHECK(!decideAssign("10.0.0.9", true, 0, "", "10.0.0.9").accept);
     CHECK(!decideAssign("10.0.0.9", true, 70000, "", "10.0.0.9").accept);
     CHECK(!decideAssign("10.0.0.9", true, -5, "", "10.0.0.9").accept);
     CHECK(decideAssign("10.0.0.9", true, 65535, "", "10.0.0.9").port == 65535);
-    CHECK(decideAssign("100.75.81.4", false, 0, "", "100.75.81.4").accept);
-    CHECK(!decideAssign("100.128.0.1", false, 0, "", "100.128.0.1").accept);
-    CHECK(decideAssign("172.31.0.1", false, 0, "", "172.31.0.1").accept);
-    CHECK(!decideAssign("172.32.0.1", false, 0, "", "172.32.0.1").accept);
-    CHECK(decideAssign("169.254.3.4", false, 0, "", "169.254.3.4").accept);
-    CHECK(decideAssign("127.0.0.1", false, 0, "", "127.0.0.1").accept);
     CHECK(!decideAssign("mac.local", false, 0, "", "10.0.0.9").accept);
   }
   {
