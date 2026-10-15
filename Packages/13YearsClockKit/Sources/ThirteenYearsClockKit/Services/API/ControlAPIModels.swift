@@ -83,6 +83,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var serviceTypes: [IdentifiedName]
         public var plans: [PlanInfo]
         public var noteCategories: [IdentifiedName]
+        public var pendingChanges: PCOPendingChanges? = nil
 
         public struct PlanInfo: Codable, Sendable {
             public var id: String
@@ -380,6 +381,23 @@ public enum ControlAPIRequests {
                 liveEventTimeId: document.liveEventTimeId,
                 settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue)
             )
+        }
+    }
+
+    public struct PCOChangesBody: Decodable, Sendable {
+        public var revision: String?
+    }
+
+    public struct PCOChangesStatus: Encodable, Sendable {
+        public var pending: PCOPendingChanges?
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(pending, forKey: .pending)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case pending
         }
     }
 

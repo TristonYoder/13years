@@ -46,6 +46,8 @@ public struct ServiceFlowView: View {
                 #endif
             }
 
+            PCOChangesBanner()
+
             Group {
                 if engine.planItems.isEmpty {
                     emptyState

@@ -144,7 +144,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     "planFilter": "all",
     "serviceTypes": [],
     "plans": [],
-    "noteCategories": []
+    "noteCategories": [],
+    "pendingChanges": null
   },
   "plotiphar": {
     "pairingState": "idle",
@@ -366,6 +367,32 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | `POST /v1/pco/plan-filter` | POST | Set which plans to show (e.g., upcoming, past, all). Body: `{"filter": "string"}`. Returns 202. |
 | `POST /v1/pco/sync` | POST | Fetch a specific plan and populate the local plan with its items (202). Body: `{"serviceTypeId": "string", "planId": "string"}`. Returns the current state and fetches in the background; watch the socket for `plan` to update. |
 | `POST /v1/pco/live-sync` | POST | Enable or disable PCO Live synchronization. Body: `{"enabled": boolean}`. Returns 202 (the toggle takes effect immediately but initial sync happens asynchronously). |
+| `GET /v1/pco/changes` | GET | Changes made in Planning Center to the loaded plan that haven't been merged or dismissed. Returns `{"pending": PendingChanges}` or `{"pending": null}`; the same object is `pco.pendingChanges` in the state snapshot. |
+| `POST /v1/pco/changes/accept` | POST | Merge the pending changes into the run sheet. Body (optional): `{"revision": "string"}`. The active item stays active and its timer keeps running; only fields that changed in Planning Center are overwritten, so local-only items and edits are kept. Returns the plan section (200), or 409 when nothing is pending or `revision` is out of date. |
+| `POST /v1/pco/changes/dismiss` | POST | Keep the run sheet as it is. Body (optional): `{"revision": "string"}`. That revision isn't offered again; a later change in Planning Center raises a new prompt with only the newer differences. Returns the PCO section of state, or 409 like `accept`. |
+| `POST /v1/pco/changes/check` | POST | Check Planning Center for changes now instead of waiting for the next poll (202). 409 when no PCO plan is loaded. |
+
+#### Two-way sync
+
+While a PCO plan is loaded, the Producer writes these run sheet edits back to Planning Center: item length, item notes (all categories, including clearing one) and item order. Writes are batched for about a second, so typing a note or dragging several items sends one request per item or one reorder.
+
+Every 30 seconds the Producer reads the plan again and compares it with what it last knew Planning Center had. Additions, removals, renames, type, length and note changes, and reordering show up as `pco.pendingChanges`:
+
+```json
+{
+  "revision": "9f1c2a7b3e4d5c60",
+  "serviceTypeId": "st-1",
+  "planId": "plan-1",
+  "detectedAt": "2026-10-18T13:55:02Z",
+  "changes": [
+    {"kind": "length", "itemId": "it-4", "title": "Announcements", "detail": "3:00 to 4:30"},
+    {"kind": "added", "itemId": "it-9", "title": "Baptism"},
+    {"kind": "reordered", "title": "Run sheet"}
+  ]
+}
+```
+
+`kind` is one of `added`, `removed`, `retitled`, `retyped`, `length`, `notes` or `reordered`. `revision` identifies Planning Center's version of the plan; the Producer's own writes never raise a prompt, and a dismissed revision isn't offered again. Removing an item in the run sheet doesn't delete it in Planning Center, and accepting a change never removes the active item.
 
 ### Plotiphar
 
