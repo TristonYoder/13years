@@ -28,20 +28,22 @@ public struct EventTimesView: View {
             Form {
                 Section {
                     if engine.eventTimes.isEmpty {
-                        Text("No event times yet. Add one for each time this run sheet runs — like a 9:00 and an 11:00 service.")
+                        Text(isManagedByPCO
+                            ? "This Planning Center plan has no service times."
+                            : "No event times yet. Add one for each time this run sheet runs — like a 9:00 and an 11:00 event.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(engine.eventTimes) { time in
                         row(time)
                     }
-                    .onDelete { offsets in
+                    .onDelete(perform: isManagedByPCO ? nil : { offsets in
                         for index in offsets where engine.eventTimes.indices.contains(index) {
                             engine.removeEventTime(id: engine.eventTimes[index].id)
                         }
-                    }
+                    })
                 } footer: {
-                    Text(engine.eventTimes.contains(where: { $0.pcoPlanTimeId != nil })
-                        ? "Times from Planning Center are replaced when the plan syncs again."
+                    Text(isManagedByPCO
+                        ? "These are the plan's service times in Planning Center. Change them there and sync the plan again."
                         : "At the end of the run sheet you can jump to the next time and start over from the top.")
                 }
             }
@@ -55,7 +57,7 @@ public struct EventTimesView: View {
                     Button(action: { editorTarget = .add }) {
                         Label("Add Event Time", systemImage: "plus")
                     }
-                    .disabled(engine.eventTimes.count >= CueEngine.maxEventTimes)
+                    .disabled(isManagedByPCO || engine.eventTimes.count >= CueEngine.maxEventTimes)
                 }
             }
             .sheet(item: $editorTarget) { target in
@@ -65,6 +67,10 @@ public struct EventTimesView: View {
         #if os(macOS)
         .frame(minWidth: 380, idealWidth: 420, minHeight: 320, idealHeight: 420)
         #endif
+    }
+
+    private var isManagedByPCO: Bool {
+        engine.isEventTimesManagedByPCO
     }
 
     private func row(_ time: EventTime) -> some View {
@@ -83,14 +89,16 @@ public struct EventTimesView: View {
                 Button("Make Live") { engine.setLiveEventTime(id: time.id) }
                     .disabled(engine.isChangingEventTime)
             }
-            Button(action: { editorTarget = .edit(time) }) {
-                Image(systemName: "pencil")
+            if !isManagedByPCO {
+                Button(action: { editorTarget = .edit(time) }) {
+                    Image(systemName: "pencil")
+                }
+                .help("Edit this event time")
+                Button(role: .destructive, action: { engine.removeEventTime(id: time.id) }) {
+                    Image(systemName: "trash")
+                }
+                .help("Delete this event time")
             }
-            .help("Edit this event time")
-            Button(role: .destructive, action: { engine.removeEventTime(id: time.id) }) {
-                Image(systemName: "trash")
-            }
-            .help("Delete this event time")
         }
         .buttonStyle(.borderless)
     }

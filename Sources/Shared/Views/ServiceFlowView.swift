@@ -23,7 +23,7 @@ public struct ServiceFlowView: View {
                 Button(action: { showingImportText = true }) {
                     Label("Import Text", systemImage: "text.badge.plus")
                 }
-                .help("Paste in a plain-text service flow")
+                .help("Paste in a plain-text run sheet")
 
                 Button(action: { showingPlanPicker = true }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
@@ -33,7 +33,7 @@ public struct ServiceFlowView: View {
                 Button(action: { showingEventTimes = true }) {
                     Label("Event Times", systemImage: "clock")
                 }
-                .help("Set up the times this run sheet runs, like a 9:00 and 11:00 service")
+                .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
 
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")

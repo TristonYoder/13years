@@ -220,6 +220,7 @@ public final class ControlAPIRouter {
         case "event-times":
             if allows(method, "GET") { return json(eventTimeStatus()) }
             guard allows(method, "POST") else { return methodNotAllowed() }
+            guard !engine.isEventTimesManagedByPCO else { return eventTimesManagedByPCO() }
             guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
             let name = request.name?.trimmingCharacters(in: .whitespaces)
             if let tooLong = tooLong(name ?? "", ContentLimits.name, "Event time name") { return tooLong }
@@ -591,6 +592,7 @@ public final class ControlAPIRouter {
                 return Self.error(404, "Unknown event time id", detail: eventTimeId)
             }
             if allows(method, "GET") { return json(eventTimeEntry(existing)) }
+            guard !engine.isEventTimesManagedByPCO else { return eventTimesManagedByPCO() }
             if allows(method, "DELETE") {
                 engine.removeEventTime(id: eventTimeId)
                 return json(eventTimeStatus())
@@ -1263,6 +1265,10 @@ public final class ControlAPIRouter {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .clear }
         return parse(trimmed).map(EventTimeField.set) ?? .invalid
+    }
+
+    private func eventTimesManagedByPCO() -> HTTPResponse {
+        Self.error(409, "Event times come from Planning Center", detail: "A PCO plan is loaded, so its service times are the event times. Edit them in Planning Center and sync again.")
     }
 
     private func invalidEventTimeField() -> HTTPResponse {

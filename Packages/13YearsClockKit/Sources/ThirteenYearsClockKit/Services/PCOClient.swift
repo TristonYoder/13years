@@ -8,6 +8,7 @@ import FoundationNetworking
 
 public final class PCOClient: @unchecked Sendable {
     public static let baseURL = URL(string: "https://api.planningcenteronline.com")!
+    public static let upcomingPlanId = "next"
 
     public var tokens: OAuthTokens?
 
@@ -127,6 +128,28 @@ public final class PCOClient: @unchecked Sendable {
             let title = (attrs["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? dates ?? "Untitled Plan"
             return PCOPlanInfo(id: id, title: title, dates: dates)
         }
+    }
+
+    public func fetchUpcomingPlanId(serviceTypeId: String) async throws -> String? {
+        var components = URLComponents(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans", relativeTo: Self.baseURL)!, resolvingAgainstBaseURL: true)!
+        components.queryItems = [
+            URLQueryItem(name: "filter", value: PCOPlanFilter.future.rawValue),
+            URLQueryItem(name: "order", value: "sort_date"),
+            URLQueryItem(name: "per_page", value: "1"),
+        ]
+
+        var request = URLRequest(url: components.url!)
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't find the next upcoming plan in Planning Center. Check your sign-in and try again."
+            ])
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return (json?["data"] as? [[String: Any]])?.first?["id"] as? String
     }
 
     public func fetchPlanItems(serviceTypeId: String, planId: String) async throws -> (planTitle: String, items: [PCOTimerItem]) {

@@ -319,6 +319,8 @@ Firing is checked every few seconds by the producer app itself — never by a cl
 
 What firing leaves behind depends on `recurrence`. A **`once`** schedule stamps `lastFiredAt` and disables itself — it won't fire again, but the record of what was scheduled and when stays visible rather than disappearing. A **`weekly`** schedule rolls `startsAt` forward to next week's occurrence (by calendar day, so a service that starts at 10:00 keeps starting at 10:00 across a daylight-saving change, not 9:00 or 11:00) and clears `lastFiredAt`, staying enabled and armed for next week.
 
+A schedule with `"pcoPlanId": "next"` loads the soonest upcoming plan of its `pcoServiceTypeId` each time it fires, so a weekly schedule picks up the new week's plan on its own.
+
 A schedule without `pcoServiceTypeId`/`pcoPlanId` only switches the app into the live producer view — it does not load or change the plan. That's a real, supported configuration: a producer who loads Sunday's plan by hand but still wants the mode switch itself automated sets a schedule with no PCO ids.
 
 | Route | Method | Purpose |
@@ -332,14 +334,14 @@ A schedule without `pcoServiceTypeId`/`pcoPlanId` only switches the app into the
 
 ### Event Times
 
-Event times are the times one run sheet runs — a 9:00 and an 11:00 service, a Saturday-night and a Sunday-morning service. They're part of the document. An event time has an optional `name`, an optional `startTime` (`"HH:mm"`, 24-hour), and an optional `day`, which is either a date (`"YYYY-MM-DD"`) or a day of the week (`"sunday"` … `"saturday"`) for a run sheet you reuse every week. Entries are kept sorted by day, then time; days of the week sort Monday first so Saturday comes before Sunday.
+Event times are the times one run sheet runs — a 9:00 and an 11:00 event, or a Saturday-night and a Sunday-morning event. They're part of the document. An event time has an optional `name`, an optional `startTime` (`"HH:mm"`, 24-hour), and an optional `day`, which is either a date (`"YYYY-MM-DD"`) or a day of the week (`"sunday"` … `"saturday"`) for a run sheet you reuse every week. Entries are kept sorted by day, then time; days of the week sort Monday first so Saturday comes before Sunday.
 
 One event time is live (`liveId`; the first one when none was picked). At the end of the run sheet, `POST /v1/event-times/next` makes the next one live and returns to the first item, paused. When a Planning Center plan syncs, its service times replace the event times (`pcoPlanTimeId` set), and with Live sync on, picking or advancing an event time steps Planning Center Live to the same item in that service time.
 
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/event-times` | GET | List event times. Same shape as `eventTimes` in the state snapshot. |
-| `POST /v1/event-times` | POST | Add one. Body: `{"name": "string?", "day": "string?", "startTime": "HH:mm?"}`. 400 for an unparseable `day` or `startTime`; 409 past 24 event times. Returns the new entry (201). |
+| `POST /v1/event-times` | POST | Add one. 409 while a PCO plan is loaded — its service times are the event times then, and add, edit and delete are refused. Body: `{"name": "string?", "day": "string?", "startTime": "HH:mm?"}`. 400 for an unparseable `day` or `startTime`; 409 past 24 event times. Returns the new entry (201). |
 | `GET /v1/event-times/{id}` | GET | Read one. |
 | `PATCH /v1/event-times/{id}` | PATCH | Update one. Same body as create; an absent field is left alone and `""` clears it. |
 | `DELETE /v1/event-times/{id}` | DELETE | Remove one. Returns the remaining list. |
@@ -364,7 +366,7 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | `GET /v1/pco/plans` | GET | List available plans for the selected service type. Returns an array of `{"id": "string", "title": "string", "dates": "string?"}`. |
 | `POST /v1/pco/plans/refresh` | POST | Fetch the latest plans from PCO (202). Requires a service type to be selected (409 if not). Watch the socket for `pco.plans` to update. |
 | `POST /v1/pco/plan-filter` | POST | Set which plans to show (e.g., upcoming, past, all). Body: `{"filter": "string"}`. Returns 202. |
-| `POST /v1/pco/sync` | POST | Fetch a specific plan and populate the local plan with its items (202). Body: `{"serviceTypeId": "string", "planId": "string"}`. Returns the current state and fetches in the background; watch the socket for `plan` to update. |
+| `POST /v1/pco/sync` | POST | Fetch a specific plan and populate the local plan with its items (202). Body: `{"serviceTypeId": "string", "planId": "string"}`. `"planId": "next"` loads the soonest upcoming plan of that type. Returns the current state and fetches in the background; watch the socket for `plan` to update. |
 | `POST /v1/pco/live-sync` | POST | Enable or disable PCO Live synchronization. Body: `{"enabled": boolean}`. Returns 202 (the toggle takes effect immediately but initial sync happens asynchronously). |
 
 ### Plotiphar

@@ -64,8 +64,8 @@ public struct ImportFlowTextView: View {
 
     private var importForm: some View {
             Form {
-                Section("Service Title") {
-                    TextField("e.g. Sunday Morning Service", text: $planTitle)
+                Section("Event Title") {
+                    TextField("e.g. Sunday Morning", text: $planTitle)
                 }
 
                 Section {

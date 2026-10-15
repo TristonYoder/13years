@@ -75,7 +75,7 @@ struct LauncherView: View {
 
     @ViewBuilder
     private var newCards: some View {
-        actionCard(title: "New Document…", subtitle: "A blank service", systemImage: "plus") {
+        actionCard(title: "New Document…", subtitle: "A blank event", systemImage: "plus") {
             actions.newDocument()
         }
         actionCard(title: "From Template", subtitle: "Start from a saved layout", systemImage: "doc.on.doc") {

@@ -33,6 +33,7 @@ public struct SectionHeaderBar<Actions: View>: View {
                 Spacer()
                 actions()
                     .labelStyle(.iconOnly)
+                    .buttonStyle(SectionHeaderActionButtonStyle())
             }
             .padding(.horizontal)
             .padding(.top, 16)
@@ -40,6 +41,30 @@ public struct SectionHeaderBar<Actions: View>: View {
 
             Divider()
         }
+    }
+}
+
+struct SectionHeaderActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SectionHeaderActionButton(configuration: configuration)
+    }
+}
+
+private struct SectionHeaderActionButton: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        configuration.label
+            .font(.title2)
+            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+            .frame(width: 52, height: 40)
+            .background(
+                Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 

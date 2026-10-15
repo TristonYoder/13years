@@ -450,6 +450,10 @@ public final class CueEngine: ObservableObject {
             remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
             return
         }
+        if planId == PCOClient.upcomingPlanId {
+            loadUpcomingPCOPlan(serviceTypeId: serviceTypeId)
+            return
+        }
         if planId != currentPCOPlanId {
             disablePCOLiveSync()
             eventTimes.removeAll { $0.pcoPlanTimeId != nil }
@@ -470,6 +474,38 @@ public final class CueEngine: ObservableObject {
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
             }
         }
+    }
+
+    private func loadUpcomingPCOPlan(serviceTypeId: String) {
+        Task {
+            do {
+                guard let planId = try await pcoClient.fetchUpcomingPlanId(serviceTypeId: serviceTypeId) else {
+                    pcoLastError = "No upcoming plan in Planning Center for this plan type."
+                    return
+                }
+                pcoLastError = nil
+                fetchPCOPlan(serviceTypeId: serviceTypeId, planId: planId)
+            } catch {
+                pcoLastError = error.localizedDescription
+            }
+        }
+    }
+
+    public var isEventTimesManagedByPCO: Bool {
+        currentPCOPlanId != nil
+    }
+
+    func reconcileEventTimesWithPlan() {
+        guard !isRemoteMirror else { return }
+        guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else {
+            if eventTimes.contains(where: { $0.pcoPlanTimeId != nil }) {
+                eventTimes.removeAll { $0.pcoPlanTimeId != nil }
+            }
+            return
+        }
+        eventTimes.removeAll { $0.pcoPlanTimeId == nil }
+        guard isPCOConnected, eventTimes.isEmpty else { return }
+        Task { await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId) }
     }
 
     public func clearPCOServiceTypeSelection() {
@@ -714,6 +750,7 @@ public final class CueEngine: ObservableObject {
             activeItemIndex = min(max(document.activeItemIndex, 0), items.count - 1)
             activeTimerItem = items[activeItemIndex]
         }
+        reconcileEventTimesWithPlan()
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
@@ -739,6 +776,7 @@ public final class CueEngine: ObservableObject {
             activeTimerItem = nil
         }
         broadcastTimerUpdate()
+        reconcileEventTimesWithPlan()
     }
 
     public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) {
@@ -2109,6 +2147,7 @@ public final class CueEngine: ObservableObject {
         var restoredItem = flow.items[activeItemIndex]
         restoredItem.isRunning = false
         activeTimerItem = restoredItem
+        reconcileEventTimesWithPlan()
     }
 
     private func setupDefaultPlan() {

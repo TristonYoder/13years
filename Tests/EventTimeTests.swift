@@ -127,6 +127,43 @@ final class EventTimeTests: XCTestCase {
         XCTAssertEqual(relaunched.liveEventTime?.id, late.id)
     }
 
+    func testLoadingAPCOPlanHandsEventTimesToPlanningCenter() {
+        let engine = engineWithTwoTimes()
+        XCTAssertFalse(engine.isEventTimesManagedByPCO)
+
+        engine.importFlow(title: "PCO", items: [
+            PCOTimerItem(id: "p1", title: "Welcome", itemType: "Item", lengthInSeconds: 60, pcoServiceTypeId: "st", pcoPlanId: "plan")
+        ])
+        XCTAssertTrue(engine.isEventTimesManagedByPCO)
+        XCTAssertTrue(engine.eventTimes.allSatisfy { $0.pcoPlanTimeId != nil })
+        XCTAssertNil(engine.addEventTime(name: "Manual", day: nil, startTime: TimeOfDay(hour: 8, minute: 0)))
+        XCTAssertFalse(engine.eventTimes.contains { $0.name == "Manual" })
+
+        XCTAssertEqual(call(engine, "POST", "/v1/event-times", #"{"name":"Manual"}"#).status, 409)
+    }
+
+    func testLeavingAPCOPlanDropsItsServiceTimes() {
+        let engine = CueEngine()
+        engine.importFlow(title: "PCO", items: [
+            PCOTimerItem(id: "p1", title: "Welcome", itemType: "Item", lengthInSeconds: 60, pcoServiceTypeId: "st", pcoPlanId: "plan")
+        ])
+        engine.eventTimes = [EventTime(id: "pt1", startTime: TimeOfDay(hour: 9, minute: 0), pcoPlanTimeId: "pt1")]
+
+        engine.importFlow(title: "Manual", items: [
+            PCOTimerItem(id: "m1", title: "Welcome", itemType: "Item", lengthInSeconds: 60)
+        ])
+        XCTAssertFalse(engine.isEventTimesManagedByPCO)
+        XCTAssertTrue(engine.eventTimes.isEmpty)
+        XCTAssertNotNil(engine.addEventTime(name: "Manual", day: nil, startTime: nil))
+    }
+
+    func testMirrorAsksTheProducerForTheUpcomingPlan() {
+        let sink = RecordingCommands()
+        let engine = CueEngine(mirroring: sink)
+        engine.fetchPCOPlan(serviceTypeId: "st", planId: PCOClient.upcomingPlanId)
+        XCTAssertEqual(sink.sent, [.pcoSync(serviceTypeId: "st", planId: "next")])
+    }
+
     func testControlAPICreatesEditsAndAdvancesEventTimes() throws {
         let engine = engineWithTwoTimes()
 

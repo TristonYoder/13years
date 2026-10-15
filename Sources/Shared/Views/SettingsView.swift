@@ -91,10 +91,10 @@ public struct SettingsView: View {
 
             Section {
                 Button(action: { showingServiceSchedule = true }) {
-                    Label("Service Schedule", systemImage: "clock.badge.checkmark")
+                    Label("Event Schedule", systemImage: "clock.badge.checkmark")
                 }
             } header: {
-                Text("Service Schedule")
+                Text("Event Schedule")
             } footer: {
                 Text("Pick a lead time before each service and this device goes live automatically — switching into the live producer view and, optionally, loading a specific Planning Center plan. Setup done once, ahead of a week's flow.")
             }
@@ -150,7 +150,7 @@ public struct SettingsView: View {
             } header: {
                 Text("Control API")
             } footer: {
-                Text("Lets a Stream Deck, Bitfocus Companion, QLab, or any script on this network drive cues, timers, and the service flow over HTTP and WebSocket. There is no password on it — anyone who can reach this device on the network can fire a cue, so leave it off on untrusted or guest Wi-Fi. See CONTROL-API.md for the full endpoint reference.")
+                Text("Lets a Stream Deck, Bitfocus Companion, QLab, or any script on this network drive cues, timers, and the run sheet over HTTP and WebSocket. There is no password on it — anyone who can reach this device on the network can fire a cue, so leave it off on untrusted or guest Wi-Fi. See CONTROL-API.md for the full endpoint reference.")
             }
 
             Section {

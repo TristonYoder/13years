@@ -36,6 +36,7 @@ extension CueEngine {
     @discardableResult
     public func addEventTime(name: String?, day: EventDay?, startTime: TimeOfDay?) -> EventTime? {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isEventTimesManagedByPCO else { return nil }
         if isRemoteMirror {
             remoteCommands?.send(.eventTimeCreate(name: trimmed, day: day?.string, startTime: startTime?.string))
             return nil
@@ -48,6 +49,7 @@ extension CueEngine {
 
     public func updateEventTime(id: String, name: String?, day: EventDay?, startTime: TimeOfDay?) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isEventTimesManagedByPCO else { return }
         if isRemoteMirror {
             remoteCommands?.send(.eventTimeUpdate(id: id, name: trimmed ?? "", day: day?.string ?? "", startTime: startTime?.string ?? ""))
             return
@@ -61,6 +63,7 @@ extension CueEngine {
     }
 
     public func removeEventTime(id: String) {
+        guard !isEventTimesManagedByPCO else { return }
         if isRemoteMirror {
             remoteCommands?.send(.eventTimeDelete(id: id))
             return
