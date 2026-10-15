@@ -100,7 +100,10 @@ public struct PagerSettingsView: View {
                         Text(engine.manualProducerHost ?? "Automatic")
                             .foregroundStyle(.secondary)
                     }
-                    ProducerHostField()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("IP / Host")
+                        ProducerHostField()
+                    }
                 } header: {
                     Text("Producer")
                 } footer: {

@@ -18,6 +18,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSBonjourServices</key>
@@ -25,11 +29,9 @@
 		<string>_13years._tcp</string>
 		<string>_13years._udp</string>
 	</array>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 7 &amp; Co LLC</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>13 Years uses the local network to receive real-time standby/go cues from the production control station.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.productivity</string>
 </dict>
 </plist>
