@@ -10,6 +10,7 @@ public extension View {
         previewElapsedSeconds: Int = 0,
         arrowEdge: Edge = TimeEntryPopoverDefaults.arrowEdge,
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
+        allowsEndAt: Bool = true,
         onCommit: @escaping (TimerInputParser.Action) -> Void
     ) -> some View {
         modifier(TimeEntryPopoverModifier(
@@ -18,6 +19,7 @@ public extension View {
             previewElapsedSeconds: previewElapsedSeconds,
             arrowEdge: arrowEdge,
             hourFormatThreshold: hourFormatThreshold,
+            allowsEndAt: allowsEndAt,
             onCommit: onCommit
         ))
     }
@@ -32,12 +34,20 @@ public enum TimeEntryPopoverDefaults {
 }
 
 enum TimeEntryPreview {
-    static func resolvedSeconds(for action: TimerInputParser.Action, base: Int, elapsed: Int) -> Int {
+    static func resolvedSeconds(
+        for action: TimerInputParser.Action,
+        base: Int,
+        elapsed: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
         switch action {
         case .setAbsolute(let seconds):
             return max(0, seconds)
         case .adjustRelative(let delta):
             return max(-elapsed, base + delta)
+        case .endAt(let time):
+            return max(0, time.secondsUntil(now: now, calendar: calendar))
         }
     }
 }
@@ -48,15 +58,22 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     let previewElapsedSeconds: Int
     let arrowEdge: Edge
     let hourFormatThreshold: HourFormatThreshold
+    let allowsEndAt: Bool
     let onCommit: (TimerInputParser.Action) -> Void
 
     @State private var editBuffer: String = ""
+    @State private var isEndAt = false
+    @State private var meridiemOverride: Bool?
     @FocusState private var isKeypadFocused: Bool
 
     func body(content: Content) -> some View {
         content
             .onChange(of: isPresented) { _, presented in
-                if presented { editBuffer = "" }
+                if presented {
+                    editBuffer = ""
+                    isEndAt = false
+                    meridiemOverride = nil
+                }
             }
             #if os(iOS) || os(macOS)
             .popover(isPresented: $isPresented, attachmentAnchor: .rect(.bounds), arrowEdge: arrowEdge) {
@@ -72,9 +89,15 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     private var popoverContent: some View {
         VStack(spacing: 12) {
             screen
+            if allowsEndAt {
+                endAtToggle
+            }
             TimeEntryKeypad(
+                isEndAt: isEndAt,
+                isPM: effectiveIsPM,
                 onDigit: { editBuffer.append($0) },
                 onSign: { setSign($0) },
+                onMeridiem: { meridiemOverride = $0 },
                 onClear: { editBuffer = "" },
                 onCommit: { commit() }
             )
@@ -118,9 +141,41 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         .contentShape(Rectangle())
     }
 
+    private var endAtToggle: some View {
+        Button {
+            toggleEndAt()
+        } label: {
+            Text("End @")
+                .font(.system(.body, design: .monospaced).weight(.medium))
+                .frame(maxWidth: .infinity)
+        }
+        .producerSecondaryButton()
+        .tint(isEndAt ? Color.accentColor : Color.secondary)
+        .foregroundStyle(isEndAt ? Color.accentColor : Color.primary)
+    }
+
+    private var effectiveIsPM: Bool {
+        meridiemOverride ?? TimerInputParser.nearestUpcomingIsPM(editBuffer)
+    }
+
+    private func toggleEndAt() {
+        isEndAt.toggle()
+        editBuffer = ""
+        meridiemOverride = nil
+    }
+
+    private var parsedAction: TimerInputParser.Action? {
+        guard !editBuffer.isEmpty else { return nil }
+        return isEndAt ? TimerInputParser.parseEndAt(editBuffer, isPM: effectiveIsPM) : TimerInputParser.parse(editBuffer)
+    }
+
     private var previewText: String {
-        guard !editBuffer.isEmpty, let action = TimerInputParser.parse(editBuffer) else { return "" }
-        return TimeFormatting.string(forSeconds: resolvedSeconds(for: action), threshold: hourFormatThreshold)
+        guard let action = parsedAction else { return "" }
+        let remaining = TimeFormatting.string(forSeconds: resolvedSeconds(for: action), threshold: hourFormatThreshold)
+        if case .endAt(let time) = action {
+            return "End @ \(time.formattedMeridiem) → \(remaining) remaining"
+        }
+        return remaining
     }
 
     private func resolvedSeconds(for action: TimerInputParser.Action) -> Int {
@@ -161,6 +216,17 @@ private struct TimeEntryPopoverModifier: ViewModifier {
             return .handled
         }
         let lower = Character(raw.lowercased())
+        if allowsEndAt && (raw == "@" || lower == "e") {
+            toggleEndAt()
+            return .handled
+        }
+        if isEndAt {
+            if lower == "a" || lower == "p" {
+                meridiemOverride = lower == "p"
+                return .handled
+            }
+            return raw == ":" ? appendColon() : .ignored
+        }
         if lower == "h" || lower == "m" || lower == "s" {
             editBuffer.append(lower)
             return .handled
@@ -176,16 +242,24 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         return .ignored
     }
 
+    private func appendColon() -> KeyPress.Result {
+        editBuffer.append(":")
+        return .handled
+    }
+
     private func commit() {
         defer { isPresented = false }
-        guard !editBuffer.isEmpty, let action = TimerInputParser.parse(editBuffer) else { return }
+        guard let action = parsedAction else { return }
         onCommit(action)
     }
 }
 
 private struct TimeEntryKeypad: View {
+    let isEndAt: Bool
+    let isPM: Bool
     let onDigit: (Character) -> Void
     let onSign: (Character) -> Void
+    let onMeridiem: (Bool) -> Void
     let onClear: () -> Void
     let onCommit: () -> Void
 
@@ -203,25 +277,33 @@ private struct TimeEntryKeypad: View {
                 GridRow {
                     key("C", tint: .secondary, action: onClear)
                     key("h") { onDigit("h") }
+                        .disabled(isEndAt)
                     key("m") { onDigit("m") }
+                        .disabled(isEndAt)
                     key("s") { onDigit("s") }
+                        .disabled(isEndAt)
                 }
                 GridRow {
                     key("7") { onDigit("7") }
                     key("8") { onDigit("8") }
                     key("9") { onDigit("9") }
-                    key("−") { onSign("-") }
+                    if isEndAt {
+                        key("AM", tint: isPM ? .primary : .accentColor, selected: !isPM) { onMeridiem(false) }
+                    } else {
+                        key("−") { onSign("-") }
+                    }
                 }
                 GridRow {
                     key("4") { onDigit("4") }
                     key("5") { onDigit("5") }
                     key("6") { onDigit("6") }
-                    key("+") { onSign("+") }
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear.preference(key: KeySizePreferenceKey.self, value: proxy.size)
-                            }
-                        )
+                    if isEndAt {
+                        key("PM", tint: isPM ? .accentColor : .primary, selected: isPM) { onMeridiem(true) }
+                            .background(sizeReader)
+                    } else {
+                        key("+") { onSign("+") }
+                            .background(sizeReader)
+                    }
                 }
             }
 
@@ -243,11 +325,18 @@ private struct TimeEntryKeypad: View {
         .onPreferenceChange(KeySizePreferenceKey.self) { measuredKeySize = $0 }
     }
 
+    private var sizeReader: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: KeySizePreferenceKey.self, value: proxy.size)
+        }
+    }
+
     @ViewBuilder
     private func key(
         _ label: String,
         tint: Color = .primary,
         prominent: Bool = false,
+        selected: Bool = false,
         width: CGFloat? = nil,
         height: CGFloat? = nil,
         action: @escaping () -> Void
@@ -264,7 +353,7 @@ private struct TimeEntryKeypad: View {
         } else {
             Button(action: action) { content }
                 .producerSecondaryButton()
-                .tint(.secondary)
+                .tint(selected ? Color.accentColor : Color.secondary)
                 .foregroundStyle(tint)
         }
     }

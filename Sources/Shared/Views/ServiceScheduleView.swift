@@ -38,7 +38,7 @@ public struct ServiceScheduleView: View {
                 schedulesSection
             }
             .formStyle(.grouped)
-            .navigationTitle("Service Schedule")
+            .navigationTitle("Event Schedule")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
@@ -78,7 +78,7 @@ public struct ServiceScheduleView: View {
     private var schedulesSection: some View {
         Section {
             if engine.serviceSchedules.isEmpty {
-                Text("No schedules yet — add one to have this device go live automatically ahead of a service, at whatever lead time you pick.")
+                Text("No schedules yet — add one to have this device go live automatically ahead of an event, at whatever lead time you pick.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -213,7 +213,7 @@ private struct ServiceScheduleEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Service") {
+                Section("Event") {
                     TextField("Title", text: $title)
                     #if os(tvOS)
                     LabeledContent("Starts At") {
@@ -259,7 +259,7 @@ private struct ServiceScheduleEditorView: View {
 
     private var leadSentence: String {
         resolvedLeadMinutes == 0
-            ? "Goes live at service time"
+            ? "Goes live at start time"
             : "Goes live \(resolvedLeadMinutes) minute\(resolvedLeadMinutes == 1 ? "" : "s") before"
     }
 
@@ -274,7 +274,7 @@ private struct ServiceScheduleEditorView: View {
 
             Picker("Lead Time", selection: $leadOption) {
                 ForEach(Self.leadPresets, id: \.self) { minutes in
-                    Text(minutes == 0 ? "At service time" : "\(minutes) min before")
+                    Text(minutes == 0 ? "At start time" : "\(minutes) min before")
                         .tag(LeadOption.preset(minutes))
                 }
                 Text("Custom\u{2026}").tag(LeadOption.custom)
@@ -333,7 +333,7 @@ private struct ServiceScheduleEditorView: View {
                 get: { pcoServiceTypeId ?? "" },
                 set: { newValue in
                     pcoServiceTypeId = newValue.isEmpty ? nil : newValue
-                    pcoPlanId = nil
+                    pcoPlanId = newValue.isEmpty ? nil : PCOClient.upcomingPlanId
                     if !newValue.isEmpty {
                         engine.selectPCOServiceType(newValue)
                     }
@@ -351,6 +351,7 @@ private struct ServiceScheduleEditorView: View {
                     set: { pcoPlanId = $0.isEmpty ? nil : $0 }
                 )) {
                     Text("None").tag("")
+                    Text("Next upcoming plan").tag(PCOClient.upcomingPlanId)
                     ForEach(engine.pcoPlans) { plan in
                         Text(plan.title).tag(plan.id)
                     }
@@ -361,7 +362,9 @@ private struct ServiceScheduleEditorView: View {
         } footer: {
             Text(pcoPlanId == nil
                 ? "No plan chosen — going live just switches this device into the live producer view and leaves whatever plan is already loaded alone."
-                : "Loads this plan from Planning Center the moment this schedule fires.")
+                : pcoPlanId == PCOClient.upcomingPlanId
+                    ? "Each time this schedule fires, it loads the next upcoming plan of this type from Planning Center — no need to pick one every week."
+                    : "Loads this plan from Planning Center the moment this schedule fires.")
         }
         .task {
             if engine.pcoServiceTypes.isEmpty {

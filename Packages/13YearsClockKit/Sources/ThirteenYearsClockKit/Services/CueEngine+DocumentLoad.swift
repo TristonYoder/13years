@@ -33,6 +33,10 @@ extension CueEngine {
         if let selected = body.selectedRoleIds { document.selectedRoleIds = selected }
         if let incoming = body.waypoints { document.waypoints = incoming }
         if let incoming = body.schedules { document.serviceSchedules = incoming }
+        if let incoming = body.eventTimes {
+            document.eventTimes = incoming
+            document.liveEventTimeId = body.liveEventTimeId
+        }
         if let raw = body.settings?.hourFormatThreshold, let threshold = HourFormatThreshold(rawValue: raw) {
             document.settings.hourFormatThreshold = threshold
         }
@@ -49,6 +53,9 @@ extension CueEngine {
             broadcastTimerUpdate()
         } else {
             importFlow(title: body.title, items: items)
+            if body.eventTimes != nil {
+                restoreEventTimes(document.eventTimes, liveId: document.liveEventTimeId)
+            }
         }
     }
 }

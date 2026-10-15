@@ -57,6 +57,7 @@ public final class CueEngine: ObservableObject {
     private static let pcoUserNameDefaultsKey = "pcoUserName"
     @Published public var pcoLastError: String?
     @Published public var pcoNoteCategories: [PCOClient.PCONoteCategory] = []
+    @Published public internal(set) var pcoPendingChanges: PCOPendingChanges?
     @Published public var isPCOLiveSyncEnabled: Bool = false {
         didSet { write(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
     }
@@ -69,6 +70,13 @@ public final class CueEngine: ObservableObject {
 
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
     @Published public var pcoPlans: [PCOClient.PCOPlanInfo] = []
+    @Published public var eventTimes: [EventTime] = [] {
+        didSet { if eventTimes != oldValue { persistCurrentFlow() } }
+    }
+    @Published public var liveEventTimeId: String? {
+        didSet { if liveEventTimeId != oldValue { persistCurrentFlow() } }
+    }
+    @Published public var isChangingEventTime: Bool = false
     @Published public var pcoSelectedServiceTypeId: String?
     @Published public var pcoPlanFilter: PCOClient.PCOPlanFilter = .future
     @Published public var pcoDefaultServiceTypeId: String? {
@@ -188,7 +196,8 @@ public final class CueEngine: ObservableObject {
     private var controlAPIEventHub: ControlAPIEventHub?
     #endif
     private let hostsControlAPI: Bool
-    private let pcoClient = PCOClient()
+    let pcoClient = PCOClient()
+    var pcoChangeTracking = PCOChangeTracking()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
     private var plotipharPollTask: Task<Void, Never>?
@@ -241,7 +250,10 @@ public final class CueEngine: ObservableObject {
         restoreNotificationsClearedAt()
         restorePersistedFlow()
         setupDefaultPlan()
-        if startsNetworking { startNetworking() }
+        if startsNetworking {
+            startNetworking()
+            startPCOChangePolling()
+        }
         relayClient.onPacketReceived = { [weak self] packet in
             self?.handlePacket(packet, origin: .relay)
         }
@@ -443,8 +455,13 @@ public final class CueEngine: ObservableObject {
             remoteCommands?.send(.pcoSync(serviceTypeId: serviceTypeId, planId: planId))
             return
         }
+        if planId == PCOClient.upcomingPlanId {
+            loadUpcomingPCOPlan(serviceTypeId: serviceTypeId)
+            return
+        }
         if planId != currentPCOPlanId {
             disablePCOLiveSync()
+            eventTimes.removeAll { $0.pcoPlanTimeId != nil }
         }
         Task {
             do {
@@ -452,15 +469,49 @@ public final class CueEngine: ObservableObject {
                 pcoLastError = nil
                 if !items.isEmpty {
                     importFlow(title: title, items: items)
+                    beginPCOChangeTracking(planId: planId, items: items)
                     self.isPCOConnected = true
                     syncPlotipharAssignments()
                 }
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
+                await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
             } catch {
                 pcoLastError = error.localizedDescription
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
             }
         }
+    }
+
+    private func loadUpcomingPCOPlan(serviceTypeId: String) {
+        Task {
+            do {
+                guard let planId = try await pcoClient.fetchUpcomingPlanId(serviceTypeId: serviceTypeId) else {
+                    pcoLastError = "No upcoming plan in Planning Center for this plan type."
+                    return
+                }
+                pcoLastError = nil
+                fetchPCOPlan(serviceTypeId: serviceTypeId, planId: planId)
+            } catch {
+                pcoLastError = error.localizedDescription
+            }
+        }
+    }
+
+    public var isEventTimesManagedByPCO: Bool {
+        currentPCOPlanId != nil
+    }
+
+    func reconcileEventTimesWithPlan() {
+        guard !isRemoteMirror else { return }
+        guard let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else {
+            if eventTimes.contains(where: { $0.pcoPlanTimeId != nil }) {
+                eventTimes.removeAll { $0.pcoPlanTimeId != nil }
+            }
+            return
+        }
+        eventTimes.removeAll { $0.pcoPlanTimeId == nil }
+        guard isPCOConnected, eventTimes.isEmpty else { return }
+        Task { await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId) }
     }
 
     public func clearPCOServiceTypeSelection() {
@@ -642,6 +693,8 @@ public final class CueEngine: ObservableObject {
             serviceSchedules: serviceSchedules,
             planItems: planItems,
             activeItemIndex: activeItemIndex,
+            eventTimes: eventTimes,
+            liveEventTimeId: liveEventTimeId,
             settings: .init(
                 hourFormatThreshold: hourFormatThreshold,
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
@@ -659,6 +712,8 @@ public final class CueEngine: ObservableObject {
         blank.serviceSchedules = []
         blank.planItems = []
         blank.activeItemIndex = 0
+        blank.eventTimes = []
+        blank.liveEventTimeId = nil
         apply(blank)
         currentDocumentURL = nil
     }
@@ -690,6 +745,7 @@ public final class CueEngine: ObservableObject {
     }
 
     func applyPlan(of document: ProducerDocument) {
+        restoreEventTimes(document.eventTimes, liveId: document.liveEventTimeId)
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false }
         planItems = items
@@ -700,6 +756,7 @@ public final class CueEngine: ObservableObject {
             activeItemIndex = min(max(document.activeItemIndex, 0), items.count - 1)
             activeTimerItem = items[activeItemIndex]
         }
+        reconcileEventTimesWithPlan()
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
@@ -725,6 +782,7 @@ public final class CueEngine: ObservableObject {
             activeTimerItem = nil
         }
         broadcastTimerUpdate()
+        reconcileEventTimesWithPlan()
     }
 
     public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) {
@@ -759,7 +817,9 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard let index = planItems.firstIndex(where: { $0.id == id }) else { return }
+        ensurePCOBaseline()
         let previousLength = planItems[index].lengthInSeconds
+        let previousNotes = planItems[index].notes
         planItems[index].title = title
         planItems[index].itemType = itemType
         planItems[index].lengthInSeconds = lengthInSeconds
@@ -779,55 +839,9 @@ public final class CueEngine: ObservableObject {
             pushItemLengthToPCO(id: id)
         }
         if let notes {
-            for category in notes.keys {
+            for category in Set(notes.keys).union(previousNotes.keys).sorted()
+            where (notes[category] ?? "") != (previousNotes[category] ?? "") {
                 pushItemNoteToPCO(id: id, category: category)
-            }
-        }
-    }
-
-    public func pushItemLengthToPCO(id: String) {
-        guard !isRemoteMirror else { return }
-        guard let item = planItems.first(where: { $0.id == id }),
-              let serviceTypeId = item.pcoServiceTypeId,
-              let planId = item.pcoPlanId else { return }
-        Task {
-            do {
-                try await pcoClient.updateItemLength(serviceTypeId: serviceTypeId, planId: planId, itemId: item.id, lengthInSeconds: item.lengthInSeconds)
-                pcoLastError = nil
-            } catch {
-                pcoLastError = error.localizedDescription
-            }
-        }
-    }
-
-    public func pushItemNoteToPCO(id: String, category: String) {
-        guard !isRemoteMirror else { return }
-        guard let index = planItems.firstIndex(where: { $0.id == id }),
-              let serviceTypeId = planItems[index].pcoServiceTypeId,
-              let planId = planItems[index].pcoPlanId,
-              let content = planItems[index].notes[category] else { return }
-
-        let itemId = planItems[index].id
-        if let existingNoteId = planItems[index].noteIds[category] {
-            Task {
-                do {
-                    try await pcoClient.updateItemNoteContent(serviceTypeId: serviceTypeId, planId: planId, itemId: itemId, noteId: existingNoteId, content: content)
-                    pcoLastError = nil
-                } catch {
-                    pcoLastError = error.localizedDescription
-                }
-            }
-        } else if let categoryId = pcoNoteCategories.first(where: { $0.name == category })?.id {
-            Task {
-                do {
-                    let newNoteId = try await pcoClient.createItemNote(serviceTypeId: serviceTypeId, planId: planId, itemId: itemId, categoryId: categoryId, content: content)
-                    pcoLastError = nil
-                    if let idx = planItems.firstIndex(where: { $0.id == id }) {
-                        planItems[idx].noteIds[category] = newNoteId
-                    }
-                } catch {
-                    pcoLastError = error.localizedDescription
-                }
             }
         }
     }
@@ -866,6 +880,7 @@ public final class CueEngine: ObservableObject {
             remoteCommands?.send(.planReorder(itemIds: reordered.map(\.id)))
             return
         }
+        ensurePCOBaseline()
         let activeId = activeTimerItem?.id
         planItems.move(fromOffsets: fromOffsets, toOffset: toOffset)
         renumberPlanItems()
@@ -873,6 +888,7 @@ public final class CueEngine: ObservableObject {
         if let activeId, let newIndex = planItems.firstIndex(where: { $0.id == activeId }) {
             activeItemIndex = newIndex
         }
+        pushPlanOrderToPCO()
     }
 
     public func setActivePlanItem(id: String) {
@@ -1219,7 +1235,78 @@ public final class CueEngine: ObservableObject {
     private func takeLiveControlIfNeeded(serviceTypeId: String, planId: String) async {
         guard !isPCOLiveSyncEnabled else { return }
         if await forceTakeLiveControl(serviceTypeId: serviceTypeId, planId: planId) {
+            if !eventTimes.contains(where: { $0.pcoPlanTimeId != nil }) {
+                await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
+            }
             syncElapsedTimeFromPCOLive()
+        }
+    }
+
+    private func refreshPCOPlanTimes(serviceTypeId: String, planId: String) async {
+        do {
+            let times = try await pcoClient.fetchPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
+                .filter(\.isService)
+            guard currentPCOPlanId == planId, !times.isEmpty else { return }
+            let previousLive = liveEventTime?.pcoPlanTimeId
+            eventTimes = times.map { time in
+                EventTime(
+                    id: time.id,
+                    name: time.name,
+                    day: time.startsAt.map { EventDay(date: $0) },
+                    startTime: time.startsAt.map { TimeOfDay(date: $0) },
+                    pcoPlanTimeId: time.id
+                )
+            }
+            liveEventTimeId = eventTimes.first(where: { $0.pcoPlanTimeId == previousLive })?.id
+        } catch {
+            AppLog.cue.error("CueEngine: fetchPlanTimes error: \(error.localizedDescription, privacy: .private)")
+        }
+    }
+
+    private func noteLivePCOPlanTime(_ planTimeId: String?) {
+        guard let planTimeId,
+              let match = eventTimes.first(where: { $0.pcoPlanTimeId == planTimeId }),
+              liveEventTimeId != match.id else { return }
+        liveEventTimeId = match.id
+    }
+
+    func jumpPCOLive(toEventTime eventTimeId: String, itemId targetItemId: String) {
+        guard isPCOLiveSyncEnabled,
+              let targetPlanTimeId = eventTimes.first(where: { $0.id == eventTimeId })?.pcoPlanTimeId,
+              let serviceTypeId = currentPCOServiceTypeId,
+              let planId = currentPCOPlanId,
+              !isChangingEventTime else { return }
+        isChangingEventTime = true
+        Task {
+            defer { isChangingEventTime = false }
+            await takeLiveControlIfNeeded(serviceTypeId: serviceTypeId, planId: planId)
+            guard isPCOLiveSyncEnabled else { return }
+            let pcoTimes = eventTimes.compactMap(\.pcoPlanTimeId)
+            let timeOrder = Dictionary(pcoTimes.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { first, _ in first })
+            guard let targetTime = timeOrder[targetPlanTimeId],
+                  let targetItem = planItems.firstIndex(where: { $0.id == targetItemId }) else { return }
+
+            let maxSteps = (planItems.count + 1) * (pcoTimes.count + 1)
+            var lastDirection: PCOClient.PCOLiveDirection?
+            do {
+                for _ in 0..<maxSteps {
+                    guard let current = try await pcoClient.fetchCurrentItemTime(serviceTypeId: serviceTypeId, planId: planId) else { break }
+                    guard let currentTime = current.planTimeId.flatMap({ timeOrder[$0] }) else { break }
+                    let currentItem = current.itemId.flatMap { id in planItems.firstIndex(where: { $0.id == id }) } ?? -1
+                    if currentTime == targetTime && currentItem == targetItem {
+                        syncElapsedTimeFromPCOLive()
+                        break
+                    }
+                    let direction: PCOClient.PCOLiveDirection =
+                        (currentTime, currentItem) < (targetTime, targetItem) ? .next : .previous
+                    if let lastDirection, lastDirection != direction { break }
+                    lastDirection = direction
+                    try await pcoClient.stepLiveItem(serviceTypeId: serviceTypeId, planId: planId, direction: direction)
+                }
+                pcoLastError = nil
+            } catch {
+                pcoLastError = error.localizedDescription
+            }
         }
     }
 
@@ -1261,6 +1348,7 @@ public final class CueEngine: ObservableObject {
         Task {
             do {
                 guard let currentItemTime = try await pcoClient.fetchCurrentItemTime(serviceTypeId: serviceTypeId, planId: planId) else { return }
+                noteLivePCOPlanTime(currentItemTime.planTimeId)
 
                 guard currentItemTime.itemId == activeTimerItem?.id,
                       let liveStartAt = currentItemTime.liveStartAt else { return }
@@ -1323,6 +1411,7 @@ public final class CueEngine: ObservableObject {
         guard isPCOLiveSyncEnabled else { return }
         do {
             guard let currentItemTime = try await pcoClient.fetchCurrentItemTime(serviceTypeId: serviceTypeId, planId: planId) else { return }
+            noteLivePCOPlanTime(currentItemTime.planTimeId)
 
             if let targetItemId, currentItemTime.itemId != targetItemId, !alreadyCorrected,
                let targetIndex = planItems.firstIndex(where: { $0.id == targetItemId }),
@@ -1996,29 +2085,33 @@ public final class CueEngine: ObservableObject {
     private struct PersistedFlow: Codable {
         let items: [PCOTimerItem]
         let activeItemIndex: Int
+        var eventTimes: [EventTime]?
+        var liveEventTimeId: String?
     }
     private static let persistedFlowDefaultsKey = "persistedFlow"
 
     private func persistCurrentFlow() {
         guard !isRemoteMirror else { return }
-        guard !planItems.isEmpty else {
+        guard !planItems.isEmpty || !eventTimes.isEmpty else {
             erase(forKey: Self.persistedFlowDefaultsKey)
             return
         }
-        let flow = PersistedFlow(items: planItems, activeItemIndex: activeItemIndex)
+        let flow = PersistedFlow(items: planItems, activeItemIndex: activeItemIndex, eventTimes: eventTimes, liveEventTimeId: liveEventTimeId)
         guard let data = try? JSONEncoder().encode(flow) else { return }
         write(data, forKey: Self.persistedFlowDefaultsKey)
     }
 
     private func restorePersistedFlow() {
         guard let data = UserDefaults.standard.data(forKey: Self.persistedFlowDefaultsKey),
-              let flow = try? JSONDecoder().decode(PersistedFlow.self, from: data),
-              !flow.items.isEmpty else { return }
+              let flow = try? JSONDecoder().decode(PersistedFlow.self, from: data) else { return }
+        restoreEventTimes(flow.eventTimes ?? [], liveId: flow.liveEventTimeId)
+        guard !flow.items.isEmpty else { return }
         planItems = flow.items
         activeItemIndex = min(max(flow.activeItemIndex, 0), flow.items.count - 1)
         var restoredItem = flow.items[activeItemIndex]
         restoredItem.isRunning = false
         activeTimerItem = restoredItem
+        reconcileEventTimesWithPlan()
     }
 
     private func setupDefaultPlan() {

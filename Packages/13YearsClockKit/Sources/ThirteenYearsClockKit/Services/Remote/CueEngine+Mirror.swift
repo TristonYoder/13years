@@ -23,6 +23,10 @@ extension CueEngine {
                 lastFiredAt: entry.lastFiredAt
             )
         })
+        assign(\.eventTimes, (state.eventTimes?.entries ?? []).map {
+            EventTime(id: $0.id, name: $0.name, day: $0.day, startTime: $0.startTime, pcoPlanTimeId: $0.pcoPlanTimeId)
+        })
+        assign(\.liveEventTimeId, state.eventTimes?.liveId)
         assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)
@@ -40,6 +44,7 @@ extension CueEngine {
         assign(\.pcoServiceTypes, state.pco.serviceTypes.map { PCOClient.PCOServiceType(id: $0.id, name: $0.name) })
         assign(\.pcoPlans, state.pco.plans.map { PCOClient.PCOPlanInfo(id: $0.id, title: $0.title, dates: $0.dates) })
         assign(\.pcoNoteCategories, state.pco.noteCategories.map { PCOClient.PCONoteCategory(id: $0.id, name: $0.name) })
+        assign(\.pcoPendingChanges, state.pco.pendingChanges)
         assign(\.remoteControllerCount, state.settings.connectedAPIClients)
     }
 

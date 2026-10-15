@@ -34,6 +34,7 @@ public struct ControlAPIState: Codable, Sendable {
     public var settings: SettingsStatus
     public var waypoints: [WaypointStatus]
     public var schedules: ScheduleStatus
+    public var eventTimes: EventTimeStatus? = nil
     public var epoch: Int? = nil
     public var utcOffsetSeconds: Int? = nil
 
@@ -82,6 +83,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var serviceTypes: [IdentifiedName]
         public var plans: [PlanInfo]
         public var noteCategories: [IdentifiedName]
+        public var pendingChanges: PCOPendingChanges? = nil
 
         public struct PlanInfo: Codable, Sendable {
             public var id: String
@@ -119,6 +121,21 @@ public struct ControlAPIState: Codable, Sendable {
         public var itemId: String?
         public var itemTitle: String?
         public var itemIndex: Int?
+    }
+
+    public struct EventTimeStatus: Codable, Sendable {
+        public var entries: [Entry]
+        public var liveId: String?
+        public var nextId: String?
+
+        public struct Entry: Codable, Sendable {
+            public var id: String
+            public var name: String?
+            public var day: EventDay?
+            public var startTime: TimeOfDay?
+            public var displayName: String
+            public var pcoPlanTimeId: String?
+        }
     }
 
     public struct ScheduleStatus: Codable, Sendable {
@@ -265,6 +282,10 @@ public enum ControlAPIRequests {
         public var input: String?
     }
 
+    public struct TimerEndAtBody: Decodable, Sendable {
+        public var time: String
+    }
+
     public struct FlagBody: Decodable, Sendable {
         public var isActual: Bool?
         public var enabled: Bool?
@@ -316,6 +337,8 @@ public enum ControlAPIRequests {
         public var selectedRoleIds: [String]?
         public var waypoints: [Waypoint]?
         public var schedules: [ServiceSchedule]?
+        public var eventTimes: [EventTime]?
+        public var liveEventTimeId: String?
         public var settings: Settings?
 
         public init(
@@ -327,6 +350,8 @@ public enum ControlAPIRequests {
             selectedRoleIds: [String]? = nil,
             waypoints: [Waypoint]? = nil,
             schedules: [ServiceSchedule]? = nil,
+            eventTimes: [EventTime]? = nil,
+            liveEventTimeId: String? = nil,
             settings: Settings? = nil
         ) {
             self.title = title
@@ -337,6 +362,8 @@ public enum ControlAPIRequests {
             self.selectedRoleIds = selectedRoleIds
             self.waypoints = waypoints
             self.schedules = schedules
+            self.eventTimes = eventTimes
+            self.liveEventTimeId = liveEventTimeId
             self.settings = settings
         }
 
@@ -350,8 +377,27 @@ public enum ControlAPIRequests {
                 selectedRoleIds: document.selectedRoleIds,
                 waypoints: document.waypoints,
                 schedules: document.serviceSchedules,
+                eventTimes: document.eventTimes,
+                liveEventTimeId: document.liveEventTimeId,
                 settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue)
             )
+        }
+    }
+
+    public struct PCOChangesBody: Decodable, Sendable {
+        public var revision: String?
+    }
+
+    public struct PCOChangesStatus: Encodable, Sendable {
+        public var pending: PCOPendingChanges?
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(pending, forKey: .pending)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case pending
         }
     }
 
@@ -380,6 +426,12 @@ public enum ControlAPIRequests {
             self.code = code
             self.state = state
         }
+    }
+
+    public struct EventTimeBody: Decodable, Sendable {
+        public var name: String?
+        public var day: String?
+        public var startTime: String?
     }
 
     public struct IdBody: Decodable, Sendable {

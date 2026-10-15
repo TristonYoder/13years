@@ -176,6 +176,18 @@ public struct PCOPlanPickerView: View {
                     .font(.footnote)
             }
 
+            Section {
+                Button(action: {
+                    if let serviceTypeId = engine.pcoSelectedServiceTypeId {
+                        engine.fetchPCOPlan(serviceTypeId: serviceTypeId, planId: PCOClient.upcomingPlanId)
+                    }
+                    dismiss()
+                }) {
+                    Label("Next Upcoming Plan", systemImage: "calendar.badge.clock")
+                }
+                .help("Load the soonest upcoming plan of this type")
+            }
+
             if engine.pcoPlans.isEmpty && engine.pcoLastError == nil {
                 Text("No \(engine.pcoPlanFilter.displayName.lowercased()) plans.")
                     .foregroundStyle(.secondary)

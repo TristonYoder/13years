@@ -13,6 +13,7 @@ public struct ServiceFlowView: View {
     @State private var newWaypointName: String = ""
     @State private var pendingDeleteItem: PCOTimerItem?
     @State private var selectedItemId: String?
+    @State private var showingEventTimes = false
 
     public init() {}
 
@@ -22,12 +23,17 @@ public struct ServiceFlowView: View {
                 Button(action: { showingImportText = true }) {
                     Label("Import Text", systemImage: "text.badge.plus")
                 }
-                .help("Paste in a plain-text service flow")
+                .help("Paste in a plain-text run sheet")
 
                 Button(action: { showingPlanPicker = true }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
+
+                Button(action: { showingEventTimes = true }) {
+                    Label("Event Times", systemImage: "clock")
+                }
+                .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
 
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")
@@ -39,6 +45,8 @@ public struct ServiceFlowView: View {
                     .help("Reorder or delete items")
                 #endif
             }
+
+            PCOChangesBanner()
 
             Group {
                 if engine.planItems.isEmpty {
@@ -64,6 +72,9 @@ public struct ServiceFlowView: View {
         }
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
+        }
+        .sheet(isPresented: $showingEventTimes) {
+            EventTimesView()
         }
         .alert("New Waypoint", isPresented: Binding(
             get: { newWaypointTargetItemId != nil },
@@ -176,6 +187,28 @@ public struct ServiceFlowView: View {
             }
         }
 
+        if engine.eventTimes.count > 1 {
+            Section {
+                Picker(selection: Binding(
+                    get: { engine.liveEventTime?.id ?? "" },
+                    set: { id in
+                        guard !id.isEmpty else { return }
+                        engine.setLiveEventTime(id: id)
+                    }
+                )) {
+                    ForEach(engine.eventTimes) { time in
+                        Text(time.displayName).tag(time.id)
+                    }
+                } label: {
+                    Label("Live Event Time", systemImage: "clock")
+                }
+                .disabled(engine.isChangingEventTime)
+                .help(engine.isPCOLiveSyncEnabled
+                    ? "Which event time is running — Planning Center Live follows along"
+                    : "Which event time is running")
+            }
+        }
+
         Section {
             ForEach(engine.planItems) { item in
                 planItemRow(item)
@@ -190,6 +223,16 @@ public struct ServiceFlowView: View {
             }
         } header: {
             Text(engine.planItems.first?.servicePlanTitle ?? "Run Sheet")
+        } footer: {
+            if engine.isAtEndOfPlan, engine.canAdvanceToNextEventTime, let next = engine.nextEventTime {
+                Button(action: { engine.advanceToNextEventTime() }) {
+                    Label("Start Next · \(next.displayName)", systemImage: "arrow.uturn.forward")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(engine.isChangingEventTime)
+                .help("Make the next event time live and return to the top of the run sheet")
+                .padding(.top, 8)
+            }
         }
     }
 

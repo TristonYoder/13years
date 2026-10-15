@@ -8,6 +8,7 @@ import FoundationNetworking
 
 public final class PCOClient: @unchecked Sendable {
     public static let baseURL = URL(string: "https://api.planningcenteronline.com")!
+    public static let upcomingPlanId = "next"
 
     public var tokens: OAuthTokens?
 
@@ -129,10 +130,35 @@ public final class PCOClient: @unchecked Sendable {
         }
     }
 
+    public func fetchUpcomingPlanId(serviceTypeId: String) async throws -> String? {
+        var components = URLComponents(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans", relativeTo: Self.baseURL)!, resolvingAgainstBaseURL: true)!
+        components.queryItems = [
+            URLQueryItem(name: "filter", value: PCOPlanFilter.future.rawValue),
+            URLQueryItem(name: "order", value: "sort_date"),
+            URLQueryItem(name: "per_page", value: "1"),
+        ]
+
+        var request = URLRequest(url: components.url!)
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't find the next upcoming plan in Planning Center. Check your sign-in and try again."
+            ])
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return (json?["data"] as? [[String: Any]])?.first?["id"] as? String
+    }
+
     public func fetchPlanItems(serviceTypeId: String, planId: String) async throws -> (planTitle: String, items: [PCOTimerItem]) {
         let path = "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/items"
         var components = URLComponents(url: URL(string: path, relativeTo: Self.baseURL)!, resolvingAgainstBaseURL: true)!
-        components.queryItems = [URLQueryItem(name: "include", value: "item_notes,item_notes.item_note_category")]
+        components.queryItems = [
+            URLQueryItem(name: "include", value: "item_notes,item_notes.item_note_category"),
+            URLQueryItem(name: "per_page", value: "100"),
+        ]
 
         var request = URLRequest(url: components.url!)
         applyAuthHeader(to: &request)
@@ -249,6 +275,26 @@ public final class PCOClient: @unchecked Sendable {
         }
     }
 
+    public func reorderItems(serviceTypeId: String, planId: String, itemIds: [String]) async throws {
+        var request = URLRequest(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/item_reorder", relativeTo: Self.baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuthHeader(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "data": [
+                "type": "PlanItemReorder",
+                "attributes": ["sequence": itemIds],
+            ],
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't save the new order to Planning Center: \(String(data: data, encoding: .utf8) ?? "")"
+            ])
+        }
+    }
+
     public func updateItemNoteContent(serviceTypeId: String, planId: String, itemId: String, noteId: String, content: String) async throws {
         var request = URLRequest(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/items/\(itemId)/item_notes/\(noteId)", relativeTo: Self.baseURL)!)
         request.httpMethod = "PATCH"
@@ -335,7 +381,50 @@ public final class PCOClient: @unchecked Sendable {
 
     public struct PCOCurrentItemTime: Sendable {
         public let itemId: String?
+        public let planTimeId: String?
         public let liveStartAt: Date?
+    }
+
+    public struct PCOPlanTime: Codable, Sendable, Identifiable, Hashable {
+        public let id: String
+        public let name: String?
+        public let startsAt: Date?
+        public let timeType: String
+
+        public init(id: String, name: String?, startsAt: Date?, timeType: String) {
+            self.id = id
+            self.name = name
+            self.startsAt = startsAt
+            self.timeType = timeType
+        }
+
+        public var isService: Bool { timeType == "service" }
+    }
+
+    public func fetchPlanTimes(serviceTypeId: String, planId: String) async throws -> [PCOPlanTime] {
+        var request = URLRequest(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/plan_times", relativeTo: Self.baseURL)!)
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't fetch the service times from Planning Center."
+            ])
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let dataArray = json?["data"] as? [[String: Any]] ?? []
+        let formatter = ISO8601DateFormatter()
+
+        return dataArray.compactMap { dict -> PCOPlanTime? in
+            guard let id = dict["id"] as? String else { return nil }
+            let attrs = dict["attributes"] as? [String: Any]
+            let name = (attrs?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let startsAt = (attrs?["starts_at"] as? String).flatMap { formatter.date(from: $0) }
+            let timeType = attrs?["time_type"] as? String ?? "service"
+            return PCOPlanTime(id: id, name: name, startsAt: startsAt, timeType: timeType)
+        }
+        .sorted { ($0.startsAt ?? .distantFuture) < ($1.startsAt ?? .distantFuture) }
     }
 
     public func fetchCurrentItemTime(serviceTypeId: String, planId: String) async throws -> PCOCurrentItemTime? {
@@ -356,9 +445,11 @@ public final class PCOClient: @unchecked Sendable {
         guard let dataObj = json?["data"] as? [String: Any] else { return nil }
         let attrs = dataObj["attributes"] as? [String: Any]
         let liveStartAt = (attrs?["live_start_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
-        let itemId = (((dataObj["relationships"] as? [String: Any])?["item"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
+        let relationships = dataObj["relationships"] as? [String: Any]
+        let itemId = ((relationships?["item"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
+        let planTimeId = ((relationships?["plan_time"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
 
-        return PCOCurrentItemTime(itemId: itemId, liveStartAt: liveStartAt)
+        return PCOCurrentItemTime(itemId: itemId, planTimeId: planTimeId, liveStartAt: liveStartAt)
     }
 
     private func postLiveAction(serviceTypeId: String, planId: String, action: String, failureMessage: String) async throws {

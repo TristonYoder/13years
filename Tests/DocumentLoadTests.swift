@@ -305,6 +305,36 @@ final class DocumentLoadMirrorTests: XCTestCase {
         XCTAssertNil(engine.pcoLastError)
     }
 
+    func testMirrorEventTimeCommandsForwardToTheProducer() {
+        let sink = RecordingCommands()
+        let engine = CueEngine(mirroring: sink)
+        var state = RemoteFixtures.state(rev: 1)
+        state.eventTimes = .init(
+            entries: [
+                .init(id: "t1", name: nil, day: nil, startTime: TimeOfDay(hour: 9, minute: 0), displayName: "9:00", pcoPlanTimeId: nil),
+                .init(id: "t2", name: "Late", day: .weekday(1), startTime: TimeOfDay(hour: 11, minute: 0), displayName: "11:00", pcoPlanTimeId: nil)
+            ],
+            liveId: "t1",
+            nextId: "t2"
+        )
+        engine.apply(remoteState: state)
+
+        XCTAssertEqual(engine.eventTimes.map(\.id), ["t1", "t2"])
+        XCTAssertEqual(engine.eventTimes[1].day, .weekday(1))
+        XCTAssertEqual(engine.nextEventTime?.id, "t2")
+
+        engine.setLiveEventTime(id: "t2")
+        engine.advanceToNextEventTime()
+        engine.removeEventTime(id: "t1")
+        engine.addEventTime(name: "Evening", day: .date(year: 2026, month: 10, day: 18), startTime: TimeOfDay(hour: 18, minute: 30))
+        XCTAssertEqual(sink.sent, [
+            .eventTimeLive(id: "t2"),
+            .eventTimeNext,
+            .eventTimeDelete(id: "t1"),
+            .eventTimeCreate(name: "Evening", day: "2026-10-18", startTime: "18:30")
+        ])
+    }
+
     func testMirrorPCOStatusComesFromTheRemoteState() {
         let engine = CueEngine(mirroring: RecordingCommands())
         var state = RemoteFixtures.state(rev: 1)
