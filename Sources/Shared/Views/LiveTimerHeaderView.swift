@@ -112,7 +112,15 @@ public struct LiveTimerHeaderView: View {
                                 .help("Reset elapsed time")
                             }
 
-                            if engine.isAtEndOfPlan && engine.canLoadNextService {
+                            if engine.isAtEndOfPlan && engine.canAdvanceToNextEventTime {
+                                Button(action: { engine.advanceToNextEventTime() }) {
+                                    Label(engine.nextEventTime?.displayName ?? "Next Time", systemImage: "arrow.uturn.forward")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .producerButtonShape()
+                                .disabled(engine.isChangingEventTime)
+                                .help("Make the next event time live and return to the top of the run sheet")
+                            } else if engine.isAtEndOfPlan && engine.canLoadNextService {
                                 Button(action: { engine.loadNextService() }) {
                                     Label("Next Service", systemImage: "calendar.badge.clock")
                                 }
@@ -225,6 +233,8 @@ public struct LiveTimerHeaderView: View {
                     engine.setTimerRemainingTime(seconds: seconds)
                 case .adjustRelative(let delta):
                     engine.adjustTimerRemainingTime(bySeconds: delta)
+                case .endAt(let time):
+                    engine.setTimerRemainingTime(seconds: time.secondsUntil(now: Date()))
                 }
             }
     }

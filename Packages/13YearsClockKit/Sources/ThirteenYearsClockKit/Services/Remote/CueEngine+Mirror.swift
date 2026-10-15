@@ -23,6 +23,10 @@ extension CueEngine {
                 lastFiredAt: entry.lastFiredAt
             )
         })
+        assign(\.eventTimes, (state.eventTimes?.entries ?? []).map {
+            EventTime(id: $0.id, name: $0.name, day: $0.day, startTime: $0.startTime, pcoPlanTimeId: $0.pcoPlanTimeId)
+        })
+        assign(\.liveEventTimeId, state.eventTimes?.liveId)
         assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)

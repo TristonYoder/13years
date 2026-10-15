@@ -32,6 +32,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var serviceSchedules: [ServiceSchedule]
     public var planItems: [PCOTimerItem]
     public var activeItemIndex: Int
+    public var eventTimes: [EventTime]
+    public var liveEventTimeId: String?
     public var settings: Settings
 
     public init(
@@ -43,6 +45,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         serviceSchedules: [ServiceSchedule],
         planItems: [PCOTimerItem],
         activeItemIndex: Int,
+        eventTimes: [EventTime] = [],
+        liveEventTimeId: String? = nil,
         settings: Settings
     ) {
         self.version = version
@@ -53,6 +57,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.serviceSchedules = serviceSchedules
         self.planItems = planItems
         self.activeItemIndex = activeItemIndex
+        self.eventTimes = eventTimes
+        self.liveEventTimeId = liveEventTimeId
         self.settings = settings
     }
 
@@ -70,6 +76,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             item.isRunning = false
             return item
         }
+        template.liveEventTimeId = nil
         return template
     }
 
@@ -93,7 +100,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -106,6 +113,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         serviceSchedules = try container.decodeIfPresent([ServiceSchedule].self, forKey: .serviceSchedules) ?? []
         planItems = try container.decodeIfPresent([PCOTimerItem].self, forKey: .planItems) ?? []
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
+        eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
+        liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
         settings = try container.decodeIfPresent(Settings.self, forKey: .settings)
             ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
     }

@@ -7,6 +7,49 @@ public enum TimerInputParser {
     public enum Action: Equatable {
         case setAbsolute(seconds: Int)
         case adjustRelative(bySeconds: Int)
+        case endAt(TimeOfDay)
+    }
+
+    public static func parseClock(_ raw: String) -> (hour12: Int, minute: Int)? {
+        let text = raw.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        let hourText: String
+        let minuteText: String
+        if let colon = text.firstIndex(of: ":") {
+            hourText = String(text[..<colon])
+            minuteText = String(text[text.index(after: colon)...])
+            guard !hourText.isEmpty, minuteText.count <= 2 else { return nil }
+        } else {
+            guard text.count <= 4 else { return nil }
+            if text.count <= 2 {
+                hourText = text
+                minuteText = ""
+            } else {
+                hourText = String(text.dropLast(2))
+                minuteText = String(text.suffix(2))
+            }
+        }
+        guard hourText.allSatisfy(\.isASCIINumber), minuteText.allSatisfy(\.isASCIINumber),
+              let hour = Int(hourText), (1...12).contains(hour) else { return nil }
+        let minute = minuteText.isEmpty ? 0 : Int(minuteText) ?? -1
+        guard (0..<60).contains(minute) else { return nil }
+        return (hour, minute)
+    }
+
+    public static func parseEndAt(_ raw: String, isPM: Bool) -> Action? {
+        guard let clock = parseClock(raw), let time = TimeOfDay(hour12: clock.hour12, minute: clock.minute, isPM: isPM) else { return nil }
+        return .endAt(time)
+    }
+
+    public static func nearestUpcomingIsPM(_ raw: String, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard let clock = parseClock(raw),
+              let am = TimeOfDay(hour12: clock.hour12, minute: clock.minute, isPM: false),
+              let pm = TimeOfDay(hour12: clock.hour12, minute: clock.minute, isPM: true) else { return false }
+        func upcoming(_ time: TimeOfDay) -> Int {
+            let delta = time.secondsUntil(now: now, calendar: calendar)
+            return delta >= 0 ? delta : delta + 86_400
+        }
+        return upcoming(pm) < upcoming(am)
     }
 
     public static func parse(_ raw: String) -> Action? {
@@ -89,5 +132,29 @@ public enum TimerInputParser {
 
         guard digits.isEmpty, matchedAny else { return nil }
         return max(0, total)
+    }
+}
+
+private extension Character {
+    var isASCIINumber: Bool { isASCII && isNumber }
+}
+
+public extension TimeOfDay {
+    init?(hour12: Int, minute: Int, isPM: Bool) {
+        guard (1...12).contains(hour12) else { return nil }
+        self.init(hour: (hour12 % 12) + (isPM ? 12 : 0), minute: minute)
+    }
+
+    func secondsUntil(now: Date, calendar: Calendar = .current) -> Int {
+        var target = date(on: now, calendar: calendar)
+        if target.timeIntervalSince(now) < -12 * 3600 {
+            target = calendar.date(byAdding: .day, value: 1, to: target) ?? target.addingTimeInterval(86_400)
+        }
+        return Int(target.timeIntervalSince(now).rounded())
+    }
+
+    var formattedMeridiem: String {
+        let hour12 = hour % 12 == 0 ? 12 : hour % 12
+        return String(format: "%d:%02d %@", hour12, minute, hour < 12 ? "AM" : "PM")
     }
 }

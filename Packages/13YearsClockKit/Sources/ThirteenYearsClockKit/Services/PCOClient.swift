@@ -335,7 +335,50 @@ public final class PCOClient: @unchecked Sendable {
 
     public struct PCOCurrentItemTime: Sendable {
         public let itemId: String?
+        public let planTimeId: String?
         public let liveStartAt: Date?
+    }
+
+    public struct PCOPlanTime: Codable, Sendable, Identifiable, Hashable {
+        public let id: String
+        public let name: String?
+        public let startsAt: Date?
+        public let timeType: String
+
+        public init(id: String, name: String?, startsAt: Date?, timeType: String) {
+            self.id = id
+            self.name = name
+            self.startsAt = startsAt
+            self.timeType = timeType
+        }
+
+        public var isService: Bool { timeType == "service" }
+    }
+
+    public func fetchPlanTimes(serviceTypeId: String, planId: String) async throws -> [PCOPlanTime] {
+        var request = URLRequest(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/plan_times", relativeTo: Self.baseURL)!)
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't fetch the service times from Planning Center."
+            ])
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let dataArray = json?["data"] as? [[String: Any]] ?? []
+        let formatter = ISO8601DateFormatter()
+
+        return dataArray.compactMap { dict -> PCOPlanTime? in
+            guard let id = dict["id"] as? String else { return nil }
+            let attrs = dict["attributes"] as? [String: Any]
+            let name = (attrs?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let startsAt = (attrs?["starts_at"] as? String).flatMap { formatter.date(from: $0) }
+            let timeType = attrs?["time_type"] as? String ?? "service"
+            return PCOPlanTime(id: id, name: name, startsAt: startsAt, timeType: timeType)
+        }
+        .sorted { ($0.startsAt ?? .distantFuture) < ($1.startsAt ?? .distantFuture) }
     }
 
     public func fetchCurrentItemTime(serviceTypeId: String, planId: String) async throws -> PCOCurrentItemTime? {
@@ -356,9 +399,11 @@ public final class PCOClient: @unchecked Sendable {
         guard let dataObj = json?["data"] as? [String: Any] else { return nil }
         let attrs = dataObj["attributes"] as? [String: Any]
         let liveStartAt = (attrs?["live_start_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
-        let itemId = (((dataObj["relationships"] as? [String: Any])?["item"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
+        let relationships = dataObj["relationships"] as? [String: Any]
+        let itemId = ((relationships?["item"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
+        let planTimeId = ((relationships?["plan_time"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
 
-        return PCOCurrentItemTime(itemId: itemId, liveStartAt: liveStartAt)
+        return PCOCurrentItemTime(itemId: itemId, planTimeId: planTimeId, liveStartAt: liveStartAt)
     }
 
     private func postLiveAction(serviceTypeId: String, planId: String, action: String, failureMessage: String) async throws {

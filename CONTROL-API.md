@@ -196,6 +196,14 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
       }
     ],
     "nextId": "sched-001"
+  },
+  "eventTimes": {
+    "entries": [
+      {"id": "t-1", "name": null, "day": "sunday", "startTime": "09:00", "displayName": "Sunday 9:00 AM", "pcoPlanTimeId": null},
+      {"id": "t-2", "name": "Late", "day": "sunday", "startTime": "11:00", "displayName": "Sunday 11:00 AM · Late", "pcoPlanTimeId": null}
+    ],
+    "liveId": "t-1",
+    "nextId": "t-2"
   }
 }
 ```
@@ -258,6 +266,7 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/timer/reset` | POST | Jump the timer to the item's original duration (reset `remainingSeconds` to `lengthInSeconds`). Returns the full state snapshot. |
 | `POST /v1/timer/adjust` | POST | Add or subtract seconds. Body: `{"seconds": number}` (integer, can be negative). Returns the full state snapshot. |
 | `POST /v1/timer/remaining` | POST | Set or adjust remaining time. Body: either `{"seconds": number}` (absolute) or `{"input": "string"}` (relative/absolute command text). Input uses the same GrandMA-style grammar the producer types: `"4350"` (absolute seconds), `"+30s"`, `"-5m"`, `"1h30m"`. Parsed by the same parser the app's UI uses so a macro pad and a keyboard agree on meaning. Returns the full state snapshot. |
+| `POST /v1/timer/end-at` | POST | Make the active timer end at a clock time. Body: `{"time": "HH:mm"}` (24-hour, producer's local time zone). The target is today at that time; if that is more than 12 hours in the past it means tomorrow, and if it is less than 12 hours in the past the remaining time is zero. Malformed times answer `400`. Returns the full state snapshot. |
 | `POST /v1/timer/actual-override` | POST | Set whether the active timer displays as Projected or Actual. Body: `{"isActual": boolean}`. This is a transient visual override; the plan item's own `isDurationActual` flag is unchanged. Returns the full state snapshot. |
 
 `GET /v1/timer` returns just the timer: `{"rev": number, "serverNowMs": number, "timer": ActiveTimer | null}`, with `timer` shaped exactly as in the snapshot.
@@ -279,7 +288,7 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/plan/items/{id}/duration-actual` | POST | Toggle whether the item displays as Projected or Actual. Body: `{"isActual": boolean}`. Returns the plan section of state. |
 | `POST /v1/plan/items/reorder` | POST | Reorder the items in the plan. Body: `{"itemIds": ["string"]}`. List must contain every current item id exactly once. Returns the plan section of state. |
 | `POST /v1/plan/import` | POST | Parse and import a service flow. Body: `{"text": "string", "title": "string?"}`. Text is `Title | Type | Duration` (one per line, duration in seconds). If parsing succeeds, a new plan titled `title` (or auto-generated) is created and imported. Returns the plan section (201). |
-| `PUT /v1/document` | PUT, POST | Load a whole plan or document with full fidelity (also socket op `document`). Body: `{"title": "string?", "items": [PlanItem], "activeItemIndex": 0, "roles": [Role], "replaceRoles": true, "selectedRoleIds": ["id"], "waypoints": [{"id","name"}], "schedules": [Schedule], "settings": {"hourFormatThreshold": "never"}, "pco": {"serviceTypeId","planId","noteCategories": [{"id","name"}]}}`. Only `items` is required. Items carry `notes`, `noteIds`, `waypointIds`, `pcoServiceTypeId`, `pcoPlanId`, `isDurationActual`, `lengthInSeconds` and the rest of the plan item shape; ids must be unique. With `activeItemIndex` it behaves like opening a document (that item becomes active, paused). Without it, it behaves like importing a plan: items are renumbered, elapsed time resets, `title` becomes the plan title and the first non-header item becomes active. `roles` replace the existing roles (cues reset to off) when `replaceRoles` is true; otherwise they are merged by id (name, person and note categories updated, unknown roles appended) and current cue states are kept. `waypoints` and `schedules` replace the existing ones when present. `pco` sets the note categories shown in PCO status and fills in missing item PCO ids. An empty `items` clears the plan. Same limits as the other routes (400 for a bad body or an over-long field, 409 for too many items, roles, waypoints or schedules); the body can be at most 1 MiB. Returns the full state snapshot (200). |
+| `PUT /v1/document` | PUT, POST | Load a whole plan or document with full fidelity (also socket op `document`). Body: `{"title": "string?", "items": [PlanItem], "activeItemIndex": 0, "roles": [Role], "replaceRoles": true, "selectedRoleIds": ["id"], "waypoints": [{"id","name"}], "schedules": [Schedule], "eventTimes": [EventTime], "liveEventTimeId": "string?", "settings": {"hourFormatThreshold": "never"}, "pco": {"serviceTypeId","planId","noteCategories": [{"id","name"}]}}`. Only `items` is required. Items carry `notes`, `noteIds`, `waypointIds`, `pcoServiceTypeId`, `pcoPlanId`, `isDurationActual`, `lengthInSeconds` and the rest of the plan item shape; ids must be unique. With `activeItemIndex` it behaves like opening a document (that item becomes active, paused). Without it, it behaves like importing a plan: items are renumbered, elapsed time resets, `title` becomes the plan title and the first non-header item becomes active. `roles` replace the existing roles (cues reset to off) when `replaceRoles` is true; otherwise they are merged by id (name, person and note categories updated, unknown roles appended) and current cue states are kept. `waypoints`, `schedules` and `eventTimes` replace the existing ones when present. `pco` sets the note categories shown in PCO status and fills in missing item PCO ids. An empty `items` clears the plan. Same limits as the other routes (400 for a bad body or an over-long field, 409 for too many items, roles, waypoints or schedules); the body can be at most 1 MiB. Returns the full state snapshot (200). |
 
 ### Waypoints
 
@@ -320,6 +329,22 @@ A schedule without `pcoServiceTypeId`/`pcoPlanId` only switches the app into the
 | `PATCH /v1/schedules/{id}` | PATCH | Update a schedule. Same body shape as create, all fields optional (absent means leave alone). Changing `startsAt` or either offset field clears `lastFiredAt` — the firing window just moved, so whatever fired the old one has nothing to say about the new one. |
 | `DELETE /v1/schedules/{id}` | DELETE | Remove a schedule. Returns the remaining list. |
 | `POST /v1/schedules/{id}/go-live` | POST | Fire a schedule right now, same as if its lead time had just arrived (202 — the PCO fetch, if any, happens in the background; watch the socket for the resulting `state`). 404 if the id doesn't exist. |
+
+### Event Times
+
+Event times are the times one run sheet runs — a 9:00 and an 11:00 service, a Saturday-night and a Sunday-morning service. They're part of the document. An event time has an optional `name`, an optional `startTime` (`"HH:mm"`, 24-hour), and an optional `day`, which is either a date (`"YYYY-MM-DD"`) or a day of the week (`"sunday"` … `"saturday"`) for a run sheet you reuse every week. Entries are kept sorted by day, then time; days of the week sort Monday first so Saturday comes before Sunday.
+
+One event time is live (`liveId`; the first one when none was picked). At the end of the run sheet, `POST /v1/event-times/next` makes the next one live and returns to the first item, paused. When a Planning Center plan syncs, its service times replace the event times (`pcoPlanTimeId` set), and with Live sync on, picking or advancing an event time steps Planning Center Live to the same item in that service time.
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `GET /v1/event-times` | GET | List event times. Same shape as `eventTimes` in the state snapshot. |
+| `POST /v1/event-times` | POST | Add one. Body: `{"name": "string?", "day": "string?", "startTime": "HH:mm?"}`. 400 for an unparseable `day` or `startTime`; 409 past 24 event times. Returns the new entry (201). |
+| `GET /v1/event-times/{id}` | GET | Read one. |
+| `PATCH /v1/event-times/{id}` | PATCH | Update one. Same body as create; an absent field is left alone and `""` clears it. |
+| `DELETE /v1/event-times/{id}` | DELETE | Remove one. Returns the remaining list. |
+| `POST /v1/event-times/live` | POST | Set which event time is live. Body: `{"id": "string"}`. Keeps the active item; with PCO Live sync on, Live is stepped to that item in the matching service time. 404 for an unknown id. |
+| `POST /v1/event-times/next` | POST | Make the next event time live and go back to the first item (paused). 409 when the live one is already last or the run sheet is empty. Returns the full state snapshot. |
 
 ### Planning Center Online
 

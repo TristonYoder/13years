@@ -217,6 +217,30 @@ public final class ControlAPIRouter {
             }
             return json(waypointStatus(for: waypoint), status: 201)
 
+        case "event-times":
+            if allows(method, "GET") { return json(eventTimeStatus()) }
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name?.trimmingCharacters(in: .whitespaces)
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Event time name") { return tooLong }
+            guard engine.eventTimes.count < CueEngine.maxEventTimes else { return limitReached("event times", CueEngine.maxEventTimes) }
+            var day: EventDay?
+            var startTime: TimeOfDay?
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .keep, .clear: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .keep, .clear: break
+            }
+            guard let created = engine.addEventTime(name: name, day: day, startTime: startTime) else {
+                return Self.error(400, "Could not create event time")
+            }
+            return json(eventTimeEntry(created), status: 201)
+
         case "schedules":
             if allows(method, "GET") { return json(scheduleStatus()) }
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -329,6 +353,8 @@ public final class ControlAPIRouter {
                     engine.setTimerRemainingTime(seconds: seconds)
                 case .adjustRelative(let delta):
                     engine.adjustTimerRemainingTime(bySeconds: delta)
+                case .endAt(let time):
+                    engine.setTimerRemainingTime(seconds: time.secondsUntil(now: Date()))
                 }
             } else if let seconds = request.seconds {
                 guard TimerLimits.isValidLength(seconds) else {
@@ -338,6 +364,16 @@ public final class ControlAPIRouter {
             } else {
                 return Self.error(400, "Provide either seconds or input")
             }
+            return json(snapshot())
+
+        case ("timer", "end-at"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.activeTimerItem != nil else { return noActiveItem() }
+            guard let request = decode(ControlAPIRequests.TimerEndAtBody.self, body) else { return badBody() }
+            guard let time = TimeOfDay(string: request.time) else {
+                return Self.error(400, "time must be HH:mm", detail: request.time)
+            }
+            engine.setTimerRemainingTime(seconds: time.secondsUntil(now: Date()))
             return json(snapshot())
 
         case ("timer", "actual-override"):
@@ -534,6 +570,54 @@ public final class ControlAPIRouter {
             guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.RoleUpdateBody.self, body) else { return badBody() }
             return updateRole(id: roleId, with: request)
+
+        case ("event-times", "live"):
+            guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.IdBody.self, body), let id = request.id, !id.isEmpty else { return badBody() }
+            guard engine.eventTime(id: id) != nil else { return Self.error(404, "Unknown event time id", detail: id) }
+            engine.setLiveEventTime(id: id)
+            return json(eventTimeStatus())
+
+        case ("event-times", "next"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.canAdvanceToNextEventTime else {
+                return Self.error(409, "No next event time", detail: "The live event time is already the last one, or the run sheet is empty.")
+            }
+            engine.advanceToNextEventTime()
+            return json(snapshot())
+
+        case ("event-times", let eventTimeId):
+            guard let existing = engine.eventTime(id: eventTimeId) else {
+                return Self.error(404, "Unknown event time id", detail: eventTimeId)
+            }
+            if allows(method, "GET") { return json(eventTimeEntry(existing)) }
+            if allows(method, "DELETE") {
+                engine.removeEventTime(id: eventTimeId)
+                return json(eventTimeStatus())
+            }
+            guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name.map { $0.trimmingCharacters(in: .whitespaces) } ?? existing.name
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Event time name") { return tooLong }
+            var day = existing.day
+            var startTime = existing.startTime
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .clear: day = nil
+            case .keep: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .clear: startTime = nil
+            case .keep: break
+            }
+            engine.updateEventTime(id: eventTimeId, name: name, day: day, startTime: startTime)
+            guard let updated = engine.eventTime(id: eventTimeId) else {
+                return Self.error(404, "Unknown event time id", detail: eventTimeId)
+            }
+            return json(eventTimeEntry(updated))
 
         case ("waypoints", "next") where method == "POST":
             let startTimer = decode(ControlAPIRequests.WaypointFireBody.self, body)?.startTimer ?? true
@@ -809,6 +893,15 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(waypointId, ContentLimits.identifier, "Waypoint id") { return tooLong }
             }
         }
+        if let times = request.eventTimes {
+            guard times.count <= CueEngine.maxEventTimes else { return limitReached("event times", CueEngine.maxEventTimes) }
+            guard Set(times.map(\.id)).count == times.count else { return Self.error(400, "Duplicate event time ids") }
+            for time in times {
+                if let tooLong = tooLong(time.id, ContentLimits.identifier, "Event time id") { return tooLong }
+                if let tooLong = tooLong(time.name ?? "", ContentLimits.name, "Event time name") { return tooLong }
+                if let tooLong = tooLong(time.pcoPlanTimeId ?? "", ContentLimits.identifier, "pcoPlanTimeId") { return tooLong }
+            }
+        }
         if let index = request.activeItemIndex, !request.items.isEmpty, !request.items.indices.contains(index) {
             return Self.error(400, "activeItemIndex out of range", detail: "Between 0 and \(request.items.count - 1).")
         }
@@ -996,6 +1089,7 @@ public final class ControlAPIRouter {
             settings: settingsStatus(),
             waypoints: waypointStatuses(),
             schedules: scheduleStatus(),
+            eventTimes: eventTimeStatus(),
             epoch: engine.syncV2.epoch,
             utcOffsetSeconds: engine.timeZoneProvider().secondsFromGMT()
         )
@@ -1136,6 +1230,43 @@ public final class ControlAPIRouter {
             isEnabled: schedule.isEnabled,
             lastFiredAt: schedule.lastFiredAt
         )
+    }
+
+    private func eventTimeStatus() -> ControlAPIState.EventTimeStatus {
+        ControlAPIState.EventTimeStatus(
+            entries: engine.eventTimes.map(eventTimeEntry),
+            liveId: engine.liveEventTime?.id,
+            nextId: engine.nextEventTime?.id
+        )
+    }
+
+    private func eventTimeEntry(_ time: EventTime) -> ControlAPIState.EventTimeStatus.Entry {
+        ControlAPIState.EventTimeStatus.Entry(
+            id: time.id,
+            name: time.name,
+            day: time.day,
+            startTime: time.startTime,
+            displayName: time.displayName,
+            pcoPlanTimeId: time.pcoPlanTimeId
+        )
+    }
+
+    private enum EventTimeField<T> {
+        case keep
+        case clear
+        case set(T)
+        case invalid
+    }
+
+    private func eventTimeField<T>(_ raw: String?, _ parse: (String) -> T?) -> EventTimeField<T> {
+        guard let raw else { return .keep }
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return .clear }
+        return parse(trimmed).map(EventTimeField.set) ?? .invalid
+    }
+
+    private func invalidEventTimeField() -> HTTPResponse {
+        Self.error(400, "Invalid day or startTime", detail: "startTime is \"HH:mm\" (24-hour); day is \"YYYY-MM-DD\" or a weekday name like \"sunday\". Send \"\" to clear either.")
     }
 
     private func scheduleStatus() -> ControlAPIState.ScheduleStatus {

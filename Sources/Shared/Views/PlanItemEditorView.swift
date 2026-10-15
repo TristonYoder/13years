@@ -156,13 +156,16 @@ public struct PlanItemEditorView: View {
                 .timeEntryPopover(
                     isPresented: $isEditingDuration,
                     previewBaseSeconds: lengthInSeconds,
-                    hourFormatThreshold: engine.hourFormatThreshold
+                    hourFormatThreshold: engine.hourFormatThreshold,
+                    allowsEndAt: false
                 ) { action in
                     switch action {
                     case .setAbsolute(let seconds):
                         lengthInSeconds = max(0, seconds)
                     case .adjustRelative(let delta):
                         lengthInSeconds = max(0, lengthInSeconds + delta)
+                    case .endAt:
+                        break
                     }
                 }
         }
