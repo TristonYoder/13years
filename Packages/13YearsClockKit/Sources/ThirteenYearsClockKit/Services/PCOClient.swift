@@ -155,7 +155,10 @@ public final class PCOClient: @unchecked Sendable {
     public func fetchPlanItems(serviceTypeId: String, planId: String) async throws -> (planTitle: String, items: [PCOTimerItem]) {
         let path = "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/items"
         var components = URLComponents(url: URL(string: path, relativeTo: Self.baseURL)!, resolvingAgainstBaseURL: true)!
-        components.queryItems = [URLQueryItem(name: "include", value: "item_notes,item_notes.item_note_category")]
+        components.queryItems = [
+            URLQueryItem(name: "include", value: "item_notes,item_notes.item_note_category"),
+            URLQueryItem(name: "per_page", value: "100"),
+        ]
 
         var request = URLRequest(url: components.url!)
         applyAuthHeader(to: &request)
@@ -268,6 +271,26 @@ public final class PCOClient: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
                 NSLocalizedDescriptionKey: "Couldn't save the new duration to Planning Center: \(String(data: data, encoding: .utf8) ?? "")"
+            ])
+        }
+    }
+
+    public func reorderItems(serviceTypeId: String, planId: String, itemIds: [String]) async throws {
+        var request = URLRequest(url: URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/item_reorder", relativeTo: Self.baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuthHeader(to: &request)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "data": [
+                "type": "PlanItemReorder",
+                "attributes": ["sequence": itemIds],
+            ],
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
+                NSLocalizedDescriptionKey: "Couldn't save the new order to Planning Center: \(String(data: data, encoding: .utf8) ?? "")"
             ])
         }
     }

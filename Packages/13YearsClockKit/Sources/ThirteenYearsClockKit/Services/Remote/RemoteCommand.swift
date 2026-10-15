@@ -63,6 +63,9 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoPlanFilter(String)
     case pcoDefaultServiceType(id: String?)
     case pcoLiveSync(Bool)
+    case pcoChangesAccept(revision: String?)
+    case pcoChangesDismiss(revision: String?)
+    case pcoChangesCheck
     case eventTimeCreate(name: String?, day: String?, startTime: String?)
     case eventTimeUpdate(id: String, name: String, day: String, startTime: String)
     case eventTimeDelete(id: String)
@@ -188,6 +191,12 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/default-service-type", ["id": id ?? NSNull()])
         case .pcoLiveSync(let enabled):
             return Self.post("pco/live-sync", ["enabled": enabled])
+        case .pcoChangesAccept(let revision):
+            return Self.post("pco/changes/accept", ["revision": revision ?? NSNull()])
+        case .pcoChangesDismiss(let revision):
+            return Self.post("pco/changes/dismiss", ["revision": revision ?? NSNull()])
+        case .pcoChangesCheck:
+            return Self.post("pco/changes/check")
         case .eventTimeCreate(let name, let day, let startTime):
             return Self.post("event-times", ["name": name ?? NSNull(), "day": day ?? NSNull(), "startTime": startTime ?? NSNull()])
         case .eventTimeUpdate(let id, let name, let day, let startTime):

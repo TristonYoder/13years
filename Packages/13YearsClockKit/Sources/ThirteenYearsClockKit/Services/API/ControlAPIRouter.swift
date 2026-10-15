@@ -510,6 +510,10 @@ public final class ControlAPIRouter {
             engine.fetchPCOPlan(serviceTypeId: request.serviceTypeId, planId: request.planId)
             return accepted()
 
+        case ("pco", "changes"):
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            return json(ControlAPIRequests.PCOChangesStatus(pending: engine.pendingPCOChangesForCurrentPlan))
+
         case ("pco", "live-sync"):
             guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.FlagBody.self, body), let enabled = request.enabled else { return badBody() }
@@ -725,6 +729,31 @@ public final class ControlAPIRouter {
             }
             engine.fetchPCOPlans()
             return accepted()
+
+        case ("pco", "changes", "accept"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            let revision = body.isEmpty ? nil : decode(ControlAPIRequests.PCOChangesBody.self, body)?.revision
+            if !body.isEmpty, decode(ControlAPIRequests.PCOChangesBody.self, body) == nil { return badBody() }
+            if let tooLong = tooLong(revision ?? "", ContentLimits.identifier, "revision") { return tooLong }
+            guard engine.acceptPCOChanges(revision: revision) else { return noMatchingPCOChanges() }
+            return json(planStatus())
+
+        case ("pco", "changes", "dismiss"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            let revision = body.isEmpty ? nil : decode(ControlAPIRequests.PCOChangesBody.self, body)?.revision
+            if !body.isEmpty, decode(ControlAPIRequests.PCOChangesBody.self, body) == nil { return badBody() }
+            if let tooLong = tooLong(revision ?? "", ContentLimits.identifier, "revision") { return tooLong }
+            guard engine.dismissPCOChanges(revision: revision) else { return noMatchingPCOChanges() }
+            return json(pcoStatus())
+
+        case ("pco", "changes", "check"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.currentPCOPlanId != nil else {
+                return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            let engine = engine
+            Task { @MainActor in await engine.checkPCOForChanges() }
+            return accepted(pcoStatus())
 
         case ("pco", "authorize", "complete"):
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -1151,7 +1180,8 @@ public final class ControlAPIRouter {
             planFilter: engine.pcoPlanFilter.rawValue,
             serviceTypes: engine.pcoServiceTypes.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
             plans: engine.pcoPlans.map { ControlAPIState.PCOStatus.PlanInfo(id: $0.id, title: $0.title, dates: $0.dates) },
-            noteCategories: engine.pcoNoteCategories.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) }
+            noteCategories: engine.pcoNoteCategories.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
+            pendingChanges: engine.pendingPCOChangesForCurrentPlan
         )
     }
 
@@ -1269,6 +1299,10 @@ public final class ControlAPIRouter {
 
     private func eventTimesManagedByPCO() -> HTTPResponse {
         Self.error(409, "Event times come from Planning Center", detail: "A PCO plan is loaded, so its service times are the event times. Edit them in Planning Center and sync again.")
+    }
+
+    private func noMatchingPCOChanges() -> HTTPResponse {
+        Self.error(409, "No matching Planning Center changes", detail: "Nothing is waiting, or the revision is out of date. GET /v1/pco/changes for the current one.")
     }
 
     private func invalidEventTimeField() -> HTTPResponse {

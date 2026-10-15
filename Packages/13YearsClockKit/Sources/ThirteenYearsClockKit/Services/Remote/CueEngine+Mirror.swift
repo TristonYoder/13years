@@ -44,6 +44,7 @@ extension CueEngine {
         assign(\.pcoServiceTypes, state.pco.serviceTypes.map { PCOClient.PCOServiceType(id: $0.id, name: $0.name) })
         assign(\.pcoPlans, state.pco.plans.map { PCOClient.PCOPlanInfo(id: $0.id, title: $0.title, dates: $0.dates) })
         assign(\.pcoNoteCategories, state.pco.noteCategories.map { PCOClient.PCONoteCategory(id: $0.id, name: $0.name) })
+        assign(\.pcoPendingChanges, state.pco.pendingChanges)
         assign(\.remoteControllerCount, state.settings.connectedAPIClients)
     }
 
