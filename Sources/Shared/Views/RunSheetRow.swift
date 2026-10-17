@@ -292,12 +292,12 @@ struct RunSheetRow: View {
             if let entry, !entry.isOmitted, let planned = entry.plannedStart {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(engine.clockFormat.string(from: planned))
-                        .font(.caption.monospacedDigit())
+                        .font(.clock(.caption))
                         .foregroundStyle(item.isHeader ? .tertiary : .secondary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
                        let projected = entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
-                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .font(.clock(.caption2, weight: .semibold))
                             .foregroundStyle(drift > 0 ? Color.orange : Color.green)
                             .help(drift > 0 ? "Projected to start later than planned" : "Projected to start earlier than planned")
                     }
@@ -314,7 +314,7 @@ struct RunSheetRow: View {
             if item.isHeader {
                 if let subtotal, subtotal > 0 {
                     Text(formattedDuration(subtotal))
-                        .font(.caption.monospacedDigit())
+                        .font(.clock(.caption))
                         .foregroundStyle(.tertiary)
                         .help("Total length of the items in this section")
                 } else {
@@ -323,7 +323,7 @@ struct RunSheetRow: View {
             } else {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(formattedDuration(entry?.length ?? item.lengthInSeconds))
-                        .font(.caption.monospacedDigit())
+                        .font(.clock(.caption))
                         .foregroundStyle(.secondary)
                     durationModeBadge
                     if let entry {

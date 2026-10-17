@@ -250,13 +250,13 @@ struct RunSheetTableView: View {
             VStack(alignment: .leading, spacing: 1) {
                 if let entry, !entry.isOmitted, let planned = entry.plannedStart {
                     Text(engine.clockFormat.string(from: planned))
-                        .monospacedDigit()
+                        .font(.clock(.body))
                         .foregroundStyle(item.isHeader ? .secondary : .primary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
                        let projected = entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.caption.weight(.semibold))
-                            .monospacedDigit()
+                            .font(.clock(.body))
                             .foregroundStyle(drift > 0 ? Color.orange : Color.green)
                             .help(drift > 0 ? "Projected to start later than planned" : "Projected to start earlier than planned")
                     }
@@ -319,7 +319,7 @@ struct RunSheetTableView: View {
             if item.isHeader {
                 if let subtotal = schedule.headerSubtotals[item.id], subtotal > 0 {
                     Text(format(subtotal))
-                        .monospacedDigit()
+                        .font(.clock(.body))
                         .foregroundStyle(.secondary)
                         .help("Total length of the items in this section")
                 }
@@ -330,7 +330,7 @@ struct RunSheetTableView: View {
                     (Text(actual.map(format) ?? "\u{2014}")
                         .foregroundStyle(actual == nil ? Color.secondary : (entry?.isActualComplete == true ? Color.primary : Color.accentColor))
                         + Text(" / \(format(planned))").foregroundStyle(.secondary))
-                        .monospacedDigit()
+                        .font(.clock(.body))
                         .lineLimit(1)
                     if let live {
                         ProgressView(value: Double(min(live.elapsedSeconds, max(live.lengthInSeconds, 1))), total: Double(max(live.lengthInSeconds, 1)))
@@ -357,7 +357,7 @@ struct RunSheetTableView: View {
             if let delta, abs(delta) >= RunSheetActualStyle.lengthThreshold {
                 let color = RunSheetActualStyle.color(forDelta: delta)
                 Text(RunSheetActualStyle.signed(delta, threshold: engine.hourFormatThreshold))
-                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .font(.clock(.callout, weight: .semibold))
                     .foregroundStyle(color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
@@ -400,7 +400,7 @@ struct RunSheetTableView: View {
     private func cell(_ item: PCOTimerItem, text: String?, monospaced: Bool = false) -> some View {
         styled(item) {
             Text(text ?? "")
-                .font(monospaced ? .body.monospacedDigit() : .body)
+                .font(monospaced ? .clock(.body) : .body)
                 .fontWeight(isActive(item) ? .semibold : (item.isHeader ? .heavy : .regular))
                 .foregroundStyle(item.isHeader ? .secondary : .primary)
                 .lineLimit(1)

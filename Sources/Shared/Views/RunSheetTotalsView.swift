@@ -76,7 +76,7 @@ struct RunSheetTotalsView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.callout.monospacedDigit().weight(.medium))
+                .font(.clock(.callout, weight: .medium))
                 .foregroundStyle(tint)
         }
     }

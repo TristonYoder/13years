@@ -33,12 +33,14 @@ struct RunSheetActualText: View {
                             .foregroundStyle(RunSheetActualStyle.color(forDelta: delta))
                     }
                 }
-                .font((compact ? Font.caption2 : Font.caption).monospacedDigit().weight(.semibold))
+                .font(.clock(compact ? .caption2 : .caption, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize()
                 .help(entry.isActualComplete ? "Actual time spent on this item" : "Time spent on this item so far")
             }
             if let pco = entry.pcoActualLength {
                 Text("PCO \(format(pco))")
-                    .font(.caption2.monospacedDigit())
+                    .font(.clock(.caption2, weight: .regular))
                     .foregroundStyle(.tertiary)
                     .help("Planning Center recorded \(format(pco)) for this item")
             }

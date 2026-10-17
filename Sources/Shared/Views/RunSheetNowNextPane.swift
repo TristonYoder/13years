@@ -131,7 +131,7 @@ private struct RunSheetFocusCard: View {
 
         switch role {
         case .now:
-            nowTiming(timing)
+            nowTiming(item, entry: entry)
         case .next:
             nextTiming(item, entry: entry)
         }
@@ -186,32 +186,27 @@ private struct RunSheetFocusCard: View {
         }
     }
 
-    private func nowTiming(_ timing: PCOTimerItem) -> some View {
-        let color = progressColor(timing)
-        let length = max(timing.lengthInSeconds, 1)
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(remainingText(timing.remainingSeconds))
-                .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(timing.isOvertime ? color : Color.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            ProgressView(value: Double(min(timing.elapsedSeconds, length)), total: Double(length))
-                .progressViewStyle(.linear)
-                .tint(color)
-        }
+    private func nowTiming(_ item: PCOTimerItem, entry: RunSheetSchedule.Entry?) -> some View {
+        let start = entry?.actualStart ?? entry?.projectedStart ?? entry?.plannedStart
+        let length = entry?.length ?? item.lengthInSeconds
+        return timingRow(startLabel: "Started", start: start, length: length)
     }
 
     private func nextTiming(_ item: PCOTimerItem, entry: RunSheetSchedule.Entry?) -> some View {
         let start = entry?.projectedStart ?? entry?.plannedStart
         let length = entry?.length ?? item.lengthInSeconds
-        return HStack(alignment: .firstTextBaseline, spacing: 16) {
+        return timingRow(startLabel: "Starts", start: start, length: length)
+    }
+
+    private func timingRow(startLabel: String, start: Date?, length: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
             if let start {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Starts")
+                    Text(startLabel)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Text(engine.clockFormat.string(from: start))
-                        .font(.title3.monospacedDigit().weight(.semibold))
+                        .font(.clock(.title3, weight: .semibold))
                 }
             }
             VStack(alignment: .leading, spacing: 0) {
@@ -219,20 +214,9 @@ private struct RunSheetFocusCard: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(TimeFormatting.string(forSeconds: length, threshold: engine.hourFormatThreshold))
-                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .font(.clock(.title3, weight: .semibold))
             }
         }
-    }
-
-    private func remainingText(_ seconds: Int) -> String {
-        let text = TimeFormatting.string(forSeconds: TimerLimits.safeAbs(seconds), threshold: engine.hourFormatThreshold)
-        return seconds < 0 ? "+\(text)" : text
-    }
-
-    private func progressColor(_ item: PCOTimerItem) -> Color {
-        if item.isOvertime { return Color(red: 0.80, green: 0.09, blue: 0.09) }
-        if item.lengthInSeconds > 0, Double(item.remainingSeconds) <= Double(item.lengthInSeconds) * 0.1 { return .orange }
-        return .green
     }
 
     @ViewBuilder
