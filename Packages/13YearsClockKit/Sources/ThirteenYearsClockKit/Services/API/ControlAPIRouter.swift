@@ -421,6 +421,13 @@ public final class ControlAPIRouter {
             engine.setActivePlanItem(id: request.itemId)
             return json(snapshot())
 
+        case ("plan", "context"):
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            guard let context = engine.pcoPlanContext else {
+                return Self.error(404, "No Planning Center plan context", detail: "Load a Planning Center plan first.")
+            }
+            return json(context)
+
         case ("plan", "items"):
             guard allows(method, "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.PlanItemCreateBody.self, body) else { return badBody() }

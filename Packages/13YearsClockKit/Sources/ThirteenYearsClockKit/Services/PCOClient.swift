@@ -53,7 +53,7 @@ public final class PCOClient: @unchecked Sendable {
         public let name: String
     }
 
-    private func applyAuthHeader(to request: inout URLRequest) {
+    func applyAuthHeader(to request: inout URLRequest) {
         if let tokens, !tokens.accessToken.isEmpty {
             request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -152,76 +152,29 @@ public final class PCOClient: @unchecked Sendable {
         return (json?["data"] as? [[String: Any]])?.first?["id"] as? String
     }
 
+    public static let planItemsInclude = "item_notes,item_notes.item_note_category,song,arrangement,key,media,item_times"
+
     public func fetchPlanItems(serviceTypeId: String, planId: String) async throws -> (planTitle: String, items: [PCOTimerItem]) {
         let path = "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/items"
         var components = URLComponents(url: URL(string: path, relativeTo: Self.baseURL)!, resolvingAgainstBaseURL: true)!
         components.queryItems = [
-            URLQueryItem(name: "include", value: "item_notes,item_notes.item_note_category"),
+            URLQueryItem(name: "include", value: Self.planItemsInclude),
             URLQueryItem(name: "per_page", value: "100"),
         ]
 
-        var request = URLRequest(url: components.url!)
-        applyAuthHeader(to: &request)
+        let json = try await fetchAllPages(
+            from: components.url!,
+            failureMessage: "Couldn't fetch the plan from Planning Center. Check your sign-in and try again."
+        )
+        let items = Self.parsePlanItems(json, serviceTypeId: serviceTypeId, planId: planId)
+        let planTitle = (try? await fetchPlanTitle(serviceTypeId: serviceTypeId, planId: planId)) ?? "PCO Plan #\(planId)"
+        return (planTitle, items)
+    }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw NSError(domain: "PCOClient", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [
-                NSLocalizedDescriptionKey: "Couldn't fetch the plan from Planning Center. Check your sign-in and try again."
-            ])
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let dataArray = json?["data"] as? [[String: Any]] ?? []
-        let included = json?["included"] as? [[String: Any]] ?? []
-
-        var categoryNameById: [String: String] = [:]
-        var noteById: [String: (content: String, categoryId: String?)] = [:]
-
-        for resource in included {
-            guard let type = resource["type"] as? String, let id = resource["id"] as? String else { continue }
-            let attrs = resource["attributes"] as? [String: Any]
-
-            if type == "ItemNoteCategory", let name = attrs?["name"] as? String {
-                categoryNameById[id] = name
-            } else if type == "ItemNote" {
-                let content = (attrs?["content"] as? String) ?? ""
-                let categoryId = (((resource["relationships"] as? [String: Any])?["item_note_category"] as? [String: Any])?["data"] as? [String: Any])?["id"] as? String
-                noteById[id] = (content, categoryId)
-            }
-        }
-
-        var items: [PCOTimerItem] = []
-        for (index, dict) in dataArray.enumerated() {
-            guard let attrs = dict["attributes"] as? [String: Any] else { continue }
-            let title = attrs["title"] as? String ?? "Item \(index + 1)"
-            let length = attrs["length"] as? Int ?? 300
-            let itemType = attrs["item_type"] as? String ?? "Item"
-            let itemId = dict["id"] as? String ?? UUID().uuidString
-
-            var notes: [String: String] = [:]
-            var noteIds: [String: String] = [:]
-            let noteRefs = (((dict["relationships"] as? [String: Any])?["item_notes"] as? [String: Any])?["data"] as? [[String: Any]]) ?? []
-            for ref in noteRefs {
-                guard let noteId = ref["id"] as? String, let note = noteById[noteId] else { continue }
-                let categoryName = note.categoryId.flatMap { categoryNameById[$0] } ?? "Notes"
-                notes[categoryName] = note.content
-                noteIds[categoryName] = noteId
-            }
-
-            items.append(PCOTimerItem(
-                id: itemId,
-                title: title,
-                itemType: itemType,
-                sequence: index + 1,
-                lengthInSeconds: length,
-                notes: notes,
-                noteIds: noteIds,
-                pcoServiceTypeId: serviceTypeId,
-                pcoPlanId: planId
-            ))
-        }
-
-        return ("PCO Plan #\(planId)", items)
+    public func fetchPlanTitle(serviceTypeId: String, planId: String) async throws -> String {
+        let url = URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)", relativeTo: Self.baseURL)!
+        let json = try await fetchJSON(from: url, failureMessage: "Couldn't fetch the plan from Planning Center.")
+        return Self.parsePlanTitle(json, planId: planId)
     }
 
     public func fetchItemNoteCategories(serviceTypeId: String, planId: String) async throws -> [PCONoteCategory] {

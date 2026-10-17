@@ -24,6 +24,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public var waypointIds: [String]
 
+    public var details: PCOItemDetails?
+
     public init(
         id: String = UUID().uuidString,
         title: String,
@@ -38,7 +40,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         pcoServiceTypeId: String? = nil,
         pcoPlanId: String? = nil,
         isDurationActual: Bool = false,
-        waypointIds: [String] = []
+        waypointIds: [String] = [],
+        details: PCOItemDetails? = nil
     ) {
         self.id = id
         self.title = title
@@ -54,12 +57,14 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         self.pcoPlanId = pcoPlanId
         self.isDurationActual = isDurationActual
         self.waypointIds = waypointIds
+        self.details = details
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, itemType, sequence, lengthInSeconds, elapsedSeconds, isRunning
         case servicePlanTitle, notes, noteIds, pcoServiceTypeId, pcoPlanId, isDurationActual, waypointIds
         case tagIds
+        case details
     }
 
     public init(from decoder: Decoder) throws {
@@ -80,6 +85,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         waypointIds = try container.decodeIfPresent([String].self, forKey: .waypointIds)
             ?? container.decodeIfPresent([String].self, forKey: .tagIds)
             ?? []
+        details = try container.decodeIfPresent(PCOItemDetails.self, forKey: .details)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -98,6 +104,13 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         try container.encodeIfPresent(pcoPlanId, forKey: .pcoPlanId)
         try container.encode(isDurationActual, forKey: .isDurationActual)
         try container.encode(waypointIds, forKey: .waypointIds)
+        try container.encodeIfPresent(details, forKey: .details)
+    }
+
+    public var broadcastTrimmed: PCOTimerItem {
+        var slim = self
+        slim.details = details?.broadcastTrimmed
+        return slim
     }
 
     public var isHeader: Bool {

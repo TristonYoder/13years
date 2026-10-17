@@ -58,6 +58,7 @@ public final class CueEngine: ObservableObject {
     @Published public var pcoLastError: String?
     @Published public var pcoNoteCategories: [PCOClient.PCONoteCategory] = []
     @Published public internal(set) var pcoPendingChanges: PCOPendingChanges?
+    @Published public internal(set) var pcoPlanContext: PCOPlanContext?
     @Published public var isPCOLiveSyncEnabled: Bool = false {
         didSet { write(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
     }
@@ -492,6 +493,7 @@ public final class CueEngine: ObservableObject {
                 }
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
                 await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
+                await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
             } catch {
                 pcoLastError = error.localizedDescription
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
@@ -712,6 +714,7 @@ public final class CueEngine: ObservableObject {
             activeItemIndex: activeItemIndex,
             eventTimes: eventTimes,
             liveEventTimeId: liveEventTimeId,
+            pcoPlanContext: pcoPlanContext,
             settings: .init(
                 hourFormatThreshold: hourFormatThreshold,
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
@@ -732,6 +735,7 @@ public final class CueEngine: ObservableObject {
         blank.activeItemIndex = 0
         blank.eventTimes = []
         blank.liveEventTimeId = nil
+        blank.pcoPlanContext = nil
         apply(blank)
         currentDocumentURL = nil
     }
@@ -768,6 +772,7 @@ public final class CueEngine: ObservableObject {
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false }
         planItems = items
+        pcoPlanContext = Self.context(document.pcoPlanContext, matching: items)
         if items.isEmpty {
             activeItemIndex = 0
             activeTimerItem = nil
@@ -776,6 +781,11 @@ public final class CueEngine: ObservableObject {
             activeTimerItem = items[activeItemIndex]
         }
         reconcileEventTimesWithPlan()
+    }
+
+    static func context(_ context: PCOPlanContext?, matching items: [PCOTimerItem]) -> PCOPlanContext? {
+        guard let context, items.contains(where: { $0.pcoPlanId == context.planId }) else { return nil }
+        return context
     }
 
     public func importFlow(title: String?, items: [PCOTimerItem]) {
@@ -791,6 +801,7 @@ public final class CueEngine: ObservableObject {
             stamped[index].isRunning = false
         }
         planItems = stamped
+        pcoPlanContext = Self.context(pcoPlanContext, matching: stamped)
         if let firstSelectable = stamped.firstIndex(where: { !$0.isHeader }) {
             activeItemIndex = firstSelectable
             var item = stamped[firstSelectable]
@@ -1533,7 +1544,7 @@ public final class CueEngine: ObservableObject {
     var activeTimerItemForBroadcast: PCOTimerItem? {
         guard var item = activeTimerItem else { return nil }
         item.isDurationActual = activeTimerActualForDisplay
-        return item
+        return item.broadcastTrimmed
     }
 
     public func nextPlanItem(startTimer: Bool = true) {

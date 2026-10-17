@@ -37,6 +37,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var activeItemIndex: Int
     public var eventTimes: [EventTime]
     public var liveEventTimeId: String?
+    public var pcoPlanContext: PCOPlanContext?
     public var settings: Settings
 
     public init(
@@ -50,6 +51,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         activeItemIndex: Int,
         eventTimes: [EventTime] = [],
         liveEventTimeId: String? = nil,
+        pcoPlanContext: PCOPlanContext? = nil,
         settings: Settings
     ) {
         self.version = version
@@ -62,6 +64,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.activeItemIndex = activeItemIndex
         self.eventTimes = eventTimes
         self.liveEventTimeId = liveEventTimeId
+        self.pcoPlanContext = pcoPlanContext
         self.settings = settings
     }
 
@@ -93,6 +96,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             return role
         }
         copy.selectedRoleIds = selectedRoleIds?.sorted()
+        copy.pcoPlanContext?.fetchedAt = .distantPast
         copy.planItems = planItems.map { item in
             var item = item
             item.elapsedSeconds = 0
@@ -103,7 +107,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -118,6 +122,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
+        pcoPlanContext = try container.decodeIfPresent(PCOPlanContext.self, forKey: .pcoPlanContext)
         settings = try container.decodeIfPresent(Settings.self, forKey: .settings)
             ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "", clockFormat: nil)
     }

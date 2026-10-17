@@ -154,6 +154,7 @@ public enum PCOPlanDiff {
             item.notes[category] = remoteValue
         }
         for (category, noteId) in theirs.noteIds { item.noteIds[category] = noteId }
+        if theirs.details != base?.details { item.details = theirs.details }
         item.pcoServiceTypeId = theirs.pcoServiceTypeId ?? item.pcoServiceTypeId
         item.pcoPlanId = theirs.pcoPlanId ?? item.pcoPlanId
         return item
