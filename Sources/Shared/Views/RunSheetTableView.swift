@@ -587,24 +587,12 @@ struct RunSheetTableView: View {
 
     private func sequenceCell(_ item: PCOTimerItem) -> some View {
         let sequence = item.details?.effectiveSequenceShort ?? []
-        let shown = Array(sequence.prefix(Self.sequenceChipLimit))
-        let extra = sequence.count - shown.count
         return styled(item) {
             if !sequence.isEmpty {
-                HStack(spacing: 3) {
-                    ForEach(Array(shown.enumerated()), id: \.offset) { _, section in
-                        RunSheetSequenceChip(text: section)
-                    }
-                    if extra > 0 {
-                        RunSheetSequenceChip(text: "+\(extra)")
-                    }
-                }
-                .help(sequence.joined(separator: " "))
+                RunSheetFittingSequence(sequence: sequence)
             }
         }
     }
-
-    private static let sequenceChipLimit = 4
 
     private func cell(_ item: PCOTimerItem, text: String?, monospaced: Bool = false, highlight: Bool = false) -> some View {
         styled(item) {
@@ -866,6 +854,63 @@ struct RunSheetColumnsMenu: View {
         var ids = ordered.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
         engine.runSheetLayout.columnOrder = ids + Self.itemParts.map(\.id)
+    }
+}
+
+struct RunSheetFittingSequence: View {
+    let sequence: [String]
+    @State private var isShowingAll = false
+
+    private static let maxCandidates = 24
+
+    var body: some View {
+        let count = sequence.count
+        let lowest = max(1, count - Self.maxCandidates)
+        ViewThatFits(in: .horizontal) {
+            chips(count)
+            ForEach(Array(stride(from: count - 1, through: lowest, by: -1)), id: \.self) { shown in
+                chips(shown)
+            }
+            overflowButton(count)
+        }
+        .help(sequence.joined(separator: " "))
+    }
+
+    private func chips(_ shown: Int) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Array(sequence.prefix(shown).enumerated()), id: \.offset) { _, section in
+                RunSheetSequenceChip(text: section)
+            }
+            if shown < sequence.count {
+                overflowButton(sequence.count - shown)
+            }
+        }
+        .fixedSize()
+    }
+
+    private func overflowButton(_ hidden: Int) -> some View {
+        Button {
+            isShowingAll.toggle()
+        } label: {
+            Text("+\(hidden)")
+                .font(.clock(.caption2, weight: .semibold))
+                .foregroundStyle(AppPalette.info)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(AppPalette.surfaceMuted, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show the full sequence")
+        .popover(isPresented: $isShowingAll, arrowEdge: .bottom) {
+            RunSheetFlowLayout(spacing: 4) {
+                ForEach(Array(sequence.enumerated()), id: \.offset) { _, section in
+                    RunSheetSequenceChip(text: section)
+                }
+            }
+            .padding(12)
+            .frame(width: 260)
+        }
     }
 }
 
