@@ -57,6 +57,15 @@ final class RunSheetScheduleTests: XCTestCase {
         XCTAssertEqual(schedule.preLength, 600)
     }
 
+    func testRecordedLiveLengthIsNotThePlannedLength() {
+        let times = [PCOItemTimeInfo(id: "t1", planTimeId: "early", length: 1, lengthOffset: 0)]
+        let items = [item("doors", length: 1100, itemTimes: times), item("song", length: 223)]
+        let schedule = RunSheetSchedule(items: items, startDate: start, planTimeId: "early")
+        XCTAssertEqual(schedule.entries.map(\.length), [1100, 223])
+        XCTAssertEqual(offset(schedule.entries[1].plannedStart), 1100)
+        XCTAssertEqual(schedule.entry(forItemId: "doors")?.pcoActualLength, 1)
+    }
+
     func testPlannedStartsChainFromEventStart() {
         let items = [item("a", length: 300), item("b", length: 120), item("c", length: 60)]
         let schedule = RunSheetSchedule(items: items, startDate: start, planTimeId: nil)
@@ -103,8 +112,8 @@ final class RunSheetScheduleTests: XCTestCase {
         XCTAssertEqual(unknown.entries.map(\.isExcluded), [false, false, false])
     }
 
-    func testPerPlanTimeLengthOverridesItemLength() {
-        let times = [PCOItemTimeInfo(id: "t1", planTimeId: "late", length: 500)]
+    func testPerPlanTimeLengthOffsetAdjustsItemLength() {
+        let times = [PCOItemTimeInfo(id: "t1", planTimeId: "late", length: 12, lengthOffset: 200)]
         let items = [item("a", length: 300, itemTimes: times), item("b", length: 100)]
 
         let late = RunSheetSchedule(items: items, startDate: start, planTimeId: "late")

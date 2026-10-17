@@ -94,7 +94,8 @@ public struct RunSheetSchedule: Equatable, Sendable {
 
     public static func effectiveLength(of item: PCOTimerItem, planTimeId: String?) -> Int {
         if item.isHeader { return 0 }
-        return item.details?.itemTime(forPlanTimeId: planTimeId)?.length ?? item.lengthInSeconds
+        let offset = item.details?.itemTime(forPlanTimeId: planTimeId)?.lengthOffset ?? 0
+        return max(0, TimerLimits.saturatingAdd(item.lengthInSeconds, offset))
     }
 
     public init(
@@ -222,7 +223,7 @@ public struct RunSheetSchedule: Equatable, Sendable {
                 actualLength: actual?.length,
                 isActualComplete: actual?.isComplete ?? false,
                 pcoActualStart: pcoTime?.liveStartAt,
-                pcoActualLength: pcoTime?.liveLengthSeconds
+                pcoActualLength: pcoTime?.liveLengthSeconds ?? pcoTime?.length.flatMap { $0 > 0 ? $0 : nil }
             ))
             indexById[items[i].id] = i
         }
