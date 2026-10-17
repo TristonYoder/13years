@@ -36,7 +36,10 @@ final class ProducerDocumentTests: XCTestCase {
             columnWidths: ["title": 320, "note-Audio": 180],
             nowNextPaneWidth: 410,
             nowNextSplit: 0.4,
-            highlightedColumns: ["note-Backstage", "note-Media"]
+            highlightedColumns: ["note-Backstage", "note-Media"],
+            sidePaneTab: RunSheetLayoutSettings.detailsTabId,
+            detailsTextScale: 1.4,
+            detailsUnpinned: true
         )
         let source = CueEngine()
         source.apply(sample())

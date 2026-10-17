@@ -58,6 +58,140 @@ extension View {
     }
 }
 
+struct LeaderAvatar: View {
+    let leader: PCOItemLeader
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle().fill(AppPalette.surfaceMuted)
+            placeholder
+            if let url = leader.photoURL {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill()
+                    }
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if leader.personId == nil && leader.teamPositionId != nil {
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.5))
+                .foregroundStyle(.secondary)
+        } else {
+            Text(leader.initials)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+    }
+}
+
+struct RunSheetByline: View {
+    let leaders: [PCOItemLeader]
+    var subtitle: String?
+    var avatarSize: CGFloat = 16
+
+    var body: some View {
+        if let byline = PCOItemLeader.byline(leaders), let first = leaders.first {
+            let text = subtitle.map { "\(byline) \u{00B7} \($0)" } ?? byline
+            HStack(spacing: 5) {
+                LeaderAvatar(leader: first, size: avatarSize)
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .help(leaders.map(\.name).joined(separator: ", "))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+struct RunSheetNotePillView: View {
+    let pill: RunSheetNotePill
+    var highlighted = false
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: pill.symbolName)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(pill.category)
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .markerHighlight(highlighted)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(pill.text)
+        .accessibilityLabel("\(pill.category) note")
+        .accessibilityHint(pill.text)
+        #if os(macOS) || os(iOS)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(pill.category, systemImage: pill.symbolName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(pill.text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: 300, alignment: .leading)
+            #if os(iOS)
+            .presentationCompactAdaptation(.popover)
+            #endif
+        }
+        #endif
+    }
+}
+
+struct RunSheetNotePillsRow: View {
+    let pills: [RunSheetNotePill]
+    var limit = 2
+    var highlightedColumns: Set<String> = []
+
+    var body: some View {
+        if !pills.isEmpty {
+            let shown = Array(pills.prefix(limit))
+            let hidden = pills.dropFirst(limit)
+            HStack(spacing: 4) {
+                ForEach(shown) { pill in
+                    RunSheetNotePillView(pill: pill, highlighted: highlightedColumns.contains(RunSheetLayoutSettings.noteColumnId(pill.category)))
+                        .frame(maxWidth: 96)
+                }
+                if !hidden.isEmpty {
+                    Text("+\(hidden.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .help(hidden.map(\.category).joined(separator: ", "))
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 struct RunSheetFlowLayout: Layout {
     var spacing: CGFloat = 4
 
@@ -484,19 +618,16 @@ struct RunSheetRow: View {
                 titleLine
 
                 if !item.isHeader {
+                    RunSheetByline(leaders: item.runSheetLeaders)
                     typeDetails
                     waypointsRow
                 }
 
-                ForEach(item.notes.keys.sorted(), id: \.self) { category in
-                    if let text = item.notes[category], !text.isEmpty {
-                        Text("\(category): \(text)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(2)
-                            .markerHighlight(isHighlighted(RunSheetLayoutSettings.noteColumnId(category)))
-                    }
-                }
+                RunSheetNotePillsRow(
+                    pills: item.isHeader ? [] : item.runSheetNotePills(layout: engine.runSheetLayout),
+                    limit: 3,
+                    highlightedColumns: engine.runSheetLayout.highlightedSet
+                )
             }
         }
     }

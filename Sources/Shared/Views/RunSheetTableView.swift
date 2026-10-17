@@ -461,6 +461,8 @@ struct RunSheetTableView: View {
 
     private func itemCell(_ item: PCOTimerItem, detailed: Bool) -> some View {
         let subtitle = detailed && !item.isHeader ? item.runSheetTableSubtitle : nil
+        let leaders = detailed && !item.isHeader ? item.runSheetLeaders : []
+        let pills = detailed && !item.isHeader ? item.runSheetNotePills(layout: engine.runSheetLayout) : []
         return styled(item) {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
@@ -473,6 +475,7 @@ struct RunSheetTableView: View {
                         .fontWeight(isActive(item) ? .semibold : (item.isHeader ? .heavy : .regular))
                         .foregroundStyle(item.isHeader ? .secondary : .primary)
                         .lineLimit(1)
+                        .layoutPriority(1)
                     if isExcluded(item), let excludedLabel {
                         Text("Not in \(excludedLabel)")
                             .font(.caption2.weight(.semibold))
@@ -485,8 +488,11 @@ struct RunSheetTableView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+                    RunSheetNotePillsRow(pills: pills, highlightedColumns: engine.runSheetLayout.highlightedSet)
                 }
-                if let subtitle {
+                if !leaders.isEmpty {
+                    RunSheetByline(leaders: leaders, subtitle: subtitle)
+                } else if let subtitle {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)

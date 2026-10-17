@@ -39,6 +39,7 @@ public struct PCOPlanPersonInfo: Codable, Equatable, Hashable, Sendable, Identif
     public var positionName: String?
     public var status: String
     public var declinedPlanTimeIds: [String]
+    public var photoThumbnailURL: String?
 
     public init(
         id: String,
@@ -47,7 +48,8 @@ public struct PCOPlanPersonInfo: Codable, Equatable, Hashable, Sendable, Identif
         teamName: String? = nil,
         positionName: String? = nil,
         status: String = "U",
-        declinedPlanTimeIds: [String] = []
+        declinedPlanTimeIds: [String] = [],
+        photoThumbnailURL: String? = nil
     ) {
         self.id = id
         self.personId = personId
@@ -56,10 +58,11 @@ public struct PCOPlanPersonInfo: Codable, Equatable, Hashable, Sendable, Identif
         self.positionName = positionName
         self.status = status
         self.declinedPlanTimeIds = declinedPlanTimeIds
+        self.photoThumbnailURL = photoThumbnailURL
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, personId, name, teamName, positionName, status, declinedPlanTimeIds
+        case id, personId, name, teamName, positionName, status, declinedPlanTimeIds, photoThumbnailURL
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +74,7 @@ public struct PCOPlanPersonInfo: Codable, Equatable, Hashable, Sendable, Identif
         positionName = try container.decodeIfPresent(String.self, forKey: .positionName)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "U"
         declinedPlanTimeIds = try container.decodeIfPresent([String].self, forKey: .declinedPlanTimeIds) ?? []
+        photoThumbnailURL = try container.decodeIfPresent(String.self, forKey: .photoThumbnailURL)
     }
 }
 

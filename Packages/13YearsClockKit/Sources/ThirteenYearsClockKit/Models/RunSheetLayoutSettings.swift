@@ -10,6 +10,19 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
     public var nowNextPaneWidth: Double?
     public var nowNextSplit: Double?
     public var highlightedColumns: [String]?
+    public var sidePaneTab: String?
+    public var detailsTextScale: Double?
+    public var detailsUnpinned: Bool?
+
+    public static let detailsTabId = "details"
+    public static let detailsTextScaleRange: ClosedRange<Double> = 0.8...2.0
+    public static let detailsTextScaleStep = 0.1
+
+    public var showsDetailsTab: Bool { sidePaneTab == Self.detailsTabId }
+    public var followsLiveItem: Bool { detailsUnpinned != true }
+    public var effectiveDetailsTextScale: Double {
+        min(max(detailsTextScale ?? 1.0, Self.detailsTextScaleRange.lowerBound), Self.detailsTextScaleRange.upperBound)
+    }
 
     public static let defaultHiddenColumns = ["number", "type", "bpm", "meter", "arrangement", "description", "pco-actual"]
 
@@ -19,7 +32,10 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
         columnWidths: [String: Double]? = nil,
         nowNextPaneWidth: Double? = nil,
         nowNextSplit: Double? = nil,
-        highlightedColumns: [String]? = nil
+        highlightedColumns: [String]? = nil,
+        sidePaneTab: String? = nil,
+        detailsTextScale: Double? = nil,
+        detailsUnpinned: Bool? = nil
     ) {
         self.columnOrder = columnOrder
         self.hiddenColumns = hiddenColumns
@@ -27,6 +43,9 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
         self.nowNextPaneWidth = nowNextPaneWidth
         self.nowNextSplit = nowNextSplit
         self.highlightedColumns = highlightedColumns
+        self.sidePaneTab = sidePaneTab
+        self.detailsTextScale = detailsTextScale
+        self.detailsUnpinned = detailsUnpinned
     }
 
     public static func noteColumnId(_ category: String) -> String { "note-\(category)" }

@@ -1011,6 +1011,17 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(value, limit, label) { return tooLong }
             }
         }
+        guard details.leaders.count <= ContentLimits.maxDetailListEntries else { return limitReached("leaders", ContentLimits.maxDetailListEntries) }
+        for leader in details.leaders {
+            let fields: [(String?, String)] = [
+                (leader.personId, "leader personId"), (leader.teamPositionId, "leader teamPositionId"),
+                (leader.name, "leader name"), (leader.firstName, "leader firstName"),
+                (leader.photoThumbnailURL, "leader photoThumbnailURL"),
+            ]
+            for (value, label) in fields {
+                if let tooLong = tooLong(value ?? "", ContentLimits.noteValue, label) { return tooLong }
+            }
+        }
         guard details.itemTimes.count <= CueEngine.maxEventTimes * 2 else { return limitReached("itemTimes", CueEngine.maxEventTimes * 2) }
         for time in details.itemTimes {
             if let tooLong = tooLong(time.id, ContentLimits.identifier, "itemTime id") { return tooLong }

@@ -210,6 +210,73 @@ public struct PCOItemTimeInfo: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+public struct PCOItemLeader: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public var personId: String?
+    public var teamPositionId: String?
+    public var name: String
+    public var firstName: String
+    public var photoThumbnailURL: String?
+
+    public init(personId: String? = nil, teamPositionId: String? = nil, name: String, firstName: String? = nil, photoThumbnailURL: String? = nil) {
+        self.personId = personId
+        self.teamPositionId = teamPositionId
+        self.name = name
+        self.firstName = firstName ?? Self.firstName(of: name)
+        self.photoThumbnailURL = photoThumbnailURL
+    }
+
+    public var id: String {
+        if let personId { return "person:\(personId)" }
+        if let teamPositionId { return "position:\(teamPositionId)" }
+        return "name:\(name)"
+    }
+
+    public var photoURL: URL? {
+        guard let photoThumbnailURL, let url = URL(string: photoThumbnailURL), url.scheme?.lowercased() == "https" else { return nil }
+        return url
+    }
+
+    public var initials: String {
+        let words = name.split(whereSeparator: { $0.isWhitespace }).filter { $0.first?.isLetter == true }
+        guard let first = words.first?.first else { return "" }
+        guard words.count > 1, let last = words.last?.first else { return String(first).uppercased() }
+        return (String(first) + String(last)).uppercased()
+    }
+
+    public static func firstName(of fullName: String) -> String {
+        fullName.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? fullName
+    }
+
+    public static func bylineNames(_ leaders: [PCOItemLeader]) -> String? {
+        let names = leaders.map(\.firstName).filter { !$0.isEmpty }
+        switch names.count {
+        case 0: return nil
+        case 1: return names[0]
+        case 2: return "\(names[0]) & \(names[1])"
+        default: return "\(names[0]) + \(names.count - 1)"
+        }
+    }
+
+    public var bylineName: String { firstName }
+
+    public static func byline(_ leaders: [PCOItemLeader]) -> String? {
+        bylineNames(leaders).map { "Led by \($0)" }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case personId, teamPositionId, name, firstName, photoThumbnailURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        personId = try container.decodeIfPresent(String.self, forKey: .personId)
+        teamPositionId = try container.decodeIfPresent(String.self, forKey: .teamPositionId)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        firstName = try container.decodeIfPresent(String.self, forKey: .firstName) ?? Self.firstName(of: name)
+        photoThumbnailURL = try container.decodeIfPresent(String.self, forKey: .photoThumbnailURL)
+    }
+}
+
 public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
     public static let broadcastDescriptionLimit = 140
 
@@ -224,6 +291,7 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
     public var customSequenceShort: [String]
     public var media: PCOMediaInfo?
     public var itemTimes: [PCOItemTimeInfo]
+    public var leaders: [PCOItemLeader]
 
     public init(
         description: String? = nil,
@@ -236,7 +304,8 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         customSequence: [String] = [],
         customSequenceShort: [String] = [],
         media: PCOMediaInfo? = nil,
-        itemTimes: [PCOItemTimeInfo] = []
+        itemTimes: [PCOItemTimeInfo] = [],
+        leaders: [PCOItemLeader] = []
     ) {
         self.description = description
         self.htmlDetails = htmlDetails
@@ -249,11 +318,12 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         self.customSequenceShort = customSequenceShort
         self.media = media
         self.itemTimes = itemTimes
+        self.leaders = leaders
     }
 
     private enum CodingKeys: String, CodingKey {
         case description, htmlDetails, servicePosition, keyName, song, arrangement, key
-        case customSequence, customSequenceShort, media, itemTimes
+        case customSequence, customSequenceShort, media, itemTimes, leaders
     }
 
     public init(from decoder: Decoder) throws {
@@ -269,6 +339,7 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         customSequenceShort = try container.decodeIfPresent([String].self, forKey: .customSequenceShort) ?? []
         media = try container.decodeIfPresent(PCOMediaInfo.self, forKey: .media)
         itemTimes = try container.decodeIfPresent([PCOItemTimeInfo].self, forKey: .itemTimes) ?? []
+        leaders = try container.decodeIfPresent([PCOItemLeader].self, forKey: .leaders) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -284,6 +355,7 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         try container.encode(customSequenceShort, forKey: .customSequenceShort)
         try container.encodeIfPresent(media, forKey: .media)
         try container.encode(itemTimes, forKey: .itemTimes)
+        if !leaders.isEmpty { try container.encode(leaders, forKey: .leaders) }
     }
 
     public var effectiveSequenceShort: [String] {

@@ -246,7 +246,7 @@ public struct ServiceFlowView: View {
                 )
             }
             if nowNextPane {
-                RunSheetNowNextPane(schedule: schedule, categories: knownNoteCategories, containerWidth: proxy.size.width)
+                RunSheetNowNextPane(schedule: schedule, categories: knownNoteCategories, containerWidth: proxy.size.width, selectedItemId: selectedItemId)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }

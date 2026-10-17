@@ -39,6 +39,7 @@ struct RunSheetNowNextPane: View {
     let schedule: RunSheetSchedule
     let categories: [String]
     let containerWidth: CGFloat
+    var selectedItemId: String?
 
     static let defaultWidth: CGFloat = 360
     static let minimumWidth: CGFloat = 280
@@ -72,12 +73,34 @@ struct RunSheetNowNextPane: View {
     var body: some View {
         HStack(spacing: 0) {
             widthHandle
-            GeometryReader { proxy in
-                cards(height: proxy.size.height)
+            VStack(spacing: 0) {
+                tabBar
+                if engine.runSheetLayout.showsDetailsTab {
+                    RunSheetDetailsPane(selectedItemId: selectedItemId)
+                } else {
+                    GeometryReader { proxy in
+                        cards(height: proxy.size.height)
+                    }
+                }
             }
         }
         .frame(width: paneWidth)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var tabBar: some View {
+        Picker("Side pane", selection: Binding(
+            get: { engine.runSheetLayout.showsDetailsTab },
+            set: { engine.runSheetLayout.sidePaneTab = $0 ? RunSheetLayoutSettings.detailsTabId : nil }
+        )) {
+            Text("Now & Next").tag(false)
+            Text("Details").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var widthHandle: some View {
@@ -170,6 +193,147 @@ struct RunSheetNowNextPane: View {
     }
 }
 
+private struct RunSheetDetailsPane: View {
+    @EnvironmentObject var engine: CueEngine
+    let selectedItemId: String?
+
+    private var followsLive: Bool { engine.runSheetLayout.followsLiveItem }
+
+    private var item: PCOTimerItem? {
+        let id = followsLive ? engine.activeTimerItem?.id : selectedItemId
+        guard let id else { return nil }
+        return engine.planItems.first { $0.id == id }
+    }
+
+    private var scale: Double { engine.runSheetLayout.effectiveDetailsTextScale }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            controls
+            Divider()
+            if let item {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.title3.weight(.semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            RunSheetByline(leaders: item.runSheetLeaders, avatarSize: 18)
+                        }
+                        if let html = Self.source(for: item) {
+                            RunSheetHTMLText(html: html, scale: scale)
+                        } else {
+                            Text("No details for this item")
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                }
+                .id(followsLive ? item.id : "pinned")
+            } else {
+                Text(emptyText)
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var emptyText: String {
+        followsLive ? "Nothing is running" : "Select an item in the run sheet"
+    }
+
+    static func source(for item: PCOTimerItem) -> String? {
+        if let html = item.details?.htmlDetails, !html.isEmpty { return html }
+        return item.details?.description.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: Binding(
+                get: { followsLive },
+                set: { engine.runSheetLayout.detailsUnpinned = $0 ? nil : true }
+            )) {
+                Label("Follow live item", systemImage: followsLive ? "pin.fill" : "pin.slash")
+                    .font(.caption)
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help(followsLive ? "Showing the live item. Turn off to show the item selected in the run sheet." : "Showing the selected item. Turn on to follow the live item.")
+            Spacer(minLength: 0)
+            Button {
+                adjustScale(by: -RunSheetLayoutSettings.detailsTextScaleStep)
+            } label: {
+                Text("A\u{2212}").font(.system(size: 11, weight: .semibold))
+            }
+            .disabled(scale <= RunSheetLayoutSettings.detailsTextScaleRange.lowerBound + 0.001)
+            .help("Smaller text")
+            Button {
+                adjustScale(by: RunSheetLayoutSettings.detailsTextScaleStep)
+            } label: {
+                Text("A+").font(.system(size: 14, weight: .semibold))
+            }
+            .disabled(scale >= RunSheetLayoutSettings.detailsTextScaleRange.upperBound - 0.001)
+            .help("Larger text")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func adjustScale(by delta: Double) {
+        let next = min(max(scale + delta, RunSheetLayoutSettings.detailsTextScaleRange.lowerBound), RunSheetLayoutSettings.detailsTextScaleRange.upperBound)
+        let rounded = (next * 100).rounded() / 100
+        engine.runSheetLayout.detailsTextScale = abs(rounded - 1.0) < 0.001 ? nil : rounded
+    }
+}
+
+private struct RunSheetHTMLText: View {
+    let html: String
+    let scale: Double
+
+    @State private var rendered: AttributedString
+
+    private static let baseSize: CGFloat = 13
+
+    init(html: String, scale: Double) {
+        self.html = html
+        self.scale = scale
+        _rendered = State(initialValue: HTMLAttributedConverter.attributedString(fromHTML: html))
+    }
+
+    var body: some View {
+        Text(styled)
+            .font(.system(size: Self.baseSize * CGFloat(scale)))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .task(id: html) { rendered = HTMLAttributedConverter.attributedString(fromHTML: html) }
+    }
+
+    private var styled: AttributedString {
+        var text = rendered
+        let size = Self.baseSize * CGFloat(scale)
+        for run in text.runs {
+            if run[HTMLUnderlineKey.self] == true {
+                text[run.range].underlineStyle = .single
+            }
+            if let level = run[HTMLHeadingLevelKey.self] {
+                let factor: CGFloat = level == 1 ? 1.5 : (level == 2 ? 1.3 : 1.15)
+                text[run.range].font = .system(size: size * factor, weight: .bold)
+            }
+        }
+        return text
+    }
+}
+
 private struct RunSheetFocusCard: View {
     enum Role {
         case now
@@ -242,6 +406,8 @@ private struct RunSheetFocusCard: View {
                 .foregroundStyle(.secondary)
         }
 
+        leadersBlock(item.runSheetLeaders)
+
         switch role {
         case .now:
             nowTiming(item, entry: entry)
@@ -256,6 +422,22 @@ private struct RunSheetFocusCard: View {
         }
 
         referenceButtons(for: item)
+    }
+
+    @ViewBuilder
+    private func leadersBlock(_ leaders: [PCOItemLeader]) -> some View {
+        if !leaders.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(leaders) { leader in
+                    HStack(spacing: 10) {
+                        LeaderAvatar(leader: leader, size: 40)
+                        (Text("Leader: ").foregroundStyle(.secondary) + Text(leader.name).fontWeight(.medium))
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
     }
 
     private func field(for column: RunSheetTableColumn, item: PCOTimerItem, entry: RunSheetSchedule.Entry?) -> Field? {

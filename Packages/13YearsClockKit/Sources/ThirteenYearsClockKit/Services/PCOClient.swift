@@ -11,6 +11,7 @@ public final class PCOClient: @unchecked Sendable {
     public static let upcomingPlanId = "next"
 
     public var tokens: OAuthTokens?
+    let leaderResolver = PCOLeaderResolver()
 
     public init(tokens: OAuthTokens? = nil) {
         self.tokens = tokens
@@ -152,7 +153,7 @@ public final class PCOClient: @unchecked Sendable {
         return (json?["data"] as? [[String: Any]])?.first?["id"] as? String
     }
 
-    public static let planItemsInclude = "item_notes,item_notes.item_note_category,song,arrangement,key,media,item_times"
+    public static let planItemsInclude = "item_notes,item_notes.item_note_category,song,arrangement,key,media,item_times,item_assignments"
 
     public func fetchPlanItems(serviceTypeId: String, planId: String) async throws -> (planTitle: String, items: [PCOTimerItem]) {
         let path = "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/items"
@@ -166,7 +167,8 @@ public final class PCOClient: @unchecked Sendable {
             from: components.url!,
             failureMessage: "Couldn't fetch the plan from Planning Center. Check your sign-in and try again."
         )
-        let items = Self.parsePlanItems(json, serviceTypeId: serviceTypeId, planId: planId)
+        let parsed = Self.parsePlanItems(json, serviceTypeId: serviceTypeId, planId: planId)
+        let items = await resolveLeaders(in: parsed, serviceTypeId: serviceTypeId, planId: planId)
         let planTitle = (try? await fetchPlanTitle(serviceTypeId: serviceTypeId, planId: planId)) ?? "PCO Plan #\(planId)"
         return (planTitle, items)
     }

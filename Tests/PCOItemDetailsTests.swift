@@ -442,3 +442,291 @@ final class PCOItemDetailsEngineTests: XCTestCase {
         XCTAssertNil(engine.pcoPlanContext)
     }
 }
+
+private final class CallLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [String] = []
+
+    func record(_ entry: String) {
+        lock.lock()
+        entries.append(entry)
+        lock.unlock()
+    }
+
+    var all: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.sorted()
+    }
+}
+
+final class PCOItemLeaderTests: XCTestCase {
+    private func json(_ text: String) -> [String: Any] {
+        try! JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
+    }
+
+    private let itemsJSON = """
+    {
+      "data": [
+        {"type": "Item", "id": "1", "attributes": {"title": "Sermon", "item_type": "item", "length": 1200},
+         "relationships": {"item_assignments": {"data": [
+           {"type": "ItemAssignment", "id": "a1"}, {"type": "ItemAssignment", "id": "a2"},
+           {"type": "ItemAssignment", "id": "a3"}, {"type": "ItemAssignment", "id": "a4"}]}}},
+        {"type": "Item", "id": "2", "attributes": {"title": "Prayer", "item_type": "item", "length": 60},
+         "relationships": {"item_assignments": {"data": []}}}
+      ],
+      "included": [
+        {"type": "ItemAssignment", "id": "a1", "attributes": {"assignable_type": "Person"}, "relationships": {"assignable": {"data": {"type": "Person", "id": "p1"}}}},
+        {"type": "ItemAssignment", "id": "a2", "attributes": {"assignable_type": "Person"}, "relationships": {"assignable": {"data": {"type": "Person", "id": "p2"}}}},
+        {"type": "ItemAssignment", "id": "a3", "attributes": {"assignable_type": "TeamPosition"}, "relationships": {"assignable": {"data": {"type": "TeamPosition", "id": "tp9"}}}},
+        {"type": "ItemAssignment", "id": "a4", "attributes": {"assignable_type": "Person"}, "relationships": {"assignable": {"data": {"type": "Person", "id": "p1"}}}}
+      ]
+    }
+    """
+
+    private func parsedItems() -> [PCOTimerItem] {
+        PCOClient.parsePlanItems(json(itemsJSON), serviceTypeId: "st", planId: "p")
+    }
+
+    private func team() -> [PCOPlanPersonInfo] {
+        [PCOPlanPersonInfo(id: "pp1", personId: "p1", name: "Mara Lopez", photoThumbnailURL: "https://example.com/mara.png")]
+    }
+
+    private func resolve(
+        _ items: [PCOTimerItem],
+        resolver: PCOLeaderResolver = PCOLeaderResolver(),
+        log: CallLog = CallLog(),
+        people: [String: PCOLeaderIdentity] = [:],
+        missing: Set<String> = []
+    ) async -> [PCOTimerItem] {
+        let team = team()
+        return await resolver.resolve(
+            items,
+            loadTeam: { log.record("team"); return team },
+            fetchPerson: { id in
+                log.record("person:\(id)")
+                if missing.contains(id) { throw NSError(domain: "PCOClient", code: 404) }
+                return people[id]
+            },
+            fetchPosition: { id in
+                log.record("position:\(id)")
+                return id == "tp9" ? "Teaching Pastor" : nil
+            }
+        )
+    }
+
+    func testParsesItemAssignmentsAndDeduplicates() {
+        let items = parsedItems()
+        let leaders = items[0].details?.leaders ?? []
+        XCTAssertEqual(leaders.map(\.personId), ["p1", "p2", nil])
+        XCTAssertEqual(leaders.last?.teamPositionId, "tp9")
+        XCTAssertTrue(items[1].details?.leaders.isEmpty ?? false)
+        XCTAssertTrue(PCOClient.planItemsInclude.contains("item_assignments"))
+    }
+
+    func testResolvesFromTeamMembersBeforeFetchingPeople() async {
+        let log = CallLog()
+        let people = ["p2": PCOLeaderIdentity(name: "Jon Reyes", firstName: "Jon", photoThumbnailURL: nil)]
+        let resolved = await resolve(parsedItems(), log: log, people: people)
+        let leaders = resolved[0].details?.leaders ?? []
+        XCTAssertEqual(leaders.map(\.name), ["Mara Lopez", "Jon Reyes", "Teaching Pastor"])
+        XCTAssertEqual(leaders[0].firstName, "Mara")
+        XCTAssertEqual(leaders[0].photoThumbnailURL, "https://example.com/mara.png")
+        XCTAssertEqual(log.all, ["person:p2", "position:tp9", "team"])
+    }
+
+    func testTeamMembersCoverEveryoneSoNothingIsFetched() async {
+        var items = parsedItems()
+        items[0].details?.leaders = [PCOItemLeader(personId: "p1", name: "")]
+        let log = CallLog()
+        let resolved = await resolve(items, log: log)
+        XCTAssertEqual(resolved[0].details?.leaders.map(\.name), ["Mara Lopez"])
+        XCTAssertEqual(log.all, ["team"])
+    }
+
+    func testMissingPersonIsDroppedAndNotRefetched() async {
+        let resolver = PCOLeaderResolver()
+        let log = CallLog()
+        let first = await resolve(parsedItems(), resolver: resolver, log: log, missing: ["p2"])
+        XCTAssertEqual(first[0].details?.leaders.map(\.name), ["Mara Lopez", "Teaching Pastor"])
+        let second = await resolve(parsedItems(), resolver: resolver, log: log, missing: ["p2"])
+        XCTAssertEqual(second[0].details?.leaders, first[0].details?.leaders)
+        XCTAssertEqual(log.all.filter { $0.hasPrefix("person:") }.count, 1)
+        XCTAssertEqual(log.all.filter { $0 == "team" }.count, 1)
+    }
+
+    func testPersonIdentityParsingKeepsOnlyHTTPSPhotos() {
+        let secure = PCOClient.parsePersonIdentity(json(#"{"data": {"attributes": {"first_name": "Jon", "full_name": "Jon Reyes", "photo_thumbnail_url": "https://example.com/j.png"}}}"#))
+        XCTAssertEqual(secure, PCOLeaderIdentity(name: "Jon Reyes", firstName: "Jon", photoThumbnailURL: "https://example.com/j.png"))
+        let insecure = PCOClient.parsePersonIdentity(json(#"{"data": {"attributes": {"full_name": "Jon Reyes", "photo_thumbnail_url": "http://example.com/j.png"}}}"#))
+        XCTAssertNil(insecure?.photoThumbnailURL)
+        XCTAssertEqual(insecure?.firstName, "Jon")
+        XCTAssertNil(PCOItemLeader(name: "A", photoThumbnailURL: "http://example.com/a.png").photoURL)
+    }
+
+    func testTeamParsingReadsPhotoThumbnail() {
+        let parsed = PCOClient.parseTeam(json(#"{"data": [{"type": "PlanPerson", "id": "pp", "attributes": {"name": "Mara Lopez", "photo_thumbnail": "https://example.com/m.png", "status": "C"}, "relationships": {"person": {"data": {"type": "Person", "id": "p1"}}}}]}"#))
+        XCTAssertEqual(parsed.first?.photoThumbnailURL, "https://example.com/m.png")
+        XCTAssertEqual(parsed.first?.personId, "p1")
+    }
+
+    func testBackCompatDecoding() throws {
+        let details = try JSONDecoder().decode(PCOItemDetails.self, from: Data(#"{"servicePosition": "pre"}"#.utf8))
+        XCTAssertTrue(details.leaders.isEmpty)
+        let sparse = try JSONDecoder().decode(PCOItemLeader.self, from: Data(#"{"personId": "p1", "name": "Mara Lopez"}"#.utf8))
+        XCTAssertEqual(sparse.firstName, "Mara")
+        XCTAssertNil(sparse.photoThumbnailURL)
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(PCOItemDetails())) as? [String: Any]
+        XCTAssertNil(encoded?["leaders"])
+
+        let withLeaders = PCOItemDetails(leaders: [PCOItemLeader(personId: "p1", name: "Mara Lopez", photoThumbnailURL: "https://example.com/m.png")])
+        XCTAssertEqual(try JSONDecoder().decode(PCOItemDetails.self, from: JSONEncoder().encode(withLeaders)), withLeaders)
+    }
+
+    func testBroadcastTrimmedStripsLeaders() {
+        let leaders = [PCOItemLeader(personId: "p1", name: "Mara Lopez", photoThumbnailURL: "https://example.com/m.png")]
+        let item = PCOTimerItem(id: "i", title: "Sermon", details: PCOItemDetails(description: "Hi", keyName: "G", leaders: leaders))
+        XCTAssertTrue(item.broadcastTrimmed.details?.leaders.isEmpty ?? false)
+        XCTAssertTrue(item.broadcastTrimmed(fields: Set(PagerItemField.allCases)).details?.leaders.isEmpty ?? true)
+        let onlyLeaders = PCOTimerItem(id: "j", title: "Prayer", details: PCOItemDetails(leaders: leaders))
+        XCTAssertNil(onlyLeaders.broadcastTrimmed(fields: Set(PagerItemField.allCases)).details)
+        XCTAssertEqual(onlyLeaders.broadcastTrimmed.details, PCOItemDetails())
+    }
+
+    func testLeaderChangesDoNotRaiseAPendingChangesBanner() {
+        let base = PCOTimerItem(id: "i", title: "Sermon", details: PCOItemDetails())
+        var changed = base
+        changed.details?.leaders = [PCOItemLeader(personId: "p1", name: "Mara Lopez")]
+        XCTAssertTrue(PCOPlanDiff.changes(from: [base], to: [changed]).isEmpty)
+    }
+
+    func testBylineFormatting() {
+        let mara = PCOItemLeader(personId: "1", name: "Mara Lopez")
+        let jon = PCOItemLeader(personId: "2", name: "Jon Reyes")
+        let ana = PCOItemLeader(personId: "3", name: "Ana Diaz")
+        XCTAssertNil(PCOItemLeader.byline([]))
+        XCTAssertEqual(PCOItemLeader.bylineNames([mara]), "Mara")
+        XCTAssertEqual(PCOItemLeader.bylineNames([mara, jon]), "Mara & Jon")
+        XCTAssertEqual(PCOItemLeader.bylineNames([mara, jon, ana]), "Mara + 2")
+        XCTAssertEqual(PCOItemLeader.byline([mara, jon]), "Led by Mara & Jon")
+        XCTAssertEqual(mara.initials, "ML")
+        XCTAssertEqual(PCOItemLeader(teamPositionId: "t", name: "Teaching Pastor", firstName: "Teaching Pastor").bylineName, "Teaching Pastor")
+    }
+
+    func testNotePillSymbolMapping() {
+        let expectations: [(String, String)] = [
+            ("Audio", "speaker.wave.2"), ("Sound Cues", "speaker.wave.2"), ("Lighting", "lightbulb"),
+            ("Video", "video"), ("Camera 2", "video"), ("Images", "video"),
+            ("Media", "photo.on.rectangle"), ("Slides", "photo.on.rectangle"), ("Resolume", "photo.on.rectangle"), ("ProPresenter", "photo.on.rectangle"),
+            ("Stage", "figure.stand"), ("Backstage", "figure.stand"),
+            ("Director", "megaphone"), ("Producer Notes", "megaphone"),
+            ("Timecode", "timer"), ("TC", "timer"), ("Watch", "note.text"), ("Notes", "note.text"),
+        ]
+        for (category, symbol) in expectations {
+            XCTAssertEqual(RunSheetNotePill.symbolName(forCategory: category), symbol, category)
+        }
+    }
+
+    func testNotePillsFollowColumnVisibility() {
+        let item = PCOTimerItem(id: "i", title: "Song", notes: ["Audio": "Reverb up", "Lighting": "", "Stage": "Walk on left"])
+        XCTAssertEqual(item.runSheetNotePills(layout: RunSheetLayoutSettings()).map(\.category), ["Audio", "Stage"])
+        let hidden = RunSheetLayoutSettings(hiddenColumns: ["note-Audio"])
+        XCTAssertEqual(item.runSheetNotePills(layout: hidden).map(\.category), ["Stage"])
+        XCTAssertEqual(item.runSheetNotePills(layout: hidden).first?.text, "Walk on left")
+    }
+}
+
+final class HTMLAttributedConverterTests: XCTestCase {
+    private func convert(_ html: String) -> AttributedString { HTMLAttributedConverter.attributedString(fromHTML: html) }
+    private func plain(_ html: String) -> String { HTMLAttributedConverter.plainText(fromHTML: html) }
+
+    func testPlainTextPassesThroughWithLineBreaks() {
+        XCTAssertEqual(plain("Walk on left\nExit right"), "Walk on left\nExit right")
+        XCTAssertEqual(plain("Just words"), "Just words")
+        XCTAssertEqual(plain("1 < 2 and 3 > 2"), "1 < 2 and 3 > 2")
+    }
+
+    func testParagraphsBreaksAndHeadings() {
+        XCTAssertEqual(plain("<p>One</p><p>Two<br>three</p>"), "One\n\nTwo\nthree")
+        XCTAssertEqual(plain("<div>A</div><div>B</div>"), "A\nB")
+        let heading = convert("<h2>Verse 1</h2><p>Line</p>")
+        XCTAssertEqual(String(heading.characters), "Verse 1\n\nLine")
+        let levels = heading.runs.compactMap { $0[HTMLHeadingLevelKey.self] }
+        XCTAssertEqual(levels, [2])
+        XCTAssertTrue(heading.runs.first?.inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false)
+    }
+
+    func testListsBulletsAndNumbers() {
+        XCTAssertEqual(plain("<ul><li>Alpha</li><li>Beta</li></ul>"), "\u{2022} Alpha\n\u{2022} Beta")
+        XCTAssertEqual(plain("<ol><li>First</li><li>Second</li></ol>"), "1. First\n2. Second")
+        XCTAssertEqual(plain("<ul><li>Top<ul><li>Inner</li></ul></li></ul>"), "\u{2022} Top\n    \u{2022} Inner")
+    }
+
+    func testEntitiesAreDecoded() {
+        XCTAssertEqual(plain("<p>Tom &amp; Jerry &lt;3 &quot;hi&quot; &#65;&#x42; &mdash; caf&eacute;&nbsp;x</p>"), "Tom & Jerry <3 \"hi\" AB \u{2014} caf&eacute; x")
+    }
+
+    func testNestedBoldItalicAndUnderline() {
+        let text = convert("<p>a <b>bold <i>both</i></b> <u>under</u> <em>it</em></p>")
+        XCTAssertEqual(String(text.characters), "a bold both under it")
+        var seen: [String: InlinePresentationIntent] = [:]
+        var underlined = ""
+        for run in text.runs {
+            let piece = String(text[run.range].characters)
+            if let intent = run.inlinePresentationIntent { seen[piece] = intent }
+            if run[HTMLUnderlineKey.self] == true { underlined += piece }
+        }
+        XCTAssertEqual(seen["bold "], .stronglyEmphasized)
+        XCTAssertEqual(seen["both"], [.stronglyEmphasized, .emphasized])
+        XCTAssertEqual(seen["it"], .emphasized)
+        XCTAssertEqual(underlined, "under")
+    }
+
+    func testOnlyHTTPLinksAreKept() {
+        let text = convert(#"<a href="https://example.com/a?x=1&amp;y=2">site</a> <a href="javascript:alert(1)">bad</a> <a href="mailto:a@b.c">mail</a>"#)
+        XCTAssertEqual(String(text.characters), "site bad mail")
+        let links = text.runs.compactMap { $0.link }
+        XCTAssertEqual(links, [URL(string: "https://example.com/a?x=1&y=2")!])
+    }
+
+    func testScriptStyleImagesAndUnknownTagsAreStripped() {
+        XCTAssertEqual(plain(#"<p>Hi<script>alert("x")</script> there<style>p{color:red}</style><img src="https://evil.example/p.png"><iframe src="https://evil.example"></iframe>!</p>"#), "Hi there!")
+        XCTAssertEqual(plain("<custom-tag>kept <span class=\"x\">text</span></custom-tag><object>gone</object>"), "kept text")
+        XCTAssertEqual(plain("<!-- hidden -->visible"), "visible")
+        XCTAssertEqual(plain("<p>open <script>never closed"), "open")
+    }
+
+    func testBlockquoteIsIndentedAndItalic() {
+        let text = convert("<p>Before</p><blockquote>Quoted</blockquote>")
+        XCTAssertEqual(String(text.characters), "Before\n\n    Quoted")
+        XCTAssertTrue(text.runs.contains { $0.inlinePresentationIntent == .emphasized })
+    }
+
+    func testWhitespaceCollapsesLikeHTML() {
+        XCTAssertEqual(plain("<p>  many   spaces\n and\tlines  </p>"), "many spaces and lines")
+    }
+}
+
+final class RunSheetLayoutDetailsTests: XCTestCase {
+    func testDetailsFieldsRoundTripAndDefaults() throws {
+        let layout = RunSheetLayoutSettings(sidePaneTab: "details", detailsTextScale: 1.3, detailsUnpinned: true)
+        let decoded = try JSONDecoder().decode(RunSheetLayoutSettings.self, from: JSONEncoder().encode(layout))
+        XCTAssertEqual(decoded, layout)
+        XCTAssertTrue(decoded.showsDetailsTab)
+        XCTAssertFalse(decoded.followsLiveItem)
+        XCTAssertEqual(decoded.effectiveDetailsTextScale, 1.3, accuracy: 0.0001)
+
+        let legacy = try JSONDecoder().decode(RunSheetLayoutSettings.self, from: Data(#"{"hiddenColumns": ["drift"]}"#.utf8))
+        XCTAssertFalse(legacy.showsDetailsTab)
+        XCTAssertTrue(legacy.followsLiveItem)
+        XCTAssertEqual(legacy.effectiveDetailsTextScale, 1.0)
+        XCTAssertEqual(RunSheetLayoutSettings(detailsTextScale: 9).effectiveDetailsTextScale, 2.0)
+        XCTAssertTrue(RunSheetLayoutSettings().isDefault)
+    }
+
+    func testHTMLDetailsAreNotBroadcast() {
+        let item = PCOTimerItem(id: "i", title: "Sermon", details: PCOItemDetails(htmlDetails: "<p>Script</p>"))
+        XCTAssertNil(item.broadcastTrimmed.details?.htmlDetails)
+        XCTAssertNil(item.broadcastTrimmed(fields: Set(PagerItemField.allCases)).details?.htmlDetails)
+    }
+}

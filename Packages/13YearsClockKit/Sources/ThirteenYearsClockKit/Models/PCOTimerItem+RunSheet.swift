@@ -57,3 +57,53 @@ extension PCOTimerItem {
         details?.song?.author.flatMap { $0.isEmpty ? nil : $0 }
     }
 }
+
+public struct RunSheetNotePill: Equatable, Identifiable, Sendable {
+    public var category: String
+    public var text: String
+
+    public init(category: String, text: String) {
+        self.category = category
+        self.text = text
+    }
+
+    public var id: String { category }
+
+    public var symbolName: String { Self.symbolName(forCategory: category) }
+
+    public static func symbolName(forCategory category: String) -> String {
+        let lower = category.lowercased()
+        let words = lower.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        func has(_ keywords: [String]) -> Bool { keywords.contains { lower.contains($0) } }
+        if has(["audio", "sound"]) { return "speaker.wave.2" }
+        if has(["light"]) { return "lightbulb" }
+        if has(["video", "camera", "imag"]) { return "video" }
+        if has(["media", "slides", "resolume", "propresenter"]) { return "photo.on.rectangle" }
+        if has(["stage", "backstage"]) { return "figure.stand" }
+        if has(["director", "producer"]) { return "megaphone" }
+        if lower.contains("timecode") || words.contains("tc") { return "timer" }
+        return "note.text"
+    }
+
+    public static func pills(notes: [String: String], hiddenColumns: Set<String>) -> [RunSheetNotePill] {
+        notes.keys.sorted().compactMap { category in
+            guard let text = notes[category], !text.isEmpty,
+                  !hiddenColumns.contains(RunSheetLayoutSettings.noteColumnId(category)) else { return nil }
+            return RunSheetNotePill(category: category, text: text)
+        }
+    }
+}
+
+extension PCOTimerItem {
+    public var runSheetLeaders: [PCOItemLeader] {
+        details?.leaders ?? []
+    }
+
+    public var runSheetByline: String? {
+        PCOItemLeader.byline(runSheetLeaders)
+    }
+
+    public func runSheetNotePills(layout: RunSheetLayoutSettings) -> [RunSheetNotePill] {
+        RunSheetNotePill.pills(notes: notes, hiddenColumns: layout.hiddenSet)
+    }
+}

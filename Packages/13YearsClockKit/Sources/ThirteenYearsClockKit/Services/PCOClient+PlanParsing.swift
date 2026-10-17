@@ -265,6 +265,8 @@ extension PCOClient {
             )
         }
 
+        details.leaders = parseItemLeaders(item, lookup: lookup)
+
         details.itemTimes = relationshipRefs(item, "item_times").compactMap { ref in
             guard let resource = lookup["\(ref.type)|\(ref.id)"] else { return nil }
             let timeAttrs = attributes(resource)
@@ -279,6 +281,41 @@ extension PCOClient {
             )
         }
         return details
+    }
+
+    static func parseItemLeaders(_ item: [String: Any], lookup: [String: [String: Any]]) -> [PCOItemLeader] {
+        var seen = Set<String>()
+        var leaders: [PCOItemLeader] = []
+        for ref in relationshipRefs(item, "item_assignments") {
+            guard let assignment = lookup["\(ref.type)|\(ref.id)"],
+                  let target = relationshipRefs(assignment, "assignable").first else { continue }
+            let kind = (string(attributes(assignment)["assignable_type"]) ?? target.type).lowercased()
+            let leader: PCOItemLeader
+            if kind == "person" {
+                leader = PCOItemLeader(personId: target.id, name: "")
+            } else if kind == "teamposition" {
+                leader = PCOItemLeader(teamPositionId: target.id, name: "")
+            } else {
+                continue
+            }
+            if seen.insert(leader.id).inserted { leaders.append(leader) }
+        }
+        return leaders
+    }
+
+    static func httpsURLString(_ value: Any?) -> String? {
+        guard let text = string(value), let url = URL(string: text), url.scheme?.lowercased() == "https", url.host != nil else { return nil }
+        return text
+    }
+
+    static func parsePersonIdentity(_ json: [String: Any]) -> PCOLeaderIdentity? {
+        let attrs = attributes(json["data"] as? [String: Any])
+        guard let name = string(attrs["full_name"]) ?? string(attrs["first_name"]) else { return nil }
+        return PCOLeaderIdentity(
+            name: name,
+            firstName: string(attrs["first_name"]) ?? PCOItemLeader.firstName(of: name),
+            photoThumbnailURL: httpsURLString(attrs["photo_thumbnail_url"]) ?? httpsURLString(attrs["photo_url"])
+        )
     }
 
     static func parsePlanTitle(_ json: [String: Any], planId: String) -> String {
@@ -301,13 +338,35 @@ extension PCOClient {
         let team = try await fetchOptionalPages(url("/team_members", include: "team,declined_plan_times"), "Couldn't fetch the team from Planning Center.")
         let needed = try await fetchOptionalPages(url("/needed_positions", include: "team"), "Couldn't fetch the needed positions from Planning Center.")
 
-        return Self.parsePlanContext(
+        let context = Self.parsePlanContext(
             plan: plan,
             notes: notes,
             team: team,
             neededPositions: needed,
             serviceTypeId: serviceTypeId,
             planId: planId
+        )
+        await leaderResolver.learn(team: context.team)
+        return context
+    }
+
+    func resolveLeaders(in items: [PCOTimerItem], serviceTypeId: String, planId: String) async -> [PCOTimerItem] {
+        await leaderResolver.resolve(
+            items,
+            loadTeam: { [self] in
+                let url = URL(string: "services/v2/service_types/\(serviceTypeId)/plans/\(planId)/team_members?per_page=100&include=team", relativeTo: Self.baseURL)!
+                let team = try await fetchAllPages(from: url, failureMessage: "Couldn't fetch the team from Planning Center.")
+                return Self.parseTeam(team)
+            },
+            fetchPerson: { [self] id in
+                let url = URL(string: "services/v2/people/\(id)", relativeTo: Self.baseURL)!
+                return Self.parsePersonIdentity(try await fetchJSON(from: url, failureMessage: "Couldn't fetch a person from Planning Center."))
+            },
+            fetchPosition: { [self] id in
+                let url = URL(string: "services/v2/service_types/\(serviceTypeId)/team_positions/\(id)", relativeTo: Self.baseURL)!
+                let json = try await fetchJSON(from: url, failureMessage: "Couldn't fetch a team position from Planning Center.")
+                return Self.string(Self.attributes(json["data"] as? [String: Any])["name"])
+            }
         )
     }
 
@@ -358,21 +417,7 @@ extension PCOClient {
             return PCOPlanNoteInfo(id: id, category: string(noteAttrs["category_name"]), content: content)
         }
 
-        let teamLookup = includedLookup(team)
-        let people: [PCOPlanPersonInfo] = (team["data"] as? [[String: Any]] ?? []).compactMap { resource in
-            guard let id = resource["id"] as? String else { return nil }
-            let personAttrs = attributes(resource)
-            let teamName = relationshipRefs(resource, "team").first.flatMap { string(attributes(teamLookup["\($0.type)|\($0.id)"])["name"]) }
-            return PCOPlanPersonInfo(
-                id: id,
-                personId: relationshipRefs(resource, "person").first?.id,
-                name: string(personAttrs["name"]) ?? "Unknown",
-                teamName: teamName,
-                positionName: string(personAttrs["team_position_name"]),
-                status: normalizedStatus(personAttrs["status"]),
-                declinedPlanTimeIds: relationshipRefs(resource, "declined_plan_times").map(\.id)
-            )
-        }
+        let people = parseTeam(team)
 
         let neededLookup = includedLookup(neededPositions)
         let needed: [PCONeededPositionInfo] = (neededPositions["data"] as? [[String: Any]] ?? []).map { resource in
@@ -400,6 +445,25 @@ extension PCOClient {
             neededPositions: needed,
             fetchedAt: fetchedAt
         )
+    }
+
+    static func parseTeam(_ team: [String: Any]) -> [PCOPlanPersonInfo] {
+        let teamLookup = includedLookup(team)
+        return (team["data"] as? [[String: Any]] ?? []).compactMap { resource in
+            guard let id = resource["id"] as? String else { return nil }
+            let personAttrs = attributes(resource)
+            let teamName = relationshipRefs(resource, "team").first.flatMap { string(attributes(teamLookup["\($0.type)|\($0.id)"])["name"]) }
+            return PCOPlanPersonInfo(
+                id: id,
+                personId: relationshipRefs(resource, "person").first?.id,
+                name: string(personAttrs["name"]) ?? "Unknown",
+                teamName: teamName,
+                positionName: string(personAttrs["team_position_name"]),
+                status: normalizedStatus(personAttrs["status"]),
+                declinedPlanTimeIds: relationshipRefs(resource, "declined_plan_times").map(\.id),
+                photoThumbnailURL: httpsURLString(personAttrs["photo_thumbnail"])
+            )
+        }
     }
 
     static func normalizedStatus(_ value: Any?) -> String {
