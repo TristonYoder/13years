@@ -27,6 +27,9 @@ public struct ServiceFlowView: View {
     @AppStorage(RunSheetLayout.storageKey) private var layoutRaw = RunSheetLayout.list.rawValue
     @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
+    #if os(macOS)
+    @SceneStorage("runSheetTableColumns") private var tableColumns = TableColumnCustomization<PCOTimerItem>()
+    #endif
 
     public init() {}
 
@@ -56,6 +59,10 @@ public struct ServiceFlowView: View {
                 .labelsHidden()
                 .frame(width: 84)
                 .help("Switch the run sheet between a list and a table with customizable columns")
+
+                if layout == .table {
+                    RunSheetColumnsMenu(customization: $tableColumns, categories: knownNoteCategories)
+                }
                 #endif
 
                 #if os(macOS) || os(iOS)
@@ -221,6 +228,7 @@ public struct ServiceFlowView: View {
             RunSheetTableView(
                 schedule: schedule,
                 selection: $selectedItemId,
+                customization: $tableColumns,
                 knownCategories: knownNoteCategories,
                 excludedLabel: engine.liveEventTimeLabel,
                 onEdit: { editorMode = .edit($0) },

@@ -8,13 +8,13 @@ struct RunSheetTableView: View {
     @EnvironmentObject var engine: CueEngine
     let schedule: RunSheetSchedule
     @Binding var selection: String?
+    @Binding var customization: TableColumnCustomization<PCOTimerItem>
     let knownCategories: [String]
     let excludedLabel: String?
     let onEdit: (PCOTimerItem) -> Void
     let onDelete: (PCOTimerItem) -> Void
     let onNewWaypoint: (PCOTimerItem) -> Void
 
-    @SceneStorage("runSheetTableColumns") private var customization = TableColumnCustomization<PCOTimerItem>()
 
     var body: some View {
         if #available(macOS 14.4, *) {
@@ -32,10 +32,10 @@ struct RunSheetTableView: View {
                 detailColumns
                 TableColumnForEach(knownCategories, id: \.self) { category in
                     TableColumn(category) { item in
-                        cell(item, text: item.notes[category])
+                        noteCell(item, text: item.notes[category])
                     }
-                    .customizationID("note-\(category)")
-                    .defaultVisibility(.hidden)
+                    .width(min: 80, ideal: 180)
+                    .customizationID(RunSheetTableColumn.noteID(category))
                 }
             }
             .contextMenu(forSelectionType: String.self, menu: contextMenu, primaryAction: primaryAction)
@@ -44,12 +44,12 @@ struct RunSheetTableView: View {
                 leadingColumns
                 detailColumns
                 TableColumn("Notes") { item in
-                    cell(item, text: item.notes.keys.sorted().compactMap { key in
+                    noteCell(item, text: item.notes.keys.sorted().compactMap { key in
                         item.notes[key].flatMap { $0.isEmpty ? nil : "\(key): \($0)" }
                     }.joined(separator: " \u{2022} "))
                 }
-                .customizationID("notes")
-                .defaultVisibility(.hidden)
+                .width(min: 100, ideal: 240)
+                .customizationID(RunSheetTableColumn.combinedNotesID)
             }
             .contextMenu(forSelectionType: String.self, menu: contextMenu, primaryAction: primaryAction)
         }
@@ -225,6 +225,17 @@ struct RunSheetTableView: View {
             .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
+    private func noteCell(_ item: PCOTimerItem, text: String?) -> some View {
+        let value = text.flatMap { $0.isEmpty ? nil : $0 }
+        return Text(value ?? "")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(value ?? "")
+            .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
+    }
+
     private func titleCell(_ item: PCOTimerItem) -> some View {
         HStack(spacing: 6) {
             if isActive(item) {
@@ -292,6 +303,87 @@ struct RunSheetTableView: View {
             onEdit(item)
         } else {
             engine.setActivePlanItem(id: item.id)
+        }
+    }
+}
+
+struct RunSheetTableColumn: Identifiable {
+    let id: String
+    let title: String
+    let isHiddenByDefault: Bool
+
+    static let combinedNotesID = "notes"
+
+    static func noteID(_ category: String) -> String { "note-\(category)" }
+
+    static let fixed: [RunSheetTableColumn] = [
+        .init(id: "number", title: "#", isHiddenByDefault: false),
+        .init(id: "start", title: "Start", isHiddenByDefault: false),
+        .init(id: "length", title: "Length", isHiddenByDefault: false),
+        .init(id: "actual", title: "Actual", isHiddenByDefault: false),
+        .init(id: "drift", title: "Drift", isHiddenByDefault: false),
+        .init(id: "type", title: "Type", isHiddenByDefault: false),
+        .init(id: "key", title: "Key", isHiddenByDefault: false),
+        .init(id: "bpm", title: "BPM", isHiddenByDefault: false),
+        .init(id: "meter", title: "Meter", isHiddenByDefault: false),
+        .init(id: "arrangement", title: "Arrangement", isHiddenByDefault: true),
+        .init(id: "sequence", title: "Sequence", isHiddenByDefault: false),
+        .init(id: "description", title: "Description", isHiddenByDefault: true),
+        .init(id: "pco-actual", title: "PCO Actual", isHiddenByDefault: true),
+    ]
+
+    static func noteColumns(_ categories: [String]) -> [RunSheetTableColumn] {
+        if #available(macOS 14.4, *) {
+            return categories.map { .init(id: noteID($0), title: $0, isHiddenByDefault: false) }
+        }
+        return [.init(id: combinedNotesID, title: "Notes", isHiddenByDefault: false)]
+    }
+}
+
+struct RunSheetColumnsMenu: View {
+    @Binding var customization: TableColumnCustomization<PCOTimerItem>
+    let categories: [String]
+
+    var body: some View {
+        Menu {
+            Section("Columns") {
+                ForEach(RunSheetTableColumn.fixed) { column in
+                    toggle(column)
+                }
+            }
+            let notes = RunSheetTableColumn.noteColumns(categories)
+            if !notes.isEmpty {
+                Section("Notes") {
+                    ForEach(notes) { column in
+                        toggle(column)
+                    }
+                }
+            }
+            Divider()
+            Button("Show All Columns") {
+                for column in RunSheetTableColumn.fixed + notes { customization[visibility: column.id] = .visible }
+            }
+            Button("Reset Columns") {
+                customization = TableColumnCustomization<PCOTimerItem>()
+            }
+        } label: {
+            Label("Columns", systemImage: "tablecells.badge.ellipsis")
+        }
+        .help("Choose which columns the run sheet table shows")
+    }
+
+    private func toggle(_ column: RunSheetTableColumn) -> some View {
+        Toggle(column.title, isOn: Binding(
+            get: { isVisible(column) },
+            set: { customization[visibility: column.id] = $0 ? .visible : .hidden }
+        ))
+    }
+
+    private func isVisible(_ column: RunSheetTableColumn) -> Bool {
+        switch customization[visibility: column.id] {
+        case .visible: return true
+        case .hidden: return false
+        default: return !column.isHiddenByDefault
         }
     }
 }
