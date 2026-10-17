@@ -10,7 +10,7 @@
     "pagerClock": {"light": "#F5F5F7", "dark": "#F5F5F7", "targets": ["swift", "web", "esp32"]},
     "pagerMessage": {"light": "#FFD60A", "dark": "#FFD60A", "targets": ["swift", "web", "esp32"]},
     "pagerMessageText": {"light": "#0B0B0D", "dark": "#0B0B0D", "targets": ["web"]},
-    "pagerPanel": {"light": "#1B1B20", "dark": "#1B1B20", "targets": ["web"]},
+    "pagerPanel": {"light": "#1B1B20", "dark": "#1B1B20", "targets": ["swift", "web"]},
     "pagerFrameNeutral": {"light": "#24242A", "dark": "#24242A", "targets": ["esp32"]},
     "pagerRow": {"light": "#2A3244", "dark": "#2A3244", "targets": ["esp32"]},
     "pagerMutedText": {"light": "#8A8A90", "dark": "#8A8A90", "targets": ["esp32"]},

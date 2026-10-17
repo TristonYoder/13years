@@ -94,6 +94,15 @@ public struct PagerPresentationState: Equatable, Sendable {
         PagerItemField.normalized(activeRole?.pagerFields ?? [])
     }
 
+    public var wantsItemDetails: Bool {
+        pagerFields.contains(.itemDetails)
+    }
+
+    public func localItemDetailsSource(includingDescription: Bool) -> String? {
+        guard wantsItemDetails else { return nil }
+        return activeTimerItem?.itemDetailsSource(includingDescription: includingDescription)
+    }
+
     private func producerNow(_ now: Date) -> Date {
         ProducerClock.producerDate(localNow: now, offsetMs: producerClockOffsetMs)
     }

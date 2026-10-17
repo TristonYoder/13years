@@ -41,8 +41,10 @@ final class PagerItemFieldTests: XCTestCase {
     func testRawValuesAreStable() {
         XCTAssertEqual(
             PagerItemField.allCases.map(\.rawValue),
-            ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime"]
+            ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "itemDetails"]
         )
+        XCTAssertEqual(PagerItemField.itemDetails.label, "Item details")
+        XCTAssertEqual(PagerItemField.allCases.filter { !$0.isLineSegment }, [.itemDetails])
     }
 
     func testRoleDecodesWithoutPagerFields() throws {
@@ -115,6 +117,30 @@ final class PagerDetailsFormatTests: XCTestCase {
         XCTAssertNil(header.pagerDetailsLine(fields: PagerItemField.allCases))
         XCTAssertNil(PCOTimerItem(title: "Manual").pagerDetailsLine(fields: PagerItemField.allCases))
         XCTAssertNil(richSong().pagerDetailsLine(fields: []))
+    }
+
+    func testItemDetailsIsNeverPartOfTheLine() {
+        let song = richSong()
+        XCTAssertNil(song.pagerDetailsLine(fields: [.itemDetails]))
+        XCTAssertEqual(song.pagerDetailsLine(fields: [.key, .itemDetails]), "G")
+        let everyLineField = PagerItemField.allCases.filter(\.isLineSegment)
+        XCTAssertEqual(
+            song.pagerDetailsLine(fields: PagerItemField.allCases, startTime: start, clockFormat: .twentyFourHour, timeZone: utc),
+            song.pagerDetailsLine(fields: everyLineField, startTime: start, clockFormat: .twentyFourHour, timeZone: utc)
+        )
+    }
+
+    func testItemDetailsSourcePrefersHTMLAndTrustsDescriptionOnlyWhenAsked() {
+        var song = richSong()
+        XCTAssertEqual(song.itemDetailsSource(includingDescription: false), song.details?.htmlDetails)
+        song.details?.htmlDetails = nil
+        XCTAssertNil(song.itemDetailsSource(includingDescription: false))
+        XCTAssertEqual(song.itemDetailsSource(includingDescription: true), "  Walk on\n  slowly  ")
+        song.details?.htmlDetails = String(repeating: "x", count: PCOTimerItem.maxItemDetailsCharacters + 10)
+        XCTAssertEqual(song.itemDetailsSource(includingDescription: false)?.count, PCOTimerItem.maxItemDetailsCharacters)
+        song.itemType = "Header"
+        XCTAssertNil(song.itemDetailsSource(includingDescription: true))
+        XCTAssertNil(PCOTimerItem(title: "Manual").itemDetailsSource(includingDescription: true))
     }
 
     func testFractionalBPM() {
@@ -226,6 +252,30 @@ final class PagerFieldsEngineTests: XCTestCase {
         XCTAssertEqual(next.displayKey, "G")
         XCTAssertEqual(next.arrangement?.bpm, 72)
         XCTAssertNil(engine.nextItemForBroadcast?.startsAtMs)
+    }
+
+    func testItemDetailsNeverRidesTheLANPackets() throws {
+        let engine = makeProducer(roles: [RoleCue(id: "band", name: "Band", pagerFields: [.itemDetails])])
+        XCTAssertNil(engine.activeTimerItemForBroadcast?.details)
+        XCTAssertNil(engine.nextItemForBroadcast?.details)
+        let both = makeProducer(roles: [RoleCue(id: "band", name: "Band", pagerFields: [.key, .itemDetails, .description])])
+        let current = try XCTUnwrap(both.activeTimerItemForBroadcast?.details)
+        XCTAssertNil(current.htmlDetails)
+        XCTAssertEqual(current.displayKey, "G")
+        XCTAssertNil(both.nextItemForBroadcast?.details?.htmlDetails)
+        let encoded = try XCTUnwrap(both.makeV2CatchUpPong(to: nil).encode())
+        XCTAssertLessThanOrEqual(encoded.count, CueEngine.maxCatchUpPongBytes)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("lyrics lyrics"))
+    }
+
+    func testApiAcceptsItemDetails() throws {
+        let engine = makeProducer(roles: [RoleCue(id: "band", name: "Band")])
+        let router = ControlAPIRouter(engine: engine)
+        let response = router.handle(HTTPRequest(method: "PATCH", path: "/v1/roles/band", body: Data(#"{"pagerFields":["itemDetails","key"]}"#.utf8)))
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .itemDetails])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        XCTAssertEqual(object["pagerFields"] as? [String], ["key", "itemDetails"])
     }
 
     func testBroadcastUsesTheUnionOfAllRolesFields() throws {

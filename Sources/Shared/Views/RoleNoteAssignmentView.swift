@@ -227,7 +227,7 @@ public struct RoleNoteAssignmentView: View {
         } header: {
             Text("Pager Details")
         } footer: {
-            Text("Choose which song and item details show on each role's pager as a compact line under the current and next item, such as key, BPM, meter and sequence. Roles with nothing chosen show no details line.")
+            Text("Choose which song and item details show on each role's pager as a compact line under the current and next item, such as key, BPM, meter and sequence. Roles with nothing chosen show no details line. Item details is separate: it adds a scrollable panel beside a landscape pager when the item has details.")
         }
     }
 

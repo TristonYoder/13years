@@ -11,6 +11,8 @@ public struct HostPagerView: View {
     @State private var dismissedMessageId: String?
     @State private var lastSeenMessageId: String?
     @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
+    @AppStorage(PagerDetailsSplit.storageKey) private var detailsSplit: Double = PagerDetailsSplit.defaultFraction
+    @StateObject private var itemDetailsStore = PagerItemDetailsStore()
 
     public init() {}
 
@@ -52,9 +54,40 @@ public struct HostPagerView: View {
         DisconnectPhase(signal: engine.isMasterServer ? .live : engine.producerSignal)
     }
 
+    private struct DetailsFetchKey: Hashable {
+        var itemId: String?
+        var host: String?
+        var port: Int?
+    }
+
+    private var holdsFullItemDetails: Bool { engine.isMasterServer || engine.isRemoteMirror }
+
+    private var itemDetailsSource: String? {
+        guard presentation.wantsItemDetails, let item = presentation.activeTimerItem else { return nil }
+        return presentation.localItemDetailsSource(includingDescription: holdsFullItemDetails)
+            ?? itemDetailsStore.source(for: item.id)
+    }
+
+    private var detailsFetchKey: DetailsFetchKey {
+        guard presentation.wantsItemDetails, !holdsFullItemDetails,
+              let item = presentation.activeTimerItem, !item.isHeader,
+              presentation.localItemDetailsSource(includingDescription: false) == nil else {
+            return DetailsFetchKey(itemId: nil, host: nil, port: nil)
+        }
+        return DetailsFetchKey(itemId: item.id, host: engine.connectedProducerHost, port: engine.connectedProducerAPIPort)
+    }
+
     private var pagerView: some View {
         pagerLayouts
             .pagerStaleLook(disconnectPhase)
+            .task(id: detailsFetchKey) {
+                let key = detailsFetchKey
+                guard let itemId = key.itemId, let host = key.host, let port = key.port else {
+                    itemDetailsStore.reset()
+                    return
+                }
+                await itemDetailsStore.run(itemId: itemId, host: host, port: port)
+            }
             .sheet(isPresented: $isShowingSettings) {
                 PagerSettingsView()
             }
@@ -95,7 +128,24 @@ public struct HostPagerView: View {
         }
     }
 
+    @ViewBuilder
     private func landscapeView(size: CGSize) -> some View {
+        if let html = itemDetailsSource, let itemId = presentation.activeTimerItem?.id, PagerDetailsSplit.isSplitLayout(size) {
+            PagerDetailsSplitView(
+                size: size,
+                html: html,
+                itemId: itemId,
+                detailsVisible: disconnectPhase != .extended,
+                fraction: $detailsSplit
+            ) { pagerSize in
+                landscapePager(size: pagerSize)
+            }
+        } else {
+            landscapePager(size: size)
+        }
+    }
+
+    private func landscapePager(size: CGSize) -> some View {
         LandscapePagerView(
             size: size,
             presentation: presentation,

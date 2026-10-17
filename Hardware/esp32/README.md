@@ -91,6 +91,7 @@ under the current and next item show, always in that order, joined with ` | ` (t
 fonts are ASCII only). The packet filter keeps only the `details` keys those fields need
 from `timerItem` and `nextItem`; `src/sync/details_line.h` holds the parser, the filter
 and the formatter. `@ h:mm` start times use the producer wall clock and UTC offset.
+The `itemDetails` field (the native and web pagers' side panel) is ignored: it is not a bit in the field mask, its HTML is never sent over the LAN socket, and the screen has no room for it.
 
 The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly, details line) lives in
 `src/sync/sync_core.h` with no Arduino dependency. The host test runs on a Mac

@@ -473,6 +473,7 @@
     --pad: calc(var(--u) * 0.025);
     --badge: calc(var(--u) * 0.11);
     --clock: calc(var(--u) * 0.075);
+    --pw: 100vw;
     flex: 1;
     min-height: 0;
     position: relative;
@@ -793,7 +794,7 @@
   }
   #lsCountdown {
     --em: 3.2;
-    font-size: min(calc(var(--u) * 0.32), calc(88vw / var(--em)));
+    font-size: min(calc(var(--u) * 0.32), calc(0.88 * var(--pw) / var(--em)));
     font-weight: 900;
     line-height: 0.95;
     letter-spacing: -0.02em;
@@ -817,6 +818,88 @@
     gap: var(--pad);
   }
   #lsBottom[data-mode="left"], #lsBottom[data-mode="right"] { grid-template-columns: 1fr; }
+
+  #lsSplit { display: contents; }
+  #lsSplit.split {
+    --lsdiv: 22px;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 2fr var(--lsdiv) 1fr;
+    background: var(--pal-pager-ground);
+  }
+  #lsSplit.split #landscape {
+    --pw: 66vw;
+    --u: min(var(--pw), 100vh);
+    min-width: 0;
+  }
+  #lsDivider {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    outline: none;
+  }
+  #lsDivider::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: max(36px, 12vh);
+    border-radius: 2px;
+    transform: translate(-50%, -50%);
+    background: var(--pal-glass-medium);
+    opacity: 0.6;
+  }
+  #lsDivider:hover::before, #lsDivider:focus-visible::before, #lsDivider.dragging::before { opacity: 1; }
+  #lsDetails {
+    --du: min(100vw, 100vh);
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--du) * 0.012);
+    margin: calc(var(--du) * 0.03) calc(var(--du) * 0.015) calc(var(--du) * 0.03) 0;
+    padding: calc(var(--du) * 0.024);
+    border-radius: calc(var(--du) * 0.02);
+    background: var(--pal-pager-panel);
+    color: var(--pal-pager-clock);
+    overflow: hidden;
+  }
+  #lsDetailsTitle {
+    flex: 0 0 auto;
+    font-size: max(11px, calc(var(--du) * 0.02));
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    opacity: 0.5;
+  }
+  #lsDetailsBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    font-size: max(14px, calc(var(--du) * 0.03));
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    outline: none;
+  }
+  #lsDetailsBody p, #lsDetailsBody ul, #lsDetailsBody ol, #lsDetailsBody blockquote, #lsDetailsBody pre, #lsDetailsBody table { margin: 0 0 0.6em; }
+  #lsDetailsBody ul, #lsDetailsBody ol { padding-left: 1.4em; }
+  #lsDetailsBody h1, #lsDetailsBody h2, #lsDetailsBody h3, #lsDetailsBody h4, #lsDetailsBody h5, #lsDetailsBody h6 { margin: 0 0 0.4em; line-height: 1.2; }
+  #lsDetailsBody h1 { font-size: 1.5em; }
+  #lsDetailsBody h2 { font-size: 1.3em; }
+  #lsDetailsBody h3 { font-size: 1.15em; }
+  #lsDetailsBody h4, #lsDetailsBody h5, #lsDetailsBody h6 { font-size: 1em; }
+  #lsDetailsBody pre, #lsDetailsBody code { font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  #lsDetailsBody blockquote { padding-left: 0.8em; border-left: 3px solid var(--pal-glass-medium); }
+  #lsDetailsBody a { color: inherit; text-decoration: underline; }
+  #lsDetailsBody table { border-collapse: collapse; }
+  #lsDetailsBody td, #lsDetailsBody th { padding: 0.15em 0.5em; border: 1px solid var(--pal-glass-soft); vertical-align: top; }
+  #lsDetailsBody hr { border: 0; border-top: 1px solid var(--pal-glass-medium); margin: 0.6em 0; }
+  html[data-offline="1"] #lsDetails { filter: grayscale(1) brightness(0.8); opacity: 0.5; }
 
   #settings {
     position: fixed;
@@ -972,6 +1055,7 @@
       </span>
     </div>
 
+    <div id="lsSplit">
     <div id="landscape" class="fr hidden">
       <div id="lsTop" class="fr-top">
         <div id="lsSlot" class="fr-slot">
@@ -1002,6 +1086,12 @@
         <div id="lsMessageText" class="fr-msg-text"></div>
         <div id="lsMessageFrom" class="fr-msg-from"></div>
       </button>
+    </div>
+    <div id="lsDivider" class="hidden" role="separator" aria-orientation="vertical" aria-label="Item details divider" aria-valuemin="40" aria-valuemax="80" aria-valuenow="67" tabindex="0" title="Drag to resize. Double-click or press and hold to reset."></div>
+    <aside id="lsDetails" class="hidden" aria-label="Item details">
+      <div id="lsDetailsTitle">ITEM DETAILS</div>
+      <div id="lsDetailsBody" tabindex="0"></div>
+    </aside>
     </div>
 
   </div>
@@ -1355,7 +1445,7 @@ function notesForRole(item, role) {
     .filter((note) => note.text);
 }
 
-const PAGER_FIELD_ORDER = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime"];
+const PAGER_FIELD_ORDER = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "itemDetails"];
 const PAGER_DETAILS_SEPARATOR = " \u00b7 ";
 
 function pagerFieldsForRole(role) {
@@ -2014,6 +2104,302 @@ function createLink(env) {
     get lastContactAt() { return Math.max(lastFrameAt, snapshotAt); },
   };
 }
+
+const DETAILS_MAX_CHARS = 64000;
+const DETAILS_MAX_NODES = 6000;
+const DETAILS_MAX_DEPTH = 24;
+const DETAILS_MIN_CONTRAST = 2.5;
+const SPLIT_DEFAULT = 2 / 3;
+const SPLIT_MIN = 0.4;
+const SPLIT_MAX = 0.8;
+const SPLIT_NUDGE = 0.05;
+const SPLIT_MIN_ASPECT = 1.15;
+const DETAILS_VOID_TAGS = { br: 1, hr: 1, img: 1, input: 1, meta: 1, link: 1, col: 1, wbr: 1, area: 1, base: 1, embed: 1, source: 1, track: 1, param: 1 };
+const DETAILS_SKIP_TAGS = { script: 1, style: 1, iframe: 1, object: 1, embed: 1, noscript: 1, template: 1, svg: 1, math: 1, head: 1, title: 1, textarea: 1, select: 1, button: 1, canvas: 1, audio: 1, video: 1, applet: 1, frameset: 1 };
+const DETAILS_RAW_TEXT_TAGS = { script: 1, style: 1, textarea: 1, title: 1, noscript: 1, template: 1 };
+const DETAILS_ALLOWED_TAGS = {
+  p: 1, div: 1, br: 1, hr: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, ul: 1, ol: 1, li: 1,
+  strong: 1, b: 1, em: 1, i: 1, u: 1, s: 1, strike: 1, del: 1, span: 1, font: 1, a: 1, blockquote: 1, pre: 1, code: 1,
+  sub: 1, sup: 1, table: 1, thead: 1, tbody: 1, tr: 1, td: 1, th: 1,
+};
+const DETAILS_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: String.fromCharCode(160), ndash: String.fromCharCode(8211), mdash: String.fromCharCode(8212), hellip: String.fromCharCode(8230), lsquo: String.fromCharCode(8216), rsquo: String.fromCharCode(8217), ldquo: String.fromCharCode(8220), rdquo: String.fromCharCode(8221), bull: String.fromCharCode(8226), middot: String.fromCharCode(183), copy: String.fromCharCode(169), reg: String.fromCharCode(174), deg: String.fromCharCode(176) };
+
+function decodeDetailsEntities(text) {
+  return String(text).replace(/&(#x[0-9a-f]{1,6}|#[0-9]{1,7}|[a-z]{2,8});/gi, (match, body) => {
+    if (body.charAt(0) === "#") {
+      const code = body.charAt(1).toLowerCase() === "x" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      if (!isFinite(code) || code < 1 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return "";
+      return String.fromCodePoint(code);
+    }
+    const named = DETAILS_ENTITIES[body.toLowerCase()];
+    return named === undefined ? match : named;
+  });
+}
+
+function parseDetailsAttributes(source) {
+  const attrs = {};
+  const pattern = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    const name = match[1].toLowerCase();
+    const value = match[2] !== undefined ? match[2] : match[3] !== undefined ? match[3] : match[4] !== undefined ? match[4] : "";
+    if (!(name in attrs)) attrs[name] = decodeDetailsEntities(value);
+  }
+  return attrs;
+}
+
+function safeDetailsLink(value) {
+  const cleaned = String(value || "").replace(/[\x00-\x20\x7f-\x9f\u200b-\u200f\u2028\u2029\ufeff]/g, "");
+  return /^https?:\/\/[^\/?#]+/i.test(cleaned) ? cleaned : null;
+}
+
+function parseDetailsColor(value) {
+  const text = String(value || "").trim().toLowerCase();
+  let match = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(text);
+  if (match) {
+    let hex = match[1];
+    if (hex.length <= 4) hex = hex.split("").map((c) => c + c).join("");
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+    return { r, g, b, a };
+  }
+  match = /^rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,\/]\s*([0-9.]+%?)\s*)?\)$/.exec(text);
+  if (match) {
+    const channels = [match[1], match[2], match[3]].map((n) => Number(n));
+    if (channels.some((n) => n > 255)) return null;
+    let a = 1;
+    if (match[4] !== undefined) {
+      a = match[4].slice(-1) === "%" ? Number(match[4].slice(0, -1)) / 100 : Number(match[4]);
+      if (!isFinite(a)) return null;
+    }
+    return { r: channels[0], g: channels[1], b: channels[2], a: Math.min(1, Math.max(0, a)) };
+  }
+  return null;
+}
+
+function detailsLuminance(color) {
+  const channel = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+}
+
+function detailsContrast(a, b) {
+  const la = detailsLuminance(a);
+  const lb = detailsLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function detailsStyleColors(style) {
+  const result = {};
+  for (const part of String(style || "").split(";")) {
+    const index = part.indexOf(":");
+    if (index < 0) continue;
+    const name = part.slice(0, index).trim().toLowerCase();
+    const color = parseDetailsColor(part.slice(index + 1).replace(/!important/i, ""));
+    if (!color) continue;
+    if (name === "color") result.color = color;
+    else if (name === "background-color" || name === "background") result.background = color;
+  }
+  return result;
+}
+
+function resolveDetailsColors(colors, ground) {
+  const out = {};
+  const base = ground || { r: 27, g: 27, b: 32, a: 1 };
+  const background = colors.background && colors.background.a >= 0.5 ? colors.background : null;
+  const surface = background || base;
+  if (background) out.background = "rgb(" + background.r + ", " + background.g + ", " + background.b + ")";
+  if (colors.color && detailsContrast(colors.color, surface) >= DETAILS_MIN_CONTRAST) {
+    out.color = "rgb(" + colors.color.r + ", " + colors.color.g + ", " + colors.color.b + ")";
+  } else if (background) {
+    out.color = detailsLuminance(background) > 0.18 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
+  }
+  return out;
+}
+
+function parseDetailsHTML(html) {
+  const source = String(html === null || html === undefined ? "" : html).slice(0, DETAILS_MAX_CHARS);
+  const root = { t: "el", tag: "#root", attrs: {}, children: [] };
+  const stack = [root];
+  let nodes = 0;
+  let skipDepth = 0;
+  let index = 0;
+
+  function addText(text) {
+    if (skipDepth > 0 || text === "" || nodes >= DETAILS_MAX_NODES) return;
+    const decoded = decodeDetailsEntities(text);
+    if (decoded === "") return;
+    nodes++;
+    stack[stack.length - 1].children.push({ t: "text", v: decoded });
+  }
+
+  function openTag(tag, attrs, selfClosed) {
+    if (DETAILS_SKIP_TAGS[tag]) {
+      if (!DETAILS_VOID_TAGS[tag] && !selfClosed) skipDepth++;
+      return;
+    }
+    if (skipDepth > 0 || nodes >= DETAILS_MAX_NODES) return;
+    if (DETAILS_VOID_TAGS[tag]) {
+      if (DETAILS_ALLOWED_TAGS[tag]) {
+        nodes++;
+        stack[stack.length - 1].children.push({ t: "el", tag, attrs: {}, children: [], source: tag });
+      }
+      return;
+    }
+    if (stack.length >= DETAILS_MAX_DEPTH) return;
+    const cleanAttrs = {};
+    if (DETAILS_ALLOWED_TAGS[tag]) {
+      if (tag === "a") {
+        const href = safeDetailsLink(attrs.href);
+        if (href) cleanAttrs.href = href;
+      }
+      const colors = detailsStyleColors(attrs.style);
+      if (colors.color) cleanAttrs.color = colors.color;
+      if (colors.background) cleanAttrs.background = colors.background;
+      if (tag === "font" && !cleanAttrs.color) {
+        const legacy = parseDetailsColor(attrs.color);
+        if (legacy) cleanAttrs.color = legacy;
+      }
+    }
+    nodes++;
+    const node = { t: "el", tag: DETAILS_ALLOWED_TAGS[tag] ? tag : "#unwrap", attrs: cleanAttrs, children: [], source: tag };
+    stack[stack.length - 1].children.push(node);
+    if (!selfClosed) stack.push(node);
+  }
+
+  function closeTag(tag) {
+    if (DETAILS_SKIP_TAGS[tag]) {
+      if (skipDepth > 0) skipDepth--;
+      return;
+    }
+    if (skipDepth > 0) return;
+    for (let i = stack.length - 1; i > 0; i--) {
+      if (stack[i].source === tag) {
+        stack.length = i;
+        return;
+      }
+    }
+  }
+
+  while (index < source.length) {
+    const lt = source.indexOf("<", index);
+    if (lt < 0) {
+      addText(source.slice(index));
+      break;
+    }
+    if (lt > index) addText(source.slice(index, lt));
+    if (source.startsWith("<!--", lt)) {
+      const end = source.indexOf("-->", lt + 4);
+      index = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    const next = source.charAt(lt + 1);
+    if (next === "!" || next === "?") {
+      const end = source.indexOf(">", lt + 2);
+      index = end < 0 ? source.length : end + 1;
+      continue;
+    }
+    const closing = next === "/";
+    const nameStart = lt + (closing ? 2 : 1);
+    const nameMatch = /^[a-zA-Z][a-zA-Z0-9:-]*/.exec(source.slice(nameStart, nameStart + 40));
+    if (!nameMatch) {
+      addText("<");
+      index = lt + 1;
+      continue;
+    }
+    let end = nameStart + nameMatch[0].length;
+    let quote = "";
+    while (end < source.length) {
+      const c = source.charAt(end);
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === ">") {
+        break;
+      }
+      end++;
+    }
+    const tag = nameMatch[0].toLowerCase();
+    const inner = source.slice(nameStart + nameMatch[0].length, end);
+    index = end + 1;
+    if (closing) {
+      closeTag(tag);
+      continue;
+    }
+    const selfClosed = /\/\s*$/.test(inner);
+    openTag(tag, parseDetailsAttributes(inner.replace(/\/\s*$/, "")), selfClosed);
+    if (DETAILS_RAW_TEXT_TAGS[tag] && !selfClosed) {
+      const closer = new RegExp("</" + tag + "\\s*>", "i");
+      const found = closer.exec(source.slice(index));
+      index = found ? index + found.index + found[0].length : source.length;
+      if (skipDepth > 0) skipDepth--;
+    }
+  }
+  return root.children;
+}
+
+function appendDetailsNodes(parent, nodes, doc, ground) {
+  for (const node of nodes) {
+    if (node.t === "text") {
+      parent.appendChild(doc.createTextNode(node.v));
+      continue;
+    }
+    if (node.tag === "#unwrap") {
+      appendDetailsNodes(parent, node.children, doc, ground);
+      continue;
+    }
+    const element = doc.createElement(node.tag === "font" ? "span" : node.tag);
+    if (node.tag === "a" && node.attrs.href) {
+      element.setAttribute("href", node.attrs.href);
+      element.setAttribute("rel", "noopener noreferrer");
+      element.setAttribute("target", "_blank");
+    }
+    const colors = resolveDetailsColors({ color: node.attrs.color, background: node.attrs.background }, ground);
+    if (colors.color) element.style.color = colors.color;
+    if (colors.background) element.style.backgroundColor = colors.background;
+    appendDetailsNodes(element, node.children, doc, ground);
+    parent.appendChild(element);
+  }
+}
+
+function renderDetailsInto(container, html, doc, ground) {
+  while (container.firstChild) container.removeChild(container.firstChild);
+  appendDetailsNodes(container, parseDetailsHTML(html), doc, ground);
+  return container;
+}
+
+function detailsSourceFor(item, fields) {
+  if (!item || !fields || fields.indexOf("itemDetails") === -1) return "";
+  if ((item.itemType || "").toLowerCase() === "header") return "";
+  const details = item.details || {};
+  if (typeof details.htmlDetails === "string" && details.htmlDetails.length > 0) return details.htmlDetails;
+  return typeof details.description === "string" ? details.description : "";
+}
+
+function clampSplit(value) {
+  const number = Number(value);
+  if (!isFinite(number)) return SPLIT_DEFAULT;
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, number));
+}
+
+function splitFractionForX(x, containerWidth, dividerWidth) {
+  const usable = containerWidth - dividerWidth;
+  if (!(usable > 0)) return SPLIT_DEFAULT;
+  return clampSplit((x - dividerWidth / 2) / usable);
+}
+
+function splitAllowedFor(width, height) {
+  return height > 0 && width / height >= SPLIT_MIN_ASPECT;
+}
+
+function splitPagerWidth(containerWidth, dividerWidth, fraction) {
+  return Math.max(0, (containerWidth - dividerWidth) * clampSplit(fraction));
+}
 </script>
 
 <script>
@@ -2071,6 +2457,10 @@ const el = {
   lsNextTitle: document.getElementById("lsNextTitle"),
   lsNextNotes: document.getElementById("lsNextNotes"),
   lsBottom: document.getElementById("lsBottom"),
+  lsSplit: document.getElementById("lsSplit"),
+  lsDivider: document.getElementById("lsDivider"),
+  lsDetails: document.getElementById("lsDetails"),
+  lsDetailsBody: document.getElementById("lsDetailsBody"),
   lsMessage: document.getElementById("lsMessage"),
   lsMessageText: document.getElementById("lsMessageText"),
   lsMessageFrom: document.getElementById("lsMessageFrom"),
@@ -2143,6 +2533,138 @@ function storeCueDisplay(value) {
   try { localStorage.setItem(CUE_DISPLAY_KEY, value); } catch (_) {  }
 }
 
+const SPLIT_STORAGE_KEY = "pagerDetailsSplit";
+const SPLIT_DIVIDER_PX = 22;
+const SPLIT_HOLD_MS = 800;
+let splitFraction = SPLIT_DEFAULT;
+let splitActive = false;
+let splitPagerPx = 0;
+let lastDetailsSignature = "";
+let lastDetailsItemId = "";
+
+function readStoredSplit() {
+  try {
+    const raw = localStorage.getItem(SPLIT_STORAGE_KEY);
+    return raw === null ? SPLIT_DEFAULT : Number(raw);
+  } catch (_) { return SPLIT_DEFAULT; }
+}
+
+function storeSplit(value) {
+  try { localStorage.setItem(SPLIT_STORAGE_KEY, String(value)); } catch (_) {  }
+}
+
+splitFraction = clampSplit(readStoredSplit());
+
+function landscapeUnit() {
+  return Math.min(splitActive ? splitPagerPx : window.innerWidth, window.innerHeight);
+}
+
+function applySplitGeometry() {
+  if (!splitActive) return;
+  splitPagerPx = splitPagerWidth(el.lsSplit.clientWidth, SPLIT_DIVIDER_PX, splitFraction);
+  el.lsSplit.style.gridTemplateColumns = splitPagerPx + "px " + SPLIT_DIVIDER_PX + "px minmax(0, 1fr)";
+  el.landscape.style.setProperty("--pw", splitPagerPx + "px");
+  el.lsDivider.setAttribute("aria-valuenow", String(Math.round(splitFraction * 100)));
+}
+
+function setSplitActive(on) {
+  if (splitActive !== on) {
+    splitActive = on;
+    el.lsSplit.classList.toggle("split", on);
+    setHidden(el.lsDivider, !on);
+    setHidden(el.lsDetails, !on);
+    if (!on) {
+      el.lsSplit.style.gridTemplateColumns = "";
+      el.landscape.style.removeProperty("--pw");
+      splitPagerPx = 0;
+      lastDetailsSignature = "";
+    }
+    lastFitKey = "";
+  }
+  applySplitGeometry();
+}
+
+function setSplitFraction(value, persist) {
+  splitFraction = clampSplit(value);
+  applySplitGeometry();
+  lastFitKey = "";
+  fitLandscapeBottom(el.lsBottom.dataset.mode);
+  if (persist) storeSplit(splitFraction);
+}
+
+function detailsGround() {
+  return parseDetailsColor(getComputedStyle(root).getPropertyValue("--pal-pager-panel"));
+}
+
+function renderDetailsPane() {
+  const item = activeItem();
+  const eligible = root.dataset.layout === "landscape" && splitAllowedFor(window.innerWidth, window.innerHeight);
+  const source = eligible ? detailsSourceFor(item, pagerFieldsForRole(activeRole())) : "";
+  setSplitActive(source !== "");
+  if (source === "") return;
+  const itemId = item ? String(item.id) : "";
+  const signature = itemId + "\u0001" + source;
+  if (signature === lastDetailsSignature) return;
+  lastDetailsSignature = signature;
+  renderDetailsInto(el.lsDetailsBody, source, document, detailsGround());
+  if (itemId !== lastDetailsItemId) {
+    lastDetailsItemId = itemId;
+    el.lsDetailsBody.scrollTop = 0;
+  }
+}
+
+(function wireDivider() {
+  let drag = null;
+  let holdTimer = null;
+  function clearHold() {
+    if (holdTimer !== null) clearTimeout(holdTimer);
+    holdTimer = null;
+  }
+  el.lsDivider.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    drag = { x: event.clientX, y: event.clientY, start: splitFraction, moved: false };
+    try { el.lsDivider.setPointerCapture(event.pointerId); } catch (_) {  }
+    el.lsDivider.classList.add("dragging");
+    clearHold();
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      if (drag && !drag.moved) {
+        drag = null;
+        el.lsDivider.classList.remove("dragging");
+        setSplitFraction(SPLIT_DEFAULT, true);
+      }
+    }, SPLIT_HOLD_MS);
+    event.preventDefault();
+  });
+  el.lsDivider.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.hypot(dx, event.clientY - drag.y) < 6) return;
+    drag.moved = true;
+    clearHold();
+    const usable = el.lsSplit.clientWidth - SPLIT_DIVIDER_PX;
+    if (usable > 0) setSplitFraction(drag.start + dx / usable, false);
+  });
+  function finish() {
+    clearHold();
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    el.lsDivider.classList.remove("dragging");
+    if (moved) storeSplit(splitFraction);
+  }
+  el.lsDivider.addEventListener("pointerup", finish);
+  el.lsDivider.addEventListener("pointercancel", finish);
+  el.lsDivider.addEventListener("dblclick", () => setSplitFraction(SPLIT_DEFAULT, true));
+  el.lsDivider.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") setSplitFraction(splitFraction - SPLIT_NUDGE, true);
+    else if (event.key === "ArrowRight") setSplitFraction(splitFraction + SPLIT_NUDGE, true);
+    else if (event.key === "Home") setSplitFraction(SPLIT_DEFAULT, true);
+    else return;
+    event.preventDefault();
+  });
+})();
+
 function renderCueButtons() {
   for (const button of document.querySelectorAll("[data-cue-display]")) {
     button.setAttribute("aria-pressed", button.dataset.cueDisplay === cueDisplay ? "true" : "false");
@@ -2182,6 +2704,7 @@ function applyLayout() {
   el.standard.classList.toggle("hidden", layout !== "standard");
   el.lowerthird.classList.toggle("hidden", layout !== "lowerthird");
   el.landscape.classList.toggle("hidden", layout !== "landscape");
+  if (layout !== "landscape") setSplitActive(false);
   tickLocalTime();
   if (snapshot) render();
 }
@@ -2423,6 +2946,7 @@ function renderSlot(badge, slot) {
 }
 
 function renderLandscape() {
+  renderDetailsPane();
   const item = activeItem();
 
   renderSlot(el.lsBadge, el.lsSlot);
@@ -2551,7 +3075,7 @@ function fitPortrait(hasMessage) {
 }
 
 function fitLandscapeBottom(mode) {
-  const u = Math.min(window.innerWidth, window.innerHeight);
+  const u = landscapeUnit();
   const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextDetails.textContent, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
   if (key === lastFitKey) return;
   lastFitKey = key;

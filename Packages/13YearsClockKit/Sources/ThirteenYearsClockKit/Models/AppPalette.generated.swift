@@ -18,6 +18,7 @@ public enum AppPalette {
     public static let pagerGround = fixed(0x111114FF)
     public static let pagerClock = fixed(0xF5F5F7FF)
     public static let pagerMessage = fixed(0xFFD60AFF)
+    public static let pagerPanel = fixed(0x1B1B20FF)
     public static let displayBlack = fixed(0x000000FF)
     public static let displayWhite = fixed(0xFFFFFFFF)
     public static let positive = adaptive(light: 0x34C759FF, dark: 0x30D158FF)

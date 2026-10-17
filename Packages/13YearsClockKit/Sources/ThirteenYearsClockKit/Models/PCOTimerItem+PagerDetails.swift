@@ -43,6 +43,8 @@ extension PCOTimerItem {
                 }
             case .startTime:
                 if let startTime { segments.append("@ " + clockFormat.string(from: startTime, timeZone: timeZone)) }
+            case .itemDetails:
+                break
             }
         }
         return segments
@@ -56,5 +58,18 @@ extension PCOTimerItem {
     ) -> String? {
         let segments = pagerDetailSegments(fields: fields, startTime: startTime, clockFormat: clockFormat, timeZone: timeZone)
         return segments.isEmpty ? nil : segments.joined(separator: Self.pagerDetailsSeparator)
+    }
+
+    public static let maxItemDetailsCharacters = 64_000
+
+    public func itemDetailsSource(includingDescription: Bool) -> String? {
+        guard !isHeader else { return nil }
+        if let html = details?.htmlDetails, !html.isEmpty {
+            return String(html.prefix(Self.maxItemDetailsCharacters))
+        }
+        if includingDescription, let text = details?.description, !text.isEmpty {
+            return String(text.prefix(Self.maxItemDetailsCharacters))
+        }
+        return nil
     }
 }

@@ -250,8 +250,7 @@ private struct RunSheetDetailsPane: View {
     }
 
     static func source(for item: PCOTimerItem) -> String? {
-        if let html = item.details?.htmlDetails, !html.isEmpty { return html }
-        return item.details?.description.flatMap { $0.isEmpty ? nil : $0 }
+        item.itemDetailsSource(includingDescription: true)
     }
 
     private var controls: some View {
@@ -300,79 +299,15 @@ private struct RunSheetHTMLText: View {
     let scale: Double
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var rendered: AttributedString
 
     private static let baseSize: CGFloat = 13
-    private static let minimumContrast = 2.5
-
-    init(html: String, scale: Double) {
-        self.html = html
-        self.scale = scale
-        _rendered = State(initialValue: HTMLAttributedConverter.attributedString(fromHTML: html))
-    }
 
     var body: some View {
-        Text(styled)
-            .font(.system(size: Self.baseSize * CGFloat(scale)))
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .task(id: html) { rendered = HTMLAttributedConverter.attributedString(fromHTML: html) }
+        HTMLRichText(html: html, baseSize: Self.baseSize * CGFloat(scale), ground: pageColor)
     }
 
     private var pageColor: HTMLColor {
         colorScheme == .dark ? HTMLColor(red: 0.12, green: 0.12, blue: 0.13) : HTMLColor(red: 1, green: 1, blue: 1)
-    }
-
-    private func color(_ value: HTMLColor) -> Color {
-        Color(.sRGB, red: value.red, green: value.green, blue: value.blue, opacity: value.alpha)
-    }
-
-    private var styled: AttributedString {
-        var text = rendered
-        let size = Self.baseSize * CGFloat(scale)
-        for run in text.runs {
-            let range = run.range
-            let background = run[HTMLBackgroundColorKey.self].flatMap(HTMLColor.init(css:))
-            if let background {
-                text[range].backgroundColor = color(background)
-            }
-            let ground = background.map { $0.alpha >= 0.5 ? $0 : pageColor } ?? pageColor
-            if let foreground = run[HTMLForegroundColorKey.self].flatMap(HTMLColor.init(css:)),
-               HTMLColor.contrast(foreground, ground) >= Self.minimumContrast {
-                text[range].foregroundColor = color(foreground)
-            } else if background != nil {
-                text[range].foregroundColor = ground.luminance > 0.4 ? .black : .white
-            }
-            if run[HTMLUnderlineKey.self] == true {
-                text[range].underlineStyle = .single
-            }
-            if run[HTMLStrikethroughKey.self] == true {
-                text[range].strikethroughStyle = .single
-            }
-            var runSize = size * CGFloat(run[HTMLFontScaleKey.self] ?? 1)
-            var weight: Font.Weight?
-            if let level = run[HTMLHeadingLevelKey.self] {
-                let factors: [Int: CGFloat] = [1: 1.5, 2: 1.3, 3: 1.15, 4: 1.05, 5: 1, 6: 0.9]
-                runSize *= factors[level] ?? 1
-                weight = .bold
-            }
-            if let baseline = run[HTMLBaselineKey.self] {
-                text[range].baselineOffset = CGFloat(baseline) * runSize * 0.35
-            }
-            let intent = run.inlinePresentationIntent ?? []
-            let resolvedWeight = weight ?? (intent.contains(.stronglyEmphasized) ? .bold : nil)
-            let needsFont = runSize != size || weight != nil || run[HTMLMonospaceKey.self] == true
-            if needsFont {
-                var font: Font = run[HTMLMonospaceKey.self] == true
-                    ? .system(size: runSize, design: .monospaced)
-                    : .system(size: runSize)
-                if let resolvedWeight { font = font.weight(resolvedWeight) }
-                if intent.contains(.emphasized) { font = font.italic() }
-                text[range].font = font
-            }
-        }
-        return text
     }
 }
 

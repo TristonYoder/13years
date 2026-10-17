@@ -617,7 +617,7 @@ static void testDetailsJson() {
       "\"itemTimes\":[{\"id\":\"t1\",\"planTimeId\":\"p\",\"length\":300}]}},"
       "\"nextItem\":{\"id\":\"n1\",\"title\":\"Sermon\",\"itemType\":\"item\",\"lengthInSeconds\":1800,\"notes\":{},\"startsAtMs\":1760000000000,"
       "\"details\":{\"servicePosition\":\"post\",\"customSequenceShort\":[\"C\",\"B\"],\"arrangement\":{\"id\":\"a\",\"bpm\":90.5,\"sequenceShort\":[\"V1\"]},\"htmlDetails\":\"<p>x</p>\"}},"
-      "\"roleCues\":[{\"id\":\"r\",\"name\":\"Band\",\"state\":\"OFF\",\"pagerFields\":[\"bpm\",\"key\",\"bogus\",\"startTime\"]},{\"id\":\"s\",\"name\":\"Host\",\"state\":\"OFF\"}]}";
+      "\"roleCues\":[{\"id\":\"r\",\"name\":\"Band\",\"state\":\"OFF\",\"pagerFields\":[\"bpm\",\"key\",\"bogus\",\"itemDetails\",\"startTime\"]},{\"id\":\"s\",\"name\":\"Host\",\"state\":\"OFF\"}]}";
   JsonDocument doc;
   CHECK(!deserializeJson(doc, src, strlen(src), DeserializationOption::Filter(filter)));
 

@@ -13,6 +13,7 @@ public enum PagerItemField: String, Codable, CaseIterable, Identifiable, Hashabl
     case mediaType
     case servicePosition
     case startTime
+    case itemDetails
 
     public var id: String { rawValue }
 
@@ -27,8 +28,11 @@ public enum PagerItemField: String, Codable, CaseIterable, Identifiable, Hashabl
         case .mediaType: return "Media type"
         case .servicePosition: return "Pre/post-service"
         case .startTime: return "Start time"
+        case .itemDetails: return "Item details"
         }
     }
+
+    public var isLineSegment: Bool { self != .itemDetails }
 
     public static func normalized(_ fields: [PagerItemField]) -> [PagerItemField] {
         let wanted = Set(fields)
