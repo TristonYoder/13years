@@ -1670,7 +1670,7 @@ public final class CueEngine: ObservableObject {
         mirrorToPCOLive(direction: .previous, count: steps, targetItemId: item.id)
     }
 
-    var derivedNextPlanItem: PCOTimerItem? {
+    public var derivedNextPlanItem: PCOTimerItem? {
         guard activeTimerItem != nil, planItems.indices.contains(activeItemIndex),
               let index = nextSelectableIndex(after: activeItemIndex) else { return nil }
         return planItems[index]

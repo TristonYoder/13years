@@ -29,6 +29,7 @@ public struct ServiceFlowView: View {
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
     #if os(macOS)
     @SceneStorage("runSheetTableColumns") private var tableColumns = TableColumnCustomization<PCOTimerItem>()
+    @AppStorage("runSheetNowNextPane") private var nowNextPane = false
     #endif
 
     public init() {}
@@ -62,6 +63,13 @@ public struct ServiceFlowView: View {
 
                 if layout == .table {
                     RunSheetColumnsMenu(customization: $tableColumns, categories: knownNoteCategories)
+
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { nowNextPane.toggle() }
+                    } label: {
+                        Label("Now & Next", systemImage: "rectangle.split.2x1")
+                    }
+                    .help(nowNextPane ? "Hide the Now & Next pane" : "Show the current and next items in a side pane")
                 }
                 #endif
 
@@ -223,19 +231,27 @@ public struct ServiceFlowView: View {
     @ViewBuilder
     private func tableLayout(_ schedule: RunSheetSchedule) -> some View {
         #if os(macOS)
-        VStack(spacing: 0) {
-            tableControls
-            RunSheetTableView(
-                schedule: schedule,
-                selection: $selectedItemId,
-                customization: $tableColumns,
-                knownCategories: knownNoteCategories,
-                excludedLabel: engine.liveEventTimeLabel,
-                onEdit: { editorMode = .edit($0) },
-                onDelete: { pendingDeleteItem = $0 },
-                onNewWaypoint: { newWaypointTargetItemId = $0.id }
-            )
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                tableControls
+                RunSheetTableView(
+                    schedule: schedule,
+                    selection: $selectedItemId,
+                    customization: $tableColumns,
+                    knownCategories: knownNoteCategories,
+                    excludedLabel: engine.liveEventTimeLabel,
+                    compact: nowNextPane,
+                    onEdit: { editorMode = .edit($0) },
+                    onDelete: { pendingDeleteItem = $0 },
+                    onNewWaypoint: { newWaypointTargetItemId = $0.id }
+                )
+            }
+            if nowNextPane {
+                RunSheetNowNextPane(schedule: schedule)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
+        .clipped()
         #else
         EmptyView()
         #endif
