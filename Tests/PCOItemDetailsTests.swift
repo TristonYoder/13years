@@ -640,6 +640,56 @@ final class HTMLAttributedConverterTests: XCTestCase {
     private func convert(_ html: String) -> AttributedString { HTMLAttributedConverter.attributedString(fromHTML: html) }
     private func plain(_ html: String) -> String { HTMLAttributedConverter.plainText(fromHTML: html) }
 
+    private func run(_ string: AttributedString, containing word: String) -> AttributedString.Runs.Run? {
+        string.runs.first { String(string[$0.range].characters).contains(word) }
+    }
+
+    func testInlineColorsAndHighlights() {
+        let html = #"<p><span style="color: #ff0000">Red</span> <span style="background-color: rgb(255, 255, 0)">Marked</span> <font color="blue">Blue</font> <mark>Mark</mark></p>"#
+        let result = convert(html)
+        XCTAssertEqual(run(result, containing: "Red")?[HTMLForegroundColorKey.self], "#FF0000FF")
+        XCTAssertEqual(run(result, containing: "Marked")?[HTMLBackgroundColorKey.self], "#FFFF00FF")
+        XCTAssertEqual(run(result, containing: "Blue")?[HTMLForegroundColorKey.self], "#0000FFFF")
+        XCTAssertNotNil(run(result, containing: "Mark")?[HTMLBackgroundColorKey.self])
+        XCTAssertEqual(String(result.characters), "Red Marked Blue Mark")
+    }
+
+    func testNestedStylesInheritAndOverride() {
+        let html = #"<span style="color:#00ff00;font-weight:bold">Green <span style="font-weight:normal;font-style:italic">plain</span> bold</span> after"#
+        let result = convert(html)
+        XCTAssertEqual(run(result, containing: "plain")?[HTMLForegroundColorKey.self], "#00FF00FF")
+        XCTAssertFalse(run(result, containing: "plain")?.inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false)
+        XCTAssertTrue(run(result, containing: "plain")?.inlinePresentationIntent?.contains(.emphasized) ?? false)
+        XCTAssertTrue(run(result, containing: "bold")?.inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false)
+        XCTAssertNil(run(result, containing: "after")?[HTMLForegroundColorKey.self])
+    }
+
+    func testStrikethroughSizesMonospaceAndBaseline() {
+        let result = convert("<s>Gone</s> <span style=\"font-size: 26px\">Big</span> <code>TC 1</code> E=mc<sup>2</sup> H<sub>2</sub>O <small>tiny</small>")
+        XCTAssertEqual(run(result, containing: "Gone")?[HTMLStrikethroughKey.self], true)
+        XCTAssertEqual(run(result, containing: "Big")?[HTMLFontScaleKey.self], 2)
+        XCTAssertEqual(run(result, containing: "TC 1")?[HTMLMonospaceKey.self], true)
+        XCTAssertEqual(result.runs.first { String(result[$0.range].characters) == "2" && $0[HTMLBaselineKey.self] == 1 }.map { _ in true }, true)
+        XCTAssertNotNil(result.runs.first { $0[HTMLBaselineKey.self] == -1 })
+        XCTAssertEqual(run(result, containing: "tiny")?[HTMLFontScaleKey.self], 0.85)
+    }
+
+    func testSmallHeadingsRulesAndTables() {
+        let result = convert("<h5>Cue</h5><hr><table><tr><th>Who</th><td>Host</td></tr></table>")
+        XCTAssertEqual(result.runs.compactMap { $0[HTMLHeadingLevelKey.self] }, [5])
+        XCTAssertTrue(String(result.characters).contains("\u{2500}"))
+        XCTAssertTrue(String(result.characters).contains("Who   Host"))
+        XCTAssertTrue(run(result, containing: "Who")?.inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false)
+    }
+
+    func testCSSColorParsing() {
+        XCTAssertEqual(HTMLColor(css: "#abc")?.hex, "#AABBCCFF")
+        XCTAssertEqual(HTMLColor(css: "rgba(0, 0, 0, 0.5)")?.hex, "#00000080")
+        XCTAssertEqual(HTMLColor(css: "Navy")?.hex, "#000080FF")
+        XCTAssertNil(HTMLColor(css: "inherit"))
+        XCTAssertGreaterThan(HTMLColor.contrast(HTMLColor(css: "black")!, HTMLColor(css: "white")!), 20)
+    }
+
     func testPlainTextPassesThroughWithLineBreaks() {
         XCTAssertEqual(plain("Walk on left\nExit right"), "Walk on left\nExit right")
         XCTAssertEqual(plain("Just words"), "Just words")
