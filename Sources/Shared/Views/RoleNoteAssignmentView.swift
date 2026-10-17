@@ -34,6 +34,30 @@ public struct RoleNoteAssignmentView: View {
                     }
                 }
 
+                if let context = engine.pcoPlanContext, !context.teamPositionReferences.isEmpty {
+                    Section {
+                        ForEach(engine.roles) { role in
+                            Picker(role.name, selection: Binding(
+                                get: { role.pcoTeamPosition ?? "" },
+                                set: { engine.setPCOTeamPosition(forRoleId: role.id, $0.isEmpty ? nil : $0) }
+                            )) {
+                                Text("None").tag("")
+                                let references = context.teamPositionReferences
+                                if let current = role.pcoTeamPosition, !references.contains(current) {
+                                    Text(current).tag(current)
+                                }
+                                ForEach(references, id: \.self) { reference in
+                                    Text(reference).tag(reference)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Planning Center Position")
+                    } footer: {
+                        Text("Links this role to a Planning Center team position. When the role has no person name, the confirmed person for that position fills in automatically (unconfirmed if nobody has confirmed, never someone who declined).")
+                    }
+                }
+
                 if FeatureFlags.plotiphar && !engine.plotipharRoles.isEmpty {
                     Section {
                         ForEach(engine.roles) { role in

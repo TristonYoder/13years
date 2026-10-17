@@ -66,6 +66,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoChangesAccept(revision: String?)
     case pcoChangesDismiss(revision: String?)
     case pcoChangesCheck
+    case pcoPlanContextRefresh
     case eventTimeCreate(name: String?, day: String?, startTime: String?)
     case eventTimeUpdate(id: String, name: String, day: String, startTime: String)
     case eventTimeDelete(id: String)
@@ -196,6 +197,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/changes/accept", ["revision": revision ?? NSNull()])
         case .pcoChangesDismiss(let revision):
             return Self.post("pco/changes/dismiss", ["revision": revision ?? NSNull()])
+        case .pcoPlanContextRefresh:
+            return Self.post("pco/plan-context/refresh")
         case .pcoChangesCheck:
             return Self.post("pco/changes/check")
         case .eventTimeCreate(let name, let day, let startTime):

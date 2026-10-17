@@ -57,8 +57,19 @@ extension CueEngine {
         await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
     }
 
+    public func refreshPCOPlanContext() async {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoPlanContextRefresh)
+            return
+        }
+        guard isPCOConnected, let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
+        await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+    }
+
     func refreshPCOPlanContext(serviceTypeId: String, planId: String) async {
         guard !isRemoteMirror else { return }
+        isRefreshingPCOPlanContext = true
+        defer { isRefreshingPCOPlanContext = false }
         let context: PCOPlanContext
         do {
             if let fetchContext = pcoChangeTracking.fetchContext {
@@ -67,11 +78,14 @@ extension CueEngine {
                 context = try await pcoClient.fetchPlanContext(serviceTypeId: serviceTypeId, planId: planId)
             }
         } catch {
+            pcoPlanContextError = error.localizedDescription
             AppLog.cue.error("CueEngine: PCO plan context refresh failed: \(error.localizedDescription, privacy: .private)")
             return
         }
         guard currentPCOPlanId == planId else { return }
+        pcoPlanContextError = nil
         pcoPlanContext = context
+        applyPCOTeamAssignments()
     }
 
     @discardableResult

@@ -22,6 +22,7 @@ public struct ServiceFlowView: View {
     @State private var selectedItemId: String?
     @State private var showingEventTimes = false
     @AppStorage(RunSheetLayout.storageKey) private var layoutRaw = RunSheetLayout.list.rawValue
+    @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
 
     public init() {}
@@ -52,6 +53,13 @@ public struct ServiceFlowView: View {
                 .labelsHidden()
                 .frame(width: 84)
                 .help("Switch the run sheet between a list and a table with customizable columns")
+                #endif
+
+                #if os(macOS) || os(iOS)
+                Button(action: { planPanelVisible.toggle() }) {
+                    Label("Plan", systemImage: "sidebar.trailing")
+                }
+                .help("Show or hide the Planning Center plan details: notes, times and team")
                 #endif
 
                 Button(action: { showingImportText = true }) {
@@ -98,6 +106,9 @@ public struct ServiceFlowView: View {
                 }
             }
         }
+        #if os(macOS) || os(iOS)
+        .modifier(RunSheetPlanInspectorModifier(isPresented: $planPanelVisible))
+        #endif
         .sheet(item: $editorMode) { mode in
             PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition in
                 if let id {

@@ -768,6 +768,15 @@ public final class ControlAPIRouter {
             Task { @MainActor in await engine.checkPCOForChanges() }
             return accepted(pcoStatus())
 
+        case ("pco", "plan-context", "refresh"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.currentPCOPlanId != nil else {
+                return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            let engine = engine
+            Task { @MainActor in await engine.refreshPCOPlanContext() }
+            return accepted(pcoStatus())
+
         case ("pco", "authorize", "complete"):
             guard allows(method, "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.PCOAuthorizeCompleteBody.self, body),
@@ -957,6 +966,7 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(role.name, ContentLimits.name, "Role name") { return tooLong }
                 if let tooLong = tooLong(role.personName ?? "", ContentLimits.name, "personName") { return tooLong }
                 if let tooLong = tooLong(role.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+                if let tooLong = tooLong(role.pcoTeamPosition ?? "", ContentLimits.name * 2, "pcoTeamPosition") { return tooLong }
                 guard role.assignedNoteCategories.count <= ContentLimits.maxNoteCategories else {
                     return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
                 }
@@ -1003,6 +1013,7 @@ public final class ControlAPIRouter {
         if let name = request.name, let tooLong = tooLong(name.trimmingCharacters(in: .whitespaces), ContentLimits.name, "Role name") { return tooLong }
         if let tooLong = tooLong(request.personName ?? "", ContentLimits.name, "personName") { return tooLong }
         if let tooLong = tooLong(request.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+        if let tooLong = tooLong(request.pcoTeamPosition ?? "", ContentLimits.name * 2, "pcoTeamPosition") { return tooLong }
         var clockFormat: ClockFormat??
         if let raw = request.clockFormat {
             if raw.isEmpty || raw == "default" {
@@ -1033,6 +1044,9 @@ public final class ControlAPIRouter {
         }
         if FeatureFlags.plotiphar, let plotipharRoleId = request.plotipharRoleId {
             engine.setPlotipharRoleId(forRoleId: id, plotipharRoleId: plotipharRoleId.isEmpty ? nil : plotipharRoleId)
+        }
+        if let teamPosition = request.pcoTeamPosition {
+            engine.setPCOTeamPosition(forRoleId: id, teamPosition.isEmpty ? nil : teamPosition)
         }
         if let categories = request.assignedNoteCategories {
             let current = Set(engine.roles.first(where: { $0.id == id })?.assignedNoteCategories ?? [])
@@ -1213,7 +1227,8 @@ public final class ControlAPIRouter {
             serviceTypes: engine.pcoServiceTypes.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
             plans: engine.pcoPlans.map { ControlAPIState.PCOStatus.PlanInfo(id: $0.id, title: $0.title, dates: $0.dates) },
             noteCategories: engine.pcoNoteCategories.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
-            pendingChanges: engine.pendingPCOChangesForCurrentPlan
+            pendingChanges: engine.pendingPCOChangesForCurrentPlan,
+            planContext: engine.pcoPlanContext
         )
     }
 

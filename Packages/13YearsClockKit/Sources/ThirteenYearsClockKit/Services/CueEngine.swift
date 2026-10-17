@@ -59,6 +59,8 @@ public final class CueEngine: ObservableObject {
     @Published public var pcoNoteCategories: [PCOClient.PCONoteCategory] = []
     @Published public internal(set) var pcoPendingChanges: PCOPendingChanges?
     @Published public internal(set) var pcoPlanContext: PCOPlanContext?
+    @Published public internal(set) var isRefreshingPCOPlanContext = false
+    @Published public internal(set) var pcoPlanContextError: String?
     @Published public var isPCOLiveSyncEnabled: Bool = false {
         didSet { write(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
     }
@@ -2304,7 +2306,7 @@ public final class CueEngine: ObservableObject {
         self.activeTimerItem = item
     }
 
-    private func broadcastState() {
+    func broadcastState() {
         broadcastLegacyState()
         emitV2Roles()
     }

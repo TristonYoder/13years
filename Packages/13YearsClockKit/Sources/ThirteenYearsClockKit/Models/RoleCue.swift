@@ -10,6 +10,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var clockFormat: ClockFormat?
     public var state: CueState
     public var plotipharRoleId: String?
+    public var pcoTeamPosition: String?
     public var lastUpdated: Date
 
     public var assignedNoteCategories: [String]
@@ -21,6 +22,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         clockFormat: ClockFormat? = nil,
         state: CueState = .off,
         plotipharRoleId: String? = nil,
+        pcoTeamPosition: String? = nil,
         lastUpdated: Date = Date(),
         assignedNoteCategories: [String] = []
     ) {
@@ -30,6 +32,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.clockFormat = clockFormat
         self.state = state
         self.plotipharRoleId = plotipharRoleId
+        self.pcoTeamPosition = pcoTeamPosition
         self.lastUpdated = lastUpdated
         self.assignedNoteCategories = assignedNoteCategories
     }

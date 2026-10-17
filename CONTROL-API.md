@@ -146,7 +146,8 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
     "serviceTypes": [],
     "plans": [],
     "noteCategories": [],
-    "pendingChanges": null
+    "pendingChanges": null,
+    "planContext": null
   },
   "plotiphar": {
     "pairingState": "idle",
@@ -245,7 +246,7 @@ Grouped by function. Dates in requests and responses are ISO-8601. Every request
 | `GET /v1/roles` | GET | List all roles. |
 | `POST /v1/roles` | POST | Create a role. Body: `{"name": "string"}`. Returns the new role (201). Name is required and cannot be empty. |
 | `GET /v1/roles/{id}` | GET | Read one role. |
-| `PATCH /v1/roles/{id}` | PATCH | Update a role. Body: `{"name": "string?", "personName": "string?", "clockFormat": "string?", "plotipharRoleId": "string?", "assignedNoteCategories": ["string"]?, "state": "string?"}`. All fields optional (absent means leave alone). `clockFormat` is `twelveHour` or `twentyFourHour` to override the producer clock format on that role's pagers; `""` or `"default"` clears the override (the role follows `settings.clockFormat`); anything else is a 400. Roles in state carry `clockFormat` as a string or `null`. Returns the updated role. Name cannot be empty if present. |
+| `PATCH /v1/roles/{id}` | PATCH | Update a role. Body: `{"name": "string?", "personName": "string?", "clockFormat": "string?", "plotipharRoleId": "string?", "pcoTeamPosition": "string?", "assignedNoteCategories": ["string"]?, "state": "string?"}`. All fields optional (absent means leave alone). `pcoTeamPosition` links the role to a Planning Center team position as `"Team › Position"` (the exact strings in `GET /v1/plan/context`); `""` unlinks. While a linked role has no `personName`, the plan's confirmed person for that position (unconfirmed if nobody has confirmed, never a person who declined; several people are joined as `"Ana & Ben"`) is filled in whenever the plan context loads or refreshes. A name typed by hand is never overwritten. Roles in state carry `pcoTeamPosition` as a string, absent when unlinked. `clockFormat` is `twelveHour` or `twentyFourHour` to override the producer clock format on that role's pagers; `""` or `"default"` clears the override (the role follows `settings.clockFormat`); anything else is a 400. Roles in state carry `clockFormat` as a string or `null`. Returns the updated role. Name cannot be empty if present. |
 | `DELETE /v1/roles/{id}` | DELETE | Remove a role. Returns the new role list. |
 | `POST /v1/roles/{id}/cue` | POST | Fire a cue for one role. Body: `{"state": "string"}`. State must be one of the `CueState` enum values — `OFF`, `STANDBY`, `GO`, uppercase. (`RESET` is *not* one of them; clearing a cue is `OFF`.) Returns the full state snapshot. |
 | `GET /v1/selection` | GET | Roles currently selected on the producer's screen (list of role ids). |
@@ -376,6 +377,7 @@ These routes start background operations; most return 202. Poll `/v1/pco` or wat
 | `GET /v1/pco/changes` | GET | Changes made in Planning Center to the loaded plan that haven't been merged or dismissed. Returns `{"pending": PendingChanges}` or `{"pending": null}`; the same object is `pco.pendingChanges` in the state snapshot. |
 | `POST /v1/pco/changes/accept` | POST | Merge the pending changes into the run sheet. Body (optional): `{"revision": "string"}`. The active item stays active and its timer keeps running; only fields that changed in Planning Center are overwritten, so local-only items and edits are kept. Returns the plan section (200), or 409 when nothing is pending or `revision` is out of date. |
 | `POST /v1/pco/changes/dismiss` | POST | Keep the run sheet as it is. Body (optional): `{"revision": "string"}`. That revision isn't offered again; a later change in Planning Center raises a new prompt with only the newer differences. Returns the PCO section of state, or 409 like `accept`. |
+| `POST /v1/pco/plan-context/refresh` | POST | Reload the plan context (notes, times, team, needed positions) from Planning Center now (202). 409 when no PCO plan is loaded. The result appears in `GET /v1/plan/context` and in `pco.planContext` of the state snapshot. |
 | `POST /v1/pco/changes/check` | POST | Check Planning Center for changes now instead of waiting for the next poll (202). 409 when no PCO plan is loaded. |
 
 #### Two-way sync

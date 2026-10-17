@@ -84,6 +84,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var plans: [PlanInfo]
         public var noteCategories: [IdentifiedName]
         public var pendingChanges: PCOPendingChanges? = nil
+        public var planContext: PCOPlanContext? = nil
 
         public struct PlanInfo: Codable, Sendable {
             public var id: String
@@ -286,6 +287,7 @@ public enum ControlAPIRequests {
         public var personName: String?
         public var clockFormat: String?
         public var plotipharRoleId: String?
+        public var pcoTeamPosition: String?
         public var assignedNoteCategories: [String]?
         public var state: String?
     }
