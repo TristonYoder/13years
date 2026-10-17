@@ -1064,6 +1064,7 @@ public final class ControlAPIRouter {
         }
         if let tooLong = tooLong(request.itemType ?? "", ContentLimits.name, "itemType") { return tooLong }
         if let length = request.lengthInSeconds, !TimerLimits.isValidLength(length) { return lengthOutOfRange() }
+        if let description = request.description, let tooLong = tooLong(description, ContentLimits.noteValue, "Description") { return tooLong }
         if let notes = request.notes {
             guard notes.count <= ContentLimits.maxNoteCategories else {
                 return Self.error(400, "Too many notes", detail: "At most \(ContentLimits.maxNoteCategories) categories.")
@@ -1079,7 +1080,9 @@ public final class ControlAPIRouter {
             itemType: request.itemType ?? existing.itemType,
             lengthInSeconds: request.lengthInSeconds ?? existing.lengthInSeconds,
             notes: request.notes,
-            isDurationActual: request.isDurationActual
+            isDurationActual: request.isDurationActual,
+            description: request.description,
+            servicePosition: request.servicePosition
         )
         return json(engine.planItems.first(where: { $0.id == id }))
     }

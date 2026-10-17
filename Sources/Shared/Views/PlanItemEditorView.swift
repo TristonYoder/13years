@@ -20,7 +20,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
-    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool) -> Void
+    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
 
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -30,13 +30,16 @@ public struct PlanItemEditorView: View {
     @State private var isDurationActual: Bool
     @State private var isEditingDuration = false
     @State private var notes: [String: String]
+    @State private var itemDescription: String
+    @State private var servicePosition: PCOServicePosition
+    private let isManual: Bool
     @State private var newCategoryName: String = ""
     @State private var newWaypointName: String = ""
 
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool) -> Void
+        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
@@ -49,12 +52,18 @@ public struct PlanItemEditorView: View {
             _lengthInSeconds = State(initialValue: 5 * 60)
             _isDurationActual = State(initialValue: false)
             _notes = State(initialValue: [:])
+            _itemDescription = State(initialValue: "")
+            _servicePosition = State(initialValue: .during)
+            isManual = true
         case .edit(let item):
             _title = State(initialValue: item.title)
             _itemType = State(initialValue: item.itemType)
             _lengthInSeconds = State(initialValue: item.lengthInSeconds)
             _isDurationActual = State(initialValue: item.isDurationActual)
             _notes = State(initialValue: item.notes)
+            _itemDescription = State(initialValue: item.details?.description ?? "")
+            _servicePosition = State(initialValue: item.details?.servicePosition ?? .during)
+            isManual = item.pcoPlanId == nil
         }
     }
 
@@ -100,7 +109,12 @@ public struct PlanItemEditorView: View {
             if case .edit(let item) = mode { return item.id }
             return nil
         }()
-        onSave(id, title, itemType, lengthInSeconds, notes, isDurationActual)
+        let isHeader = itemType.caseInsensitiveCompare("header") == .orderedSame
+        onSave(
+            id, title, itemType, lengthInSeconds, notes, isDurationActual,
+            isManual && !isHeader ? itemDescription : nil,
+            isManual ? servicePosition : nil
+        )
         dismiss()
     }
 
@@ -128,6 +142,10 @@ public struct PlanItemEditorView: View {
                     }
                 }
 
+                if isManual {
+                    placementSection
+                }
+
                 notesSection
 
                 if case .edit(let item) = mode {
@@ -135,6 +153,24 @@ public struct PlanItemEditorView: View {
                 }
             }
             .formStyle(.grouped)
+    }
+
+    private var placementSection: some View {
+        Section {
+            Picker("Position", selection: $servicePosition) {
+                Text("Before the event").tag(PCOServicePosition.pre)
+                Text("During the event").tag(PCOServicePosition.during)
+                Text("After the event").tag(PCOServicePosition.post)
+            }
+            if itemType.caseInsensitiveCompare("header") != .orderedSame {
+                TextField("Description", text: $itemDescription, axis: .vertical)
+                    .lineLimit(1...4)
+            }
+        } header: {
+            Text("Run Sheet")
+        } footer: {
+            Text("Items before or after the event are scheduled around its start time instead of counting toward the event's length.")
+        }
     }
 
     private var durationRow: some View {

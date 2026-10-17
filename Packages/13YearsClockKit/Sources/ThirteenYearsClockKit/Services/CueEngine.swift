@@ -815,10 +815,11 @@ public final class CueEngine: ObservableObject {
         reconcileEventTimesWithPlan()
     }
 
-    public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) {
+    @discardableResult
+    public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) -> String? {
         if isRemoteMirror {
             remoteCommands?.send(.planItemAdd(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual))
-            return
+            return nil
         }
         var item = PCOTimerItem(
             title: title,
@@ -836,13 +837,16 @@ public final class CueEngine: ObservableObject {
             activeTimerItem = item
             broadcastTimerUpdate()
         }
+        return item.id
     }
 
-    public func updatePlanItem(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]? = nil, isDurationActual: Bool? = nil) {
+    public func updatePlanItem(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]? = nil, isDurationActual: Bool? = nil, description: String? = nil, servicePosition: PCOServicePosition? = nil) {
         if isRemoteMirror {
             var fields: [String: Any] = ["title": title, "itemType": itemType, "lengthInSeconds": lengthInSeconds]
             if let notes { fields["notes"] = notes }
             if let isDurationActual { fields["isDurationActual"] = isDurationActual }
+            if let description { fields["description"] = description }
+            if let servicePosition { fields["servicePosition"] = servicePosition.rawValue }
             remoteCommands?.send(.planItemUpdate(id: id, body: RemoteCommand.body(fields)))
             return
         }
@@ -859,6 +863,9 @@ public final class CueEngine: ObservableObject {
         if let isDurationActual {
             planItems[index].isDurationActual = isDurationActual
         }
+        if planItems[index].pcoPlanId == nil {
+            applyManualDetails(at: index, description: description, servicePosition: servicePosition)
+        }
 
         if activeTimerItem?.id == id {
             activeTimerItem = planItems[index]
@@ -874,6 +881,20 @@ public final class CueEngine: ObservableObject {
                 pushItemNoteToPCO(id: id, category: category)
             }
         }
+    }
+
+    private func applyManualDetails(at index: Int, description: String?, servicePosition: PCOServicePosition?) {
+        guard description != nil || servicePosition != nil else { return }
+        let trimmed = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var details = planItems[index].details ?? PCOItemDetails()
+        if let trimmed {
+            details.description = trimmed.isEmpty ? nil : trimmed
+        }
+        if let servicePosition {
+            details.servicePosition = servicePosition
+        }
+        let isEmpty = details == PCOItemDetails()
+        planItems[index].details = isEmpty ? nil : details
     }
 
     public func removePlanItem(id: String) {

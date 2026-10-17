@@ -326,6 +326,8 @@ public enum ControlAPIRequests {
         public var lengthInSeconds: Int?
         public var notes: [String: String]?
         public var isDurationActual: Bool?
+        public var description: String?
+        public var servicePosition: PCOServicePosition?
     }
 
     public struct PlanReorderBody: Decodable, Sendable {
