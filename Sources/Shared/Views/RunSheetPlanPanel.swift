@@ -8,6 +8,7 @@ struct RunSheetPlanPanel: View {
     @EnvironmentObject var engine: CueEngine
     @Environment(\.openURL) private var openURL
     @State private var isRefreshing = false
+    @StateObject private var attachmentOpener = AttachmentOpener()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +17,7 @@ struct RunSheetPlanPanel: View {
             if let context = engine.pcoPlanContext {
                 List {
                     planSection(context)
+                    if engine.canBrowsePCOReference { attachmentsSection(context) }
                     if !context.notes.isEmpty { notesSection(context) }
                     if !context.times.isEmpty { timesSection(context) }
                     if !context.team.isEmpty { teamSections(context) }
@@ -30,7 +32,19 @@ struct RunSheetPlanPanel: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .attachmentPreview(attachmentOpener)
         .inspectorColumnWidthIfAvailable()
+    }
+
+    private func attachmentsSection(_ context: PCOPlanContext) -> some View {
+        Section("Attachments") {
+            AttachmentRows(
+                opener: attachmentOpener,
+                owner: .plan(serviceTypeId: context.serviceTypeId, planId: context.planId),
+                refreshToken: context.fetchedAt,
+                emptyText: "No plan attachments"
+            )
+        }
     }
 
     private var header: some View {

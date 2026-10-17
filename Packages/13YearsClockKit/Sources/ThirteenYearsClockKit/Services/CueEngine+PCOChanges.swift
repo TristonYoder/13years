@@ -64,6 +64,7 @@ extension CueEngine {
             return
         }
         guard isPCOConnected, let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
+        pcoReferenceCache.removeAll()
         await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
     }
 

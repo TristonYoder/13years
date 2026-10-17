@@ -5,6 +5,9 @@ import SwiftUI
 
 struct RunSheetItemActions: View {
     @EnvironmentObject var engine: CueEngine
+    #if os(macOS) || os(iOS)
+    @Environment(\.runSheetReferencePresenter) private var reference
+    #endif
     let item: PCOTimerItem
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -36,6 +39,24 @@ struct RunSheetItemActions: View {
             } label: {
                 Label("Assign Waypoints\u{2026}", systemImage: Waypoint.symbolName)
             }
+
+            #if os(macOS) || os(iOS)
+            if engine.hasAttachments(item) {
+                Button {
+                    reference.present(.attachments(item))
+                } label: {
+                    Label("Attachments\u{2026}", systemImage: "paperclip")
+                }
+            }
+
+            if engine.hasChart(item) {
+                Button {
+                    reference.present(.chart(item))
+                } label: {
+                    Label("Chart\u{2026}", systemImage: "music.note.list")
+                }
+            }
+            #endif
 
             if !engine.isPCOExcluded(item) {
                 let skipped = engine.isItemSkipped(item.id)

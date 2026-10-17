@@ -95,6 +95,9 @@ struct PulsingRowBackground: View {
 
 struct InlineItemEditor: View {
     @EnvironmentObject var engine: CueEngine
+    #if os(macOS) || os(iOS)
+    @Environment(\.runSheetReferencePresenter) private var reference
+    #endif
     let item: PCOTimerItem
     let knownCategories: [String]
 
@@ -123,6 +126,10 @@ struct InlineItemEditor: View {
                     Button("Set") { commitDuration() }
                         .producerSecondaryButton()
                         .compactControlSize()
+                    #if os(macOS) || os(iOS)
+                    Spacer(minLength: 0)
+                    referenceButtons
+                    #endif
                 }
             }
 
@@ -137,6 +144,32 @@ struct InlineItemEditor: View {
             secondsText = "\(item.lengthInSeconds % 60)"
         }
     }
+
+    #if os(macOS) || os(iOS)
+    @ViewBuilder
+    private var referenceButtons: some View {
+        if engine.hasChart(item) {
+            Button {
+                reference.present(.chart(item))
+            } label: {
+                Label("Chart", systemImage: "music.note.list")
+            }
+            .producerSecondaryButton()
+            .compactControlSize()
+            .help("Show the lyrics and chord chart from Planning Center")
+        }
+        if engine.hasAttachments(item) {
+            Button {
+                reference.present(.attachments(item))
+            } label: {
+                Label("Attachments", systemImage: "paperclip")
+            }
+            .producerSecondaryButton()
+            .compactControlSize()
+            .help("Show the files and links attached in Planning Center")
+        }
+    }
+    #endif
 
     private func noteField(category: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {

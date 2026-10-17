@@ -21,6 +21,9 @@ public struct ServiceFlowView: View {
     @State private var pendingDeleteItem: PCOTimerItem?
     @State private var selectedItemId: String?
     @State private var showingEventTimes = false
+    #if os(macOS) || os(iOS)
+    @State private var referenceRequest: RunSheetReferenceRequest?
+    #endif
     @AppStorage(RunSheetLayout.storageKey) private var layoutRaw = RunSheetLayout.list.rawValue
     @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
@@ -112,6 +115,17 @@ public struct ServiceFlowView: View {
         }
         #if os(macOS) || os(iOS)
         .modifier(RunSheetPlanInspectorModifier(isPresented: $planPanelVisible))
+        #endif
+        #if os(macOS) || os(iOS)
+        .environment(\.runSheetReferencePresenter, RunSheetReferencePresenter { referenceRequest = $0 })
+        .sheet(item: $referenceRequest) { request in
+            switch request {
+            case .attachments(let item):
+                RunSheetAttachmentsSheet(item: item)
+            case .chart(let item):
+                RunSheetChartSheet(item: item)
+            }
+        }
         #endif
         .sheet(item: $editorMode) { mode in
             PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition in

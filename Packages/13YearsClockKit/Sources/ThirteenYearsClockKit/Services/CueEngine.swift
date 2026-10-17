@@ -251,6 +251,7 @@ public final class CueEngine: ObservableObject {
     #endif
     private let hostsControlAPI: Bool
     let pcoClient = PCOClient()
+    let pcoReferenceCache = PCOReferenceCache()
     var pcoChangeTracking = PCOChangeTracking()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
@@ -515,6 +516,7 @@ public final class CueEngine: ObservableObject {
             loadUpcomingPCOPlan(serviceTypeId: serviceTypeId)
             return
         }
+        pcoReferenceCache.removeAll()
         if planId != currentPCOPlanId {
             disablePCOLiveSync()
             eventTimes.removeAll { $0.pcoPlanTimeId != nil }
