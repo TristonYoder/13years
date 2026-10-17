@@ -75,7 +75,7 @@ public final class DocumentAutosaver: ObservableObject {
             engine.$activeItemIndex.map { _ in }.eraseToAnyPublisher(),
             engine.$hourFormatThreshold.map { _ in }.eraseToAnyPublisher(),
             engine.$clockFormat.map { _ in }.eraseToAnyPublisher(),
-            engine.$runSheetColumnWidths.map { _ in }.eraseToAnyPublisher(),
+            engine.$runSheetLayout.map { _ in }.eraseToAnyPublisher(),
             engine.$pcoDefaultServiceTypeId.map { _ in }.eraseToAnyPublisher(),
             engine.$plotipharRelayHost.map { _ in }.eraseToAnyPublisher()
         ]

@@ -23,6 +23,8 @@ public final class CueEngine: ObservableObject {
     @Published public var currentDocumentURL: URL?
     @Published public var selectedMessageThreadId: String = "all"
     @Published private var messageReadAt: [String: Date] = [:]
+    public let incomingMessages = PassthroughSubject<InterTeamMessage, Never>()
+    static let incomingMessageFreshness: TimeInterval = 300
     @Published public var roles: [RoleCue] = RoleCue.defaultRoles {
         didSet {
             persistRoles()
@@ -103,7 +105,13 @@ public final class CueEngine: ObservableObject {
         didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
     }
     private static let clockFormatDefaultsKey = "clockFormat"
-    @Published public var runSheetColumnWidths: [String: Double] = [:]
+    @Published public var runSheetLayout = RunSheetLayoutSettings()
+    private var legacyRunSheetHiddenColumns: [String]?
+
+    public var runSheetColumnWidths: [String: Double] {
+        get { runSheetLayout.columnWidths ?? [:] }
+        set { runSheetLayout.columnWidths = newValue.isEmpty ? nil : newValue }
+    }
     @Published public internal(set) var producerClockFormat: ClockFormat?
 
     public var displayClockFormat: ClockFormat {
@@ -341,12 +349,24 @@ public final class CueEngine: ObservableObject {
         }
 
         refreshPCOTokensIfNeeded()
+        migrateLegacyRunSheetHiddenColumns()
 
         if UserDefaults.standard.bool(forKey: Self.pcoLiveSyncDefaultsKey) {
             enablePCOLiveSync()
         }
 
         updateControlAPI()
+    }
+
+    private static let legacyRunSheetHiddenColumnsKey = "runSheetHiddenColumns"
+
+    private func migrateLegacyRunSheetHiddenColumns() {
+        guard !isRemoteMirror,
+              let raw = UserDefaults.standard.string(forKey: Self.legacyRunSheetHiddenColumnsKey) else { return }
+        let hidden = raw.split(separator: ",").map(String.init)
+        legacyRunSheetHiddenColumns = hidden
+        if runSheetLayout.hiddenColumns == nil { runSheetLayout.hiddenColumns = hidden }
+        UserDefaults.standard.removeObject(forKey: Self.legacyRunSheetHiddenColumnsKey)
     }
 
     private func write(_ value: Any?, forKey key: String) {
@@ -769,7 +789,7 @@ public final class CueEngine: ObservableObject {
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
                 plotipharRelayHost: plotipharRelayHost,
                 clockFormat: clockFormat,
-                runSheetColumnWidths: runSheetColumnWidths.isEmpty ? nil : runSheetColumnWidths
+                runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout
             )
         )
     }
@@ -816,7 +836,8 @@ public final class CueEngine: ObservableObject {
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
         if let format = document.settings.clockFormat { clockFormat = format }
-        runSheetColumnWidths = document.settings.runSheetColumnWidths ?? [:]
+        runSheetLayout = document.settings.runSheetLayout
+            ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
     }
 
@@ -2043,13 +2064,31 @@ public final class CueEngine: ObservableObject {
         if isMasterServer { _ = nextRev() }
     }
 
+    public static let allMessagesThreadId = "all"
+
+    private func readAt(forSenderRoleId roleId: String) -> Date {
+        max(messageReadAt[roleId] ?? .distantPast, messageReadAt[Self.allMessagesThreadId] ?? .distantPast)
+    }
+
+    private func isUnread(_ message: InterTeamMessage) -> Bool {
+        guard let role = message.senderRoleId else { return false }
+        return message.timestamp > readAt(forSenderRoleId: role)
+    }
+
+    public var unreadMessageCount: Int {
+        recentMessages.reduce(0) { $0 + (isUnread($1) ? 1 : 0) }
+    }
+
     public func hasUnreadMessage(forRoleId roleId: String) -> Bool {
-        let readAt = messageReadAt[roleId] ?? .distantPast
-        return recentMessages.contains { $0.senderRoleId == roleId && $0.timestamp > readAt }
+        recentMessages.contains { $0.senderRoleId == roleId && isUnread($0) }
     }
 
     public func markThreadRead(roleId: String) {
-        guard hasUnreadMessage(forRoleId: roleId) else { return }
+        if roleId == Self.allMessagesThreadId {
+            guard unreadMessageCount > 0 else { return }
+        } else {
+            guard hasUnreadMessage(forRoleId: roleId) else { return }
+        }
         messageReadAt[roleId] = Date()
     }
 
@@ -2251,6 +2290,10 @@ public final class CueEngine: ObservableObject {
         let existingIds = Set(recentMessages.map(\.id))
         let newOnes = incoming.prefix(Self.maxStoredMessages).map { $0.clampedForStorage() }.filter { !existingIds.contains($0.id) }
         guard !newOnes.isEmpty else { return }
+        let freshCutoff = Date().addingTimeInterval(-Self.incomingMessageFreshness)
+        for message in newOnes where message.senderRoleId != nil && message.timestamp > freshCutoff {
+            incomingMessages.send(message)
+        }
         recentMessages.append(contentsOf: newOnes)
         recentMessages = SyncHash.sortedNewestFirst(recentMessages)
         if recentMessages.count > Self.maxStoredMessages {

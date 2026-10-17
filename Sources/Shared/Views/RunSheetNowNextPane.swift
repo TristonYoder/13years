@@ -37,21 +37,126 @@ struct RunSheetSequenceChip: View {
 struct RunSheetNowNextPane: View {
     @EnvironmentObject var engine: CueEngine
     let schedule: RunSheetSchedule
+    let categories: [String]
+    let containerWidth: CGFloat
 
-    static let width: CGFloat = 360
+    static let defaultWidth: CGFloat = 360
+    static let minimumWidth: CGFloat = 280
+    static let maximumFraction: CGFloat = 0.6
+    static let defaultSplit: Double = 0.5
+
+    private static let handleWidth: CGFloat = 9
+    private static let minimumCardHeight: CGFloat = 120
+    private static let splitHandleHeight: CGFloat = 9
+    private static let coveredColumnIds: Set<String> = ["status", "title", "start"]
+
+    @State private var widthDrag: (start: CGFloat, width: CGFloat)?
+    @State private var splitDrag: (start: CGFloat, nowHeight: CGFloat)?
+
+    private var maximumWidth: CGFloat {
+        max(Self.minimumWidth, (containerWidth * Self.maximumFraction).rounded(.down))
+    }
+
+    private var paneWidth: CGFloat {
+        let stored = widthDrag?.width ?? engine.runSheetLayout.nowNextPaneWidth.map { CGFloat($0) } ?? Self.defaultWidth
+        return min(max(stored, Self.minimumWidth), maximumWidth)
+    }
+
+    private var fieldColumns: [RunSheetTableColumn] {
+        let layout = engine.runSheetLayout
+        let hidden = layout.hiddenSet
+        return RunSheetTableColumn.ordered(categories, layout: layout)
+            .filter { !hidden.contains($0.id) && !Self.coveredColumnIds.contains($0.id) }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
-            Divider()
-            VSplitView {
-                RunSheetFocusCard(role: .now, item: nowItem, schedule: schedule)
-                    .frame(minHeight: 160, maxHeight: .infinity)
-                RunSheetFocusCard(role: .next, item: nextItem, schedule: schedule)
-                    .frame(minHeight: 140, maxHeight: .infinity)
+            widthHandle
+            GeometryReader { proxy in
+                cards(height: proxy.size.height)
             }
         }
-        .frame(minWidth: 300, idealWidth: Self.width, maxWidth: Self.width)
+        .frame(width: paneWidth)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var widthHandle: some View {
+        Color.clear
+            .frame(width: Self.handleWidth)
+            .frame(maxHeight: .infinity)
+            .overlay(alignment: .trailing) { Divider() }
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = widthDrag?.start ?? paneWidth
+                        let proposed = start - value.translation.width
+                        widthDrag = (start, min(max(proposed.rounded(), Self.minimumWidth), maximumWidth))
+                    }
+                    .onEnded { _ in
+                        if let drag = widthDrag {
+                            engine.runSheetLayout.nowNextPaneWidth = Double(drag.width)
+                        }
+                        widthDrag = nil
+                    }
+            )
+            .onTapGesture(count: 2) {
+                engine.runSheetLayout.nowNextPaneWidth = nil
+            }
+            .help("Drag to resize the pane. Double-click to reset it.")
+    }
+
+    private func nowHeight(in total: CGFloat) -> CGFloat {
+        let available = max(total - Self.splitHandleHeight, 0)
+        let lower = min(Self.minimumCardHeight, available / 2)
+        let upper = max(available - Self.minimumCardHeight, lower)
+        if let drag = splitDrag { return min(max(drag.nowHeight, lower), upper) }
+        let fraction = engine.runSheetLayout.nowNextSplit ?? Self.defaultSplit
+        return min(max((available * CGFloat(fraction)).rounded(), lower), upper)
+    }
+
+    private func cards(height: CGFloat) -> some View {
+        let now = nowHeight(in: height)
+        return VStack(spacing: 0) {
+            RunSheetFocusCard(role: .now, item: nowItem, schedule: schedule, columns: fieldColumns)
+                .frame(height: now)
+            splitHandle(totalHeight: height, currentNowHeight: now)
+            RunSheetFocusCard(role: .next, item: nextItem, schedule: schedule, columns: fieldColumns)
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    private func splitHandle(totalHeight: CGFloat, currentNowHeight: CGFloat) -> some View {
+        let available = max(totalHeight - Self.splitHandleHeight, 1)
+        return Color.clear
+            .frame(height: Self.splitHandleHeight)
+            .frame(maxWidth: .infinity)
+            .overlay { Divider() }
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = splitDrag?.start ?? currentNowHeight
+                        splitDrag = (start, start + value.translation.height)
+                    }
+                    .onEnded { _ in
+                        if splitDrag != nil {
+                            let fraction = Double(nowHeight(in: totalHeight) / available)
+                            engine.runSheetLayout.nowNextSplit = (fraction * 1000).rounded() / 1000
+                        }
+                        splitDrag = nil
+                    }
+            )
+            .onTapGesture(count: 2) {
+                engine.runSheetLayout.nowNextSplit = nil
+            }
+            .help("Drag to resize the Now and Next cards. Double-click to reset.")
     }
 
     private var nowItem: PCOTimerItem? {
@@ -71,11 +176,21 @@ private struct RunSheetFocusCard: View {
         case next
     }
 
+    private enum Field {
+        case text(String)
+        case number(String)
+        case key(String)
+        case chips([String])
+        case drift(Int)
+        case note(String)
+    }
+
     @EnvironmentObject var engine: CueEngine
     @Environment(\.runSheetReferencePresenter) private var reference
     let role: Role
     let item: PCOTimerItem?
     let schedule: RunSheetSchedule
+    let columns: [RunSheetTableColumn]
 
     var body: some View {
         ScrollView {
@@ -127,8 +242,6 @@ private struct RunSheetFocusCard: View {
                 .foregroundStyle(.secondary)
         }
 
-        details(for: item)
-
         switch role {
         case .now:
             nowTiming(item, entry: entry)
@@ -136,54 +249,96 @@ private struct RunSheetFocusCard: View {
             nextTiming(item, entry: entry)
         }
 
-        let sequence = item.details?.effectiveSequenceShort ?? []
-        if !sequence.isEmpty {
-            RunSheetFlowLayout(spacing: 4) {
-                ForEach(Array(sequence.enumerated()), id: \.offset) { _, section in
-                    RunSheetSequenceChip(text: section)
-                }
-            }
-        }
-
-        if let description = item.runSheetDescription {
-            Text(description)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-
-        ForEach(item.notes.keys.sorted(), id: \.self) { category in
-            if let text = item.notes[category], !text.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(category)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(text)
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        ForEach(columns) { column in
+            if let field = field(for: column, item: item, entry: entry) {
+                fieldView(column, field)
             }
         }
 
         referenceButtons(for: item)
     }
 
-    @ViewBuilder
-    private func details(for item: PCOTimerItem) -> some View {
-        let key = item.details?.displayKey
-        let bpm = item.runSheetBPMText
-        let meter = item.runSheetMeter
-        let arrangement = item.runSheetArrangementName
-        if key != nil || bpm != nil || meter != nil || arrangement != nil {
-            RunSheetFlowLayout(spacing: 8) {
-                if let key { RunSheetKeyPill(key: key) }
-                if let bpm { Text("\(bpm) BPM").font(.clock(.caption, weight: .regular)) }
-                if let meter { Text(meter) }
-                if let arrangement { Text(arrangement) }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+    private func field(for column: RunSheetTableColumn, item: PCOTimerItem, entry: RunSheetSchedule.Entry?) -> Field? {
+        func nonEmpty(_ text: String?) -> String? {
+            guard let text, !text.isEmpty else { return nil }
+            return text
         }
+        switch column.id {
+        case "time":
+            let live = engine.activeTimerItem?.id == item.id ? engine.activeTimerItem : nil
+            guard let actual = live?.elapsedSeconds ?? entry?.actualLength else { return nil }
+            let planned = entry?.length ?? item.lengthInSeconds
+            return .number("\(format(actual)) / \(format(planned))")
+        case "drift":
+            guard let delta = entry?.actualDeltaSeconds, abs(delta) >= RunSheetActualStyle.lengthThreshold else { return nil }
+            return .drift(delta)
+        case "key":
+            return item.details?.displayKey.map(Field.key)
+        case "sequence":
+            let sequence = item.details?.effectiveSequenceShort ?? []
+            return sequence.isEmpty ? nil : .chips(sequence)
+        case "number":
+            return .number(String(item.sequence))
+        case "type":
+            return nonEmpty(item.runSheetTypeLabel).map(Field.text)
+        case "bpm":
+            return nonEmpty(item.runSheetBPMText).map(Field.number)
+        case "meter":
+            return nonEmpty(item.runSheetMeter).map(Field.text)
+        case "arrangement":
+            return nonEmpty(item.runSheetArrangementName).map(Field.text)
+        case "description":
+            return nonEmpty(item.runSheetDescription).map(Field.text)
+        case "pco-actual":
+            return entry?.pcoActualLength.map { Field.number(format($0)) }
+        default:
+            guard column.id.hasPrefix("note-") else { return nil }
+            return nonEmpty(item.notes[RunSheetTableColumn.category(fromNoteID: column.id)]).map(Field.note)
+        }
+    }
+
+    private func fieldView(_ column: RunSheetTableColumn, _ field: Field) -> some View {
+        let on = engine.runSheetLayout.highlightedSet.contains(column.id)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(column.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Group {
+            switch field {
+            case .text(let text):
+                Text(text)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .number(let text):
+                Text(text)
+                    .font(.clock(.callout))
+            case .key(let key):
+                RunSheetKeyPill(key: key)
+            case .chips(let sections):
+                RunSheetFlowLayout(spacing: 4) {
+                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                        RunSheetSequenceChip(text: section)
+                    }
+                }
+            case .drift(let delta):
+                Text(RunSheetActualStyle.signed(delta, threshold: engine.hourFormatThreshold))
+                    .font(.clock(.callout, weight: .semibold))
+                    .foregroundStyle(RunSheetActualStyle.color(forDelta: delta))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(RunSheetActualStyle.fillColor(forDelta: delta), in: Capsule())
+            case .note(let text):
+                Text(text)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            }
+            .markerHighlight(on)
+        }
+    }
+
+    private func format(_ seconds: Int) -> String {
+        TimeFormatting.string(forSeconds: seconds, threshold: engine.hourFormatThreshold)
     }
 
     private func nowTiming(_ item: PCOTimerItem, entry: RunSheetSchedule.Entry?) -> some View {

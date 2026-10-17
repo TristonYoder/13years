@@ -230,6 +230,7 @@ public struct ServiceFlowView: View {
     @ViewBuilder
     private func tableLayout(_ schedule: RunSheetSchedule) -> some View {
         #if os(macOS)
+        GeometryReader { proxy in
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 tableControls
@@ -245,9 +246,11 @@ public struct ServiceFlowView: View {
                 )
             }
             if nowNextPane {
-                RunSheetNowNextPane(schedule: schedule)
+                RunSheetNowNextPane(schedule: schedule, categories: knownNoteCategories, containerWidth: proxy.size.width)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+        }
+        .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
         #else

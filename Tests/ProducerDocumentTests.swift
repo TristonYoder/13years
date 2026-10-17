@@ -27,24 +27,77 @@ final class ProducerDocumentTests: XCTestCase {
         XCTAssertEqual(try ProducerDocument.read(from: url), original)
     }
 
-    func testRunSheetColumnWidthsTravelWithTheDocument() throws {
+    func testRunSheetLayoutTravelsWithTheDocument() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ProducerDocument.fileExtension)")
         defer { try? FileManager.default.removeItem(at: url) }
+        let layout = RunSheetLayoutSettings(
+            columnOrder: ["title", "start", "note-Audio"],
+            hiddenColumns: ["drift"],
+            columnWidths: ["title": 320, "note-Audio": 180],
+            nowNextPaneWidth: 410,
+            nowNextSplit: 0.4,
+            highlightedColumns: ["note-Backstage", "note-Media"]
+        )
         let source = CueEngine()
         source.apply(sample())
-        source.runSheetColumnWidths = ["title": 320, "note-Audio": 180]
+        source.runSheetLayout = layout
         try source.makeDocument().write(to: url)
 
         let loaded = try ProducerDocument.read(from: url)
-        XCTAssertEqual(loaded.settings.runSheetColumnWidths, ["title": 320, "note-Audio": 180])
+        XCTAssertEqual(loaded.settings.runSheetLayout, layout)
         let target = CueEngine()
-        target.runSheetColumnWidths = ["drift": 99]
+        target.runSheetLayout = RunSheetLayoutSettings(columnWidths: ["drift": 99])
         target.apply(loaded)
+        XCTAssertEqual(target.runSheetLayout, layout)
         XCTAssertEqual(target.runSheetColumnWidths, ["title": 320, "note-Audio": 180])
 
         target.apply(sample())
-        XCTAssertEqual(target.runSheetColumnWidths, [:])
-        XCTAssertNil(target.makeDocument().settings.runSheetColumnWidths)
+        XCTAssertEqual(target.runSheetLayout, RunSheetLayoutSettings())
+        XCTAssertNil(target.makeDocument().settings.runSheetLayout)
+    }
+
+    func testHighlightedColumnsRoundTrip() throws {
+        let layout = RunSheetLayoutSettings(highlightedColumns: ["note-Backstage", "key"])
+        let data = try JSONEncoder().encode(layout)
+        let decoded = try JSONDecoder().decode(RunSheetLayoutSettings.self, from: data)
+        XCTAssertEqual(decoded.highlightedColumns, ["note-Backstage", "key"])
+        XCTAssertEqual(decoded.highlightedSet, ["note-Backstage", "key"])
+        XCTAssertTrue(RunSheetLayoutSettings().highlightedSet.isEmpty)
+    }
+
+    func testLegacyColumnWidthsDecodeIntoLayout() throws {
+        var document = sample()
+        document.settings.runSheetLayout = nil
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: document.encoded()) as? [String: Any])
+        var settings = try XCTUnwrap(json["settings"] as? [String: Any])
+        settings["runSheetColumnWidths"] = ["title": 300.0, "drift": 70.0]
+        json["settings"] = settings
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let loaded = try ProducerDocument.decoded(from: data)
+        XCTAssertEqual(loaded.settings.runSheetLayout?.columnWidths, ["title": 300, "drift": 70])
+        XCTAssertNil(loaded.settings.runSheetLayout?.columnOrder)
+        XCTAssertEqual(loaded.settings.runSheetColumnWidths, ["title": 300, "drift": 70])
+    }
+
+    func testColumnOrderNormalization() {
+        let defaults = ["status", "start", "title", "note-A", "key"]
+        XCTAssertEqual(RunSheetLayoutSettings.normalizedOrder(nil, defaultOrder: defaults), defaults)
+        XCTAssertEqual(
+            RunSheetLayoutSettings.normalizedOrder(["key", "gone", "title", "key", "status"], defaultOrder: defaults),
+            ["key", "title", "status", "start", "note-A"]
+        )
+        XCTAssertEqual(
+            RunSheetLayoutSettings(columnOrder: ["note-A", "start"]).orderedIds(defaultOrder: defaults),
+            ["note-A", "start", "status", "title", "key"]
+        )
+    }
+
+    func testHiddenColumnDefaults() {
+        XCTAssertEqual(RunSheetLayoutSettings().hiddenSet, Set(RunSheetLayoutSettings.defaultHiddenColumns))
+        XCTAssertTrue(RunSheetLayoutSettings().hiddenSet.contains("bpm"))
+        XCTAssertFalse(RunSheetLayoutSettings().hiddenSet.contains("title"))
+        XCTAssertTrue(RunSheetLayoutSettings(hiddenColumns: []).hiddenSet.isEmpty)
+        XCTAssertEqual(RunSheetLayoutSettings(hiddenColumns: ["key"]).hiddenSet, ["key"])
     }
 
     func testApplyRestoresSelectedRoles() {

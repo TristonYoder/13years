@@ -48,6 +48,7 @@ public enum AppPalette {
     public static let sectionCardBorder = adaptive(light: 0x0000001F, dark: 0xFFFFFF1A)
     public static let sectionHeaderTint = adaptive(light: 0xAF52DE12, dark: 0xBF5AF224)
     public static let sectionHeaderText = adaptive(light: 0x7A3AA5FF, dark: 0xD7A8F2FF)
+    public static let highlightMarker = adaptive(light: 0xFFE0668C, dark: 0xFFB02059)
     public static let rowActive = adaptive(light: 0x34C75924, dark: 0x30D15824)
     public static let rowSelected = adaptive(light: 0x007AFF38, dark: 0x0A84FF38)
     public static let rowHeader = fixed(0x8E8E9324)

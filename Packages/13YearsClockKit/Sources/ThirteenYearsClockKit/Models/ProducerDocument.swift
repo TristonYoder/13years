@@ -13,20 +13,57 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var pcoDefaultServiceTypeId: String?
         public var plotipharRelayHost: String
         public var clockFormat: ClockFormat?
-        public var runSheetColumnWidths: [String: Double]?
+        public var runSheetLayout: RunSheetLayoutSettings?
+
+        public var runSheetColumnWidths: [String: Double]? {
+            get { runSheetLayout?.columnWidths }
+            set {
+                var layout = runSheetLayout ?? RunSheetLayoutSettings()
+                layout.columnWidths = newValue
+                runSheetLayout = layout.isDefault ? nil : layout
+            }
+        }
 
         public init(
             hourFormatThreshold: HourFormatThreshold,
             pcoDefaultServiceTypeId: String?,
             plotipharRelayHost: String,
             clockFormat: ClockFormat? = nil,
-            runSheetColumnWidths: [String: Double]? = nil
+            runSheetLayout: RunSheetLayoutSettings? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
             self.clockFormat = clockFormat
-            self.runSheetColumnWidths = runSheetColumnWidths
+            self.runSheetLayout = runSheetLayout
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            hourFormatThreshold = try container.decode(HourFormatThreshold.self, forKey: .hourFormatThreshold)
+            pcoDefaultServiceTypeId = try container.decodeIfPresent(String.self, forKey: .pcoDefaultServiceTypeId)
+            plotipharRelayHost = try container.decode(String.self, forKey: .plotipharRelayHost)
+            clockFormat = try container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
+            if let layout = try container.decodeIfPresent(RunSheetLayoutSettings.self, forKey: .runSheetLayout) {
+                runSheetLayout = layout
+            } else if let widths = try container.decodeIfPresent([String: Double].self, forKey: .runSheetColumnWidths) {
+                runSheetLayout = RunSheetLayoutSettings(columnWidths: widths)
+            } else {
+                runSheetLayout = nil
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(hourFormatThreshold, forKey: .hourFormatThreshold)
+            try container.encodeIfPresent(pcoDefaultServiceTypeId, forKey: .pcoDefaultServiceTypeId)
+            try container.encode(plotipharRelayHost, forKey: .plotipharRelayHost)
+            try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
+            try container.encodeIfPresent(runSheetLayout, forKey: .runSheetLayout)
         }
     }
 

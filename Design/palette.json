@@ -46,6 +46,7 @@
     "sectionCardBorder": {"light": "#0000001F", "dark": "#FFFFFF1A", "targets": ["swift"]},
     "sectionHeaderTint": {"light": "#AF52DE12", "dark": "#BF5AF224", "targets": ["swift"]},
     "sectionHeaderText": {"light": "#7A3AA5", "dark": "#D7A8F2", "targets": ["swift"]},
+    "highlightMarker": {"light": "#FFE0668C", "dark": "#FFB02059", "targets": ["swift"]},
     "rowActive": {"light": "#34C75924", "dark": "#30D15824", "targets": ["swift"]},
     "rowSelected": {"light": "#007AFF38", "dark": "#0A84FF38", "targets": ["swift"]},
     "rowHeader": {"light": "#8E8E9324", "dark": "#8E8E9324", "targets": ["swift"]},

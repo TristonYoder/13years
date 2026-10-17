@@ -204,6 +204,7 @@ targets:
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerAnchor.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerLimits.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerDocument.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/RunSheetLayoutSettings.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/Waypoint.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ClockFormat.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerClock.swift

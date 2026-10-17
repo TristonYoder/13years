@@ -15,7 +15,6 @@ struct RunSheetTableView: View {
     let onDelete: (PCOTimerItem) -> Void
     let onNewWaypoint: (PCOTimerItem) -> Void
 
-    @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
     @FocusState private var isFocused: Bool
     @State private var columnDrag: (id: String, startWidth: CGFloat, width: CGFloat)?
@@ -38,16 +37,13 @@ struct RunSheetTableView: View {
         Set(collapsedRaw.split(separator: ",").map(String.init))
     }
 
-    private var hiddenIds: Set<String> {
-        Set(hiddenRaw.split(separator: ",").map(String.init))
-    }
-
     private var columns: [RunSheetTableColumn] {
         if compact {
             return RunSheetTableColumn.compact
         }
-        let hidden = hiddenIds
-        return RunSheetTableColumn.all(knownCategories).filter { !hidden.contains($0.id) }
+        let layout = engine.runSheetLayout
+        let hidden = layout.hiddenSet
+        return RunSheetTableColumn.ordered(knownCategories, layout: layout).filter { !hidden.contains($0.id) }
     }
 
     private var groups: [CardGroup] {
@@ -159,6 +155,12 @@ struct RunSheetTableView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .modifier(RunSheetColumnFrame(width: widths[column.id] ?? column.minWidth))
+                    .contentShape(Rectangle())
+                    .modifier(RunSheetColumnReorder(
+                        column: column,
+                        enabled: !compact,
+                        onMove: { moveColumn($0, to: column.id) }
+                    ))
                     .overlay(alignment: .trailing) {
                         resizeHandle(column, currentWidth: widths[column.id] ?? column.minWidth)
                     }
@@ -172,6 +174,13 @@ struct RunSheetTableView: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(AppPalette.sectionCardBorder).frame(height: 0.5)
         }
+    }
+
+    private func moveColumn(_ id: String, to target: String) {
+        let current = RunSheetTableColumn.ordered(knownCategories, layout: engine.runSheetLayout).map(\.id)
+        let moved = RunSheetTableColumn.reordered(current, moving: id, to: target)
+        guard moved != current else { return }
+        engine.runSheetLayout.columnOrder = moved
     }
 
     private func resizeHandle(_ column: RunSheetTableColumn, currentWidth: CGFloat) -> some View {
@@ -319,22 +328,23 @@ struct RunSheetTableView: View {
 
     @ViewBuilder
     private func cellContent(_ column: RunSheetTableColumn, _ item: PCOTimerItem) -> some View {
+        let on = engine.runSheetLayout.highlightedSet.contains(column.id)
         switch column.id {
         case "status": statusCell(item)
-        case "start": startCell(item)
-        case "title": itemCell(item, detailed: !compact)
-        case "time": timeCell(item)
-        case "drift": driftCell(item)
-        case "key": keyCell(item)
-        case "sequence": sequenceCell(item)
-        case "number": cell(item, text: String(item.sequence), monospaced: true)
-        case "type": cell(item, text: item.runSheetTypeLabel)
-        case "bpm": cell(item, text: item.runSheetBPMText, monospaced: true)
-        case "meter": cell(item, text: item.runSheetMeter)
-        case "arrangement": cell(item, text: item.runSheetArrangementName)
-        case "description": cell(item, text: item.runSheetDescription)
-        case "pco-actual": cell(item, text: pcoActualText(item), monospaced: true)
-        default: noteCell(item, text: item.notes[RunSheetTableColumn.category(fromNoteID: column.id)])
+        case "start": startCell(item).markerHighlight(on)
+        case "title": itemCell(item, detailed: !compact).markerHighlight(on)
+        case "time": timeCell(item).markerHighlight(on)
+        case "drift": driftCell(item).markerHighlight(on)
+        case "key": keyCell(item).markerHighlight(on)
+        case "sequence": sequenceCell(item).markerHighlight(on)
+        case "number": cell(item, text: String(item.sequence), monospaced: true, highlight: on)
+        case "type": cell(item, text: item.runSheetTypeLabel, highlight: on)
+        case "bpm": cell(item, text: item.runSheetBPMText, monospaced: true, highlight: on)
+        case "meter": cell(item, text: item.runSheetMeter, highlight: on)
+        case "arrangement": cell(item, text: item.runSheetArrangementName, highlight: on)
+        case "description": cell(item, text: item.runSheetDescription, highlight: on)
+        case "pco-actual": cell(item, text: pcoActualText(item), monospaced: true, highlight: on)
+        default: noteCell(item, text: item.notes[RunSheetTableColumn.category(fromNoteID: column.id)], highlight: on)
         }
     }
 
@@ -588,23 +598,25 @@ struct RunSheetTableView: View {
 
     private static let sequenceChipLimit = 4
 
-    private func cell(_ item: PCOTimerItem, text: String?, monospaced: Bool = false) -> some View {
+    private func cell(_ item: PCOTimerItem, text: String?, monospaced: Bool = false, highlight: Bool = false) -> some View {
         styled(item) {
             Text(text ?? "")
                 .font(monospaced ? .clock(.body) : .body)
                 .fontWeight(isActive(item) ? .semibold : (item.isHeader ? .heavy : .regular))
                 .foregroundStyle(item.isHeader ? .secondary : .primary)
                 .lineLimit(1)
+                .markerHighlight(highlight && !(text ?? "").isEmpty)
         }
     }
 
-    private func noteCell(_ item: PCOTimerItem, text: String?) -> some View {
+    private func noteCell(_ item: PCOTimerItem, text: String?, highlight: Bool = false) -> some View {
         let value = text.flatMap { $0.isEmpty ? nil : $0 }
         return styled(item) {
             Text(value ?? "")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+                .markerHighlight(highlight && value != nil)
                 .help(value ?? "")
         }
     }
@@ -668,37 +680,34 @@ private struct RunSheetColumnFrame: ViewModifier {
 struct RunSheetTableColumn: Identifiable {
     let id: String
     let title: String
-    let isHiddenByDefault: Bool
     var fixedWidth: CGFloat?
     var flexMinWidth: CGFloat = 0
 
     var minWidth: CGFloat { fixedWidth ?? flexMinWidth }
 
-    static let storageKey = "runSheetHiddenColumns"
+    var isNote: Bool { id.hasPrefix("note-") }
 
-    static var defaultHiddenRaw: String {
-        fixed.filter(\.isHiddenByDefault).map(\.id).joined(separator: ",")
-    }
+    var pickerTitle: String { title.isEmpty ? "Status" : title }
 
-    static func noteID(_ category: String) -> String { "note-\(category)" }
+    static func noteID(_ category: String) -> String { RunSheetLayoutSettings.noteColumnId(category) }
 
     static func category(fromNoteID id: String) -> String { String(id.dropFirst("note-".count)) }
 
     static let fixed: [RunSheetTableColumn] = [
-        .init(id: "status", title: "", isHiddenByDefault: false, fixedWidth: 22),
-        .init(id: "start", title: "Start", isHiddenByDefault: false, fixedWidth: 84),
-        .init(id: "title", title: "Item", isHiddenByDefault: false, flexMinWidth: 160),
-        .init(id: "time", title: "Time", isHiddenByDefault: false, fixedWidth: 112),
-        .init(id: "drift", title: "Drift", isHiddenByDefault: false, fixedWidth: 64),
-        .init(id: "key", title: "Key", isHiddenByDefault: false, fixedWidth: 52),
-        .init(id: "sequence", title: "Sequence", isHiddenByDefault: false, fixedWidth: 200),
-        .init(id: "number", title: "#", isHiddenByDefault: true, fixedWidth: 36),
-        .init(id: "type", title: "Type", isHiddenByDefault: true, fixedWidth: 70),
-        .init(id: "bpm", title: "BPM", isHiddenByDefault: true, fixedWidth: 48),
-        .init(id: "meter", title: "Meter", isHiddenByDefault: true, fixedWidth: 48),
-        .init(id: "arrangement", title: "Arrangement", isHiddenByDefault: true, fixedWidth: 110),
-        .init(id: "description", title: "Description", isHiddenByDefault: true, fixedWidth: 220),
-        .init(id: "pco-actual", title: "PCO Actual", isHiddenByDefault: true, fixedWidth: 76),
+        .init(id: "status", title: "", fixedWidth: 22),
+        .init(id: "start", title: "Start", fixedWidth: 84),
+        .init(id: "title", title: "Item", flexMinWidth: 160),
+        .init(id: "time", title: "Time", fixedWidth: 112),
+        .init(id: "drift", title: "Drift", fixedWidth: 64),
+        .init(id: "key", title: "Key", fixedWidth: 52),
+        .init(id: "sequence", title: "Sequence", fixedWidth: 200),
+        .init(id: "number", title: "#", fixedWidth: 36),
+        .init(id: "type", title: "Type", fixedWidth: 70),
+        .init(id: "bpm", title: "BPM", fixedWidth: 48),
+        .init(id: "meter", title: "Meter", fixedWidth: 48),
+        .init(id: "arrangement", title: "Arrangement", fixedWidth: 110),
+        .init(id: "description", title: "Description", fixedWidth: 220),
+        .init(id: "pco-actual", title: "PCO Actual", fixedWidth: 76),
     ]
 
     static let compact: [RunSheetTableColumn] = {
@@ -708,86 +717,157 @@ struct RunSheetTableColumn: Identifiable {
     }()
 
     static func noteColumns(_ categories: [String]) -> [RunSheetTableColumn] {
-        categories.map { .init(id: noteID($0), title: $0, isHiddenByDefault: false, flexMinWidth: 140) }
+        categories.map { .init(id: noteID($0), title: $0, flexMinWidth: 140) }
     }
 
     static func all(_ categories: [String]) -> [RunSheetTableColumn] {
         Array(fixed.prefix(7)) + noteColumns(categories) + Array(fixed.dropFirst(7))
     }
+
+    static func ordered(_ categories: [String], layout: RunSheetLayoutSettings) -> [RunSheetTableColumn] {
+        let available = all(categories)
+        let byId = Dictionary(available.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return layout.orderedIds(defaultOrder: available.map(\.id)).compactMap { byId[$0] }
+    }
+
+    static func reordered(_ ids: [String], moving id: String, to target: String) -> [String] {
+        guard id != target, let from = ids.firstIndex(of: id), let to = ids.firstIndex(of: target) else { return ids }
+        var result = ids
+        result.remove(at: from)
+        result.insert(id, at: to)
+        return result
+    }
 }
 
 struct RunSheetColumnsMenu: View {
     @EnvironmentObject var engine: CueEngine
-    @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
     let categories: [String]
 
-    private var hiddenIds: Set<String> {
-        Set(hiddenRaw.split(separator: ",").map(String.init))
-    }
-
     @State private var isPresented = false
+
+    private var ordered: [RunSheetTableColumn] {
+        RunSheetTableColumn.ordered(categories, layout: engine.runSheetLayout)
+    }
 
     var body: some View {
         Button(action: { isPresented.toggle() }) {
             Label("Columns", systemImage: "tablecells.badge.ellipsis")
         }
-        .help("Choose which columns the run sheet table shows")
+        .help("Choose which columns the run sheet table shows, and their order")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             picker
         }
     }
 
     private var picker: some View {
-        let notes = RunSheetTableColumn.noteColumns(categories)
+        let columns = ordered
         return VStack(alignment: .leading, spacing: 10) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    section("Columns", RunSheetTableColumn.fixed)
-                    if !notes.isEmpty {
-                        section("Notes", notes)
-                    }
+            Text("Drag to reorder")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            List {
+                ForEach(columns) { column in
+                    row(column)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .onMove(perform: move)
             }
-            .frame(maxHeight: 420)
+            .listStyle(.plain)
+            .frame(height: min(CGFloat(columns.count) * 28 + 8, 380))
             Divider()
             HStack {
-                Button("Show All") { hiddenRaw = "" }
+                Button("Show All") { engine.runSheetLayout.hiddenColumns = [] }
                 Button("Reset") {
-                    hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
-                    engine.runSheetColumnWidths = [:]
+                    engine.runSheetLayout.columnOrder = nil
+                    engine.runSheetLayout.hiddenColumns = nil
+                    engine.runSheetLayout.columnWidths = nil
+                    engine.runSheetLayout.highlightedColumns = nil
                 }
-                .help("Restore the default columns and widths")
+                .help("Restore the default column order, visibility, widths and highlights")
                 Spacer()
                 Button("Done") { isPresented = false }
                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(14)
-        .frame(width: 260)
+        .frame(width: 280)
     }
 
-    private func section(_ title: String, _ columns: [RunSheetTableColumn]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ForEach(columns) { column in
-                toggle(column)
-                    .toggleStyle(.checkbox)
+    private func row(_ column: RunSheetTableColumn) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Toggle(column.pickerTitle, isOn: Binding(
+                get: { !engine.runSheetLayout.hiddenSet.contains(column.id) },
+                set: { visible in
+                    var ids = engine.runSheetLayout.hiddenSet
+                    if visible { ids.remove(column.id) } else { ids.insert(column.id) }
+                    engine.runSheetLayout.hiddenColumns = ids.sorted()
+                }
+            ))
+            .toggleStyle(.checkbox)
+            Spacer(minLength: 0)
+            if column.id != "status" {
+                highlightButton(column)
+            }
+            if column.isNote {
+                Text("Note")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
+        .frame(height: 24)
     }
 
-    private func toggle(_ column: RunSheetTableColumn) -> some View {
-        Toggle(column.title, isOn: Binding(
-            get: { !hiddenIds.contains(column.id) },
-            set: { visible in
-                var ids = hiddenIds
-                if visible { ids.remove(column.id) } else { ids.insert(column.id) }
-                hiddenRaw = ids.sorted().joined(separator: ",")
-            }
-        ))
+    private func highlightButton(_ column: RunSheetTableColumn) -> some View {
+        let on = engine.runSheetLayout.highlightedSet.contains(column.id)
+        return Button {
+            var ids = engine.runSheetLayout.highlightedSet
+            if on { ids.remove(column.id) } else { ids.insert(column.id) }
+            engine.runSheetLayout.highlightedColumns = ids.isEmpty ? nil : ids.sorted()
+        } label: {
+            Image(systemName: "highlighter")
+                .font(.caption)
+                .foregroundStyle(on ? Color.primary : Color.secondary)
+                .frame(width: 22, height: 18)
+                .background(on ? AppPalette.highlightMarker : Color.clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(on ? "Stop highlighting this column" : "Highlight this column's values everywhere they appear")
+        .accessibilityLabel("Highlight \(column.pickerTitle)")
+        .accessibilityValue(on ? "On" : "Off")
+    }
+
+    private func move(from source: IndexSet, to destination: Int) {
+        var ids = ordered.map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        engine.runSheetLayout.columnOrder = ids
+    }
+}
+
+private struct RunSheetColumnReorder: ViewModifier {
+    let column: RunSheetTableColumn
+    let enabled: Bool
+    let onMove: (String) -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .draggable(column.id) {
+                    Text(column.pickerTitle)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(AppPalette.surfaceMuted, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let id = ids.first else { return false }
+                    onMove(id)
+                    return true
+                }
+        } else {
+            content
+        }
     }
 }
 

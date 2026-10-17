@@ -3,6 +3,61 @@
 
 import SwiftUI
 
+struct MarkerShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let inset = rect.height * 0.14
+        let r = rect.insetBy(dx: 0, dy: inset)
+        let w = r.width
+        let h = r.height
+        let skew = min(h * 0.22, 6)
+        var path = Path()
+        path.move(to: CGPoint(x: r.minX + skew, y: r.minY + h * 0.06))
+        path.addCurve(
+            to: CGPoint(x: r.maxX, y: r.minY),
+            control1: CGPoint(x: r.minX + w * 0.30, y: r.minY - h * 0.07),
+            control2: CGPoint(x: r.minX + w * 0.68, y: r.minY + h * 0.12)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: r.maxX - skew, y: r.maxY - h * 0.04),
+            control: CGPoint(x: r.maxX + skew * 0.4, y: r.midY)
+        )
+        path.addCurve(
+            to: CGPoint(x: r.minX, y: r.maxY),
+            control1: CGPoint(x: r.minX + w * 0.72, y: r.maxY + h * 0.07),
+            control2: CGPoint(x: r.minX + w * 0.28, y: r.maxY - h * 0.10)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: r.minX + skew, y: r.minY + h * 0.06),
+            control: CGPoint(x: r.minX - skew * 0.3, y: r.midY)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct MarkerHighlight: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content.background {
+                MarkerShape()
+                    .fill(AppPalette.highlightMarker)
+                    .padding(.horizontal, -4)
+                    .padding(.vertical, -1)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func markerHighlight(_ isOn: Bool) -> some View {
+        modifier(MarkerHighlight(isOn: isOn))
+    }
+}
+
 struct RunSheetFlowLayout: Layout {
     var spacing: CGFloat = 4
 
@@ -439,6 +494,7 @@ struct RunSheetRow: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .lineLimit(2)
+                            .markerHighlight(isHighlighted(RunSheetLayoutSettings.noteColumnId(category)))
                     }
                 }
             }
@@ -514,6 +570,7 @@ struct RunSheetRow: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .markerHighlight(isHighlighted("type"))
             }
         case .item, .header:
             EmptyView()
@@ -523,6 +580,7 @@ struct RunSheetRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+                .markerHighlight(isHighlighted("description"))
         }
     }
 
@@ -542,16 +600,20 @@ struct RunSheetRow: View {
                         .padding(.vertical, 1)
                         .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .accessibilityLabel("Key \(key)")
+                        .markerHighlight(isHighlighted("key"))
                 }
                 if let bpm {
                     Text("\(bpm) BPM")
                         .font(.clock(.caption, weight: .regular))
+                        .markerHighlight(isHighlighted("bpm"))
                 }
                 if let meter {
                     Text(meter)
+                        .markerHighlight(isHighlighted("meter"))
                 }
                 if let arrangement {
                     Text(arrangement)
+                        .markerHighlight(isHighlighted("arrangement"))
                 }
             }
             .font(.caption)
@@ -569,7 +631,12 @@ struct RunSheetRow: View {
                         .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
             }
+            .markerHighlight(isHighlighted("sequence"))
         }
+    }
+
+    private func isHighlighted(_ columnId: String) -> Bool {
+        engine.runSheetLayout.highlightedSet.contains(columnId)
     }
 
     @ViewBuilder
