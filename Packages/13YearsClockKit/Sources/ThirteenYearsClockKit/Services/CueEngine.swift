@@ -103,6 +103,7 @@ public final class CueEngine: ObservableObject {
         didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
     }
     private static let clockFormatDefaultsKey = "clockFormat"
+    @Published public var runSheetColumnWidths: [String: Double] = [:]
     @Published public internal(set) var producerClockFormat: ClockFormat?
 
     public var displayClockFormat: ClockFormat {
@@ -767,7 +768,8 @@ public final class CueEngine: ObservableObject {
                 hourFormatThreshold: hourFormatThreshold,
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
                 plotipharRelayHost: plotipharRelayHost,
-                clockFormat: clockFormat
+                clockFormat: clockFormat,
+                runSheetColumnWidths: runSheetColumnWidths.isEmpty ? nil : runSheetColumnWidths
             )
         )
     }
@@ -814,6 +816,7 @@ public final class CueEngine: ObservableObject {
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
         if let format = document.settings.clockFormat { clockFormat = format }
+        runSheetColumnWidths = document.settings.runSheetColumnWidths ?? [:]
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
     }
 

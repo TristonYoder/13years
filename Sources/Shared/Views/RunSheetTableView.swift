@@ -18,6 +18,7 @@ struct RunSheetTableView: View {
     @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
     @FocusState private var isFocused: Bool
+    @State private var columnDrag: (id: String, startWidth: CGFloat, width: CGFloat)?
 
     private static let rowHeight: CGFloat = 38
     private static let headerHeight: CGFloat = 34
@@ -85,23 +86,54 @@ struct RunSheetTableView: View {
 
     private var minContentWidth: CGFloat {
         let cols = columns
-        let widths = cols.reduce(CGFloat(0)) { $0 + $1.minWidth }
+        let widths = cols.reduce(CGFloat(0)) { $0 + baseWidth($1) }
         let spacing = Self.columnSpacing * CGFloat(max(cols.count - 1, 0))
         return widths + spacing + 2 * Self.rowPadding + 2 * Self.outerPadding
     }
 
+    private static let minimumColumnWidth: CGFloat = 24
+
+    private func userWidth(_ column: RunSheetTableColumn) -> CGFloat? {
+        if let drag = columnDrag, drag.id == column.id { return drag.width }
+        return engine.runSheetColumnWidths[column.id].map { max(Self.minimumColumnWidth, CGFloat($0)) }
+    }
+
+    private func baseWidth(_ column: RunSheetTableColumn) -> CGFloat {
+        userWidth(column) ?? column.minWidth
+    }
+
+    private func resolvedWidths(for totalWidth: CGFloat) -> [String: CGFloat] {
+        let cols = columns
+        let fixedTotal = cols.reduce(CGFloat(0)) { $0 + baseWidth($1) }
+        let chrome = 2 * Self.rowPadding + 2 * Self.outerPadding + Self.columnSpacing * CGFloat(max(cols.count - 1, 0))
+        let available = totalWidth - chrome
+        let extra = max(0, available - fixedTotal)
+        let weights = cols.map { column -> CGFloat in
+            guard column.fixedWidth == nil, userWidth(column) == nil else { return 0 }
+            return column.id == "title" ? 2 : 1
+        }
+        let totalWeight = weights.reduce(0, +)
+        var result: [String: CGFloat] = [:]
+        for (column, weight) in zip(cols, weights) {
+            let share = totalWeight > 0 ? extra * weight / totalWeight : 0
+            result[column.id] = (baseWidth(column) + share).rounded(.down)
+        }
+        return result
+    }
+
     var body: some View {
         GeometryReader { geometry in
+            let widths = resolvedWidths(for: geometry.size.width)
             ScrollView(.horizontal) {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         LazyVStack(spacing: Self.cardGap, pinnedViews: [.sectionHeaders]) {
                             Section {
                                 ForEach(groups) { group in
-                                    card(group)
+                                    card(group, widths: widths)
                                 }
                             } header: {
-                                columnHeader
+                                columnHeader(widths)
                             }
                         }
                         .padding(.horizontal, Self.outerPadding)
@@ -119,14 +151,17 @@ struct RunSheetTableView: View {
         }
     }
 
-    private var columnHeader: some View {
+    private func columnHeader(_ widths: [String: CGFloat]) -> some View {
         HStack(spacing: Self.columnSpacing) {
             ForEach(columns) { column in
                 Text(column.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .modifier(RunSheetColumnFrame(column: column))
+                    .modifier(RunSheetColumnFrame(width: widths[column.id] ?? column.minWidth))
+                    .overlay(alignment: .trailing) {
+                        resizeHandle(column, currentWidth: widths[column.id] ?? column.minWidth)
+                    }
             }
         }
         .padding(.horizontal, Self.rowPadding)
@@ -139,7 +174,37 @@ struct RunSheetTableView: View {
         }
     }
 
-    private func card(_ group: CardGroup) -> some View {
+    private func resizeHandle(_ column: RunSheetTableColumn, currentWidth: CGFloat) -> some View {
+        Rectangle()
+            .fill(columnDrag?.id == column.id ? AppPalette.sectionCardBorder : Color.clear)
+            .frame(width: 1)
+            .padding(.horizontal, 3)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .offset(x: (Self.columnSpacing / 2) + 3)
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = columnDrag?.startWidth ?? currentWidth
+                        columnDrag = (column.id, start, max(Self.minimumColumnWidth, (start + value.translation.width).rounded()))
+                    }
+                    .onEnded { _ in
+                        if let drag = columnDrag {
+                            engine.runSheetColumnWidths[drag.id] = Double(drag.width)
+                        }
+                        columnDrag = nil
+                    }
+            )
+            .onTapGesture(count: 2) {
+                engine.runSheetColumnWidths[column.id] = nil
+            }
+            .help("Drag to resize this column. Double-click to reset it.")
+    }
+
+    private func card(_ group: CardGroup, widths: [String: CGFloat]) -> some View {
         let isCollapsed = group.header.map { collapsedIds.contains($0.id) } ?? false
         let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
         return VStack(spacing: 0) {
@@ -151,7 +216,7 @@ struct RunSheetTableView: View {
                     if group.header != nil || index > 0 {
                         separator
                     }
-                    itemRow(item)
+                    itemRow(item, widths: widths)
                 }
             }
         }
@@ -223,11 +288,11 @@ struct RunSheetTableView: View {
         ))
     }
 
-    private func itemRow(_ item: PCOTimerItem) -> some View {
+    private func itemRow(_ item: PCOTimerItem, widths: [String: CGFloat]) -> some View {
         HStack(spacing: Self.columnSpacing) {
             ForEach(columns) { column in
                 cellContent(column, item)
-                    .modifier(RunSheetColumnFrame(column: column))
+                    .modifier(RunSheetColumnFrame(width: widths[column.id] ?? column.minWidth))
             }
         }
         .padding(.horizontal, Self.rowPadding)
@@ -444,12 +509,20 @@ struct RunSheetTableView: View {
             } else {
                 let planned = entry?.length ?? item.lengthInSeconds
                 let actual = entry?.actualLength
+                let hasStarted = live != nil || isCompleted(item) || actual != nil
                 VStack(alignment: .leading, spacing: 3) {
-                    (Text(actual.map(format) ?? "\u{2014}")
-                        .foregroundStyle(actual == nil ? Color.secondary : (entry?.isActualComplete == true ? Color.primary : Color.accentColor))
-                        + Text(" / \(format(planned))").foregroundStyle(.secondary))
-                        .font(.clock(.body))
-                        .lineLimit(1)
+                    Group {
+                        if hasStarted {
+                            Text(format(live?.elapsedSeconds ?? actual ?? 0))
+                                .foregroundStyle(live != nil ? Color.accentColor : Color.primary)
+                                + Text(" / \(format(planned))").foregroundStyle(.secondary)
+                        } else {
+                            Text(format(planned))
+                                .foregroundStyle(Color.primary)
+                        }
+                    }
+                    .font(.clock(.body))
+                    .lineLimit(1)
                     if let live {
                         ProgressView(value: Double(min(live.elapsedSeconds, max(live.lengthInSeconds, 1))), total: Double(max(live.lengthInSeconds, 1)))
                             .progressViewStyle(.linear)
@@ -580,14 +653,15 @@ private struct RunSheetRowInteraction<Menu: View>: ViewModifier {
 }
 
 private struct RunSheetColumnFrame: ViewModifier {
-    let column: RunSheetTableColumn
+    let width: CGFloat
 
     func body(content: Content) -> some View {
-        if let width = column.fixedWidth {
-            content.frame(width: width, alignment: .leading)
-        } else {
-            content.frame(minWidth: column.minWidth, maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 0) {
+            content
+            Color.clear.frame(width: width, height: 0)
         }
+        .frame(width: width, alignment: .leading)
+        .clipped()
     }
 }
 
@@ -611,7 +685,7 @@ struct RunSheetTableColumn: Identifiable {
     static func category(fromNoteID id: String) -> String { String(id.dropFirst("note-".count)) }
 
     static let fixed: [RunSheetTableColumn] = [
-        .init(id: "status", title: "Status", isHiddenByDefault: false, fixedWidth: 22),
+        .init(id: "status", title: "", isHiddenByDefault: false, fixedWidth: 22),
         .init(id: "start", title: "Start", isHiddenByDefault: false, fixedWidth: 84),
         .init(id: "title", title: "Item", isHiddenByDefault: false, flexMinWidth: 160),
         .init(id: "time", title: "Time", isHiddenByDefault: false, fixedWidth: 112),
@@ -643,6 +717,7 @@ struct RunSheetTableColumn: Identifiable {
 }
 
 struct RunSheetColumnsMenu: View {
+    @EnvironmentObject var engine: CueEngine
     @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
     let categories: [String]
 
@@ -678,7 +753,11 @@ struct RunSheetColumnsMenu: View {
             Divider()
             HStack {
                 Button("Show All") { hiddenRaw = "" }
-                Button("Reset") { hiddenRaw = RunSheetTableColumn.defaultHiddenRaw }
+                Button("Reset") {
+                    hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
+                    engine.runSheetColumnWidths = [:]
+                }
+                .help("Restore the default columns and widths")
                 Spacer()
                 Button("Done") { isPresented = false }
                     .keyboardShortcut(.defaultAction)

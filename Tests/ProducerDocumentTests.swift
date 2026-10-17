@@ -27,6 +27,26 @@ final class ProducerDocumentTests: XCTestCase {
         XCTAssertEqual(try ProducerDocument.read(from: url), original)
     }
 
+    func testRunSheetColumnWidthsTravelWithTheDocument() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ProducerDocument.fileExtension)")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let source = CueEngine()
+        source.apply(sample())
+        source.runSheetColumnWidths = ["title": 320, "note-Audio": 180]
+        try source.makeDocument().write(to: url)
+
+        let loaded = try ProducerDocument.read(from: url)
+        XCTAssertEqual(loaded.settings.runSheetColumnWidths, ["title": 320, "note-Audio": 180])
+        let target = CueEngine()
+        target.runSheetColumnWidths = ["drift": 99]
+        target.apply(loaded)
+        XCTAssertEqual(target.runSheetColumnWidths, ["title": 320, "note-Audio": 180])
+
+        target.apply(sample())
+        XCTAssertEqual(target.runSheetColumnWidths, [:])
+        XCTAssertNil(target.makeDocument().settings.runSheetColumnWidths)
+    }
+
     func testApplyRestoresSelectedRoles() {
         let engine = CueEngine()
         var doc = sample()

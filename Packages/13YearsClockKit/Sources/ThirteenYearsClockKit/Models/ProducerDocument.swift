@@ -13,17 +13,20 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var pcoDefaultServiceTypeId: String?
         public var plotipharRelayHost: String
         public var clockFormat: ClockFormat?
+        public var runSheetColumnWidths: [String: Double]?
 
         public init(
             hourFormatThreshold: HourFormatThreshold,
             pcoDefaultServiceTypeId: String?,
             plotipharRelayHost: String,
-            clockFormat: ClockFormat? = nil
+            clockFormat: ClockFormat? = nil,
+            runSheetColumnWidths: [String: Double]? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
             self.clockFormat = clockFormat
+            self.runSheetColumnWidths = runSheetColumnWidths
         }
     }
 
