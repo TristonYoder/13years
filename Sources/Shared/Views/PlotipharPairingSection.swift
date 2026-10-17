@@ -49,7 +49,7 @@ public struct PlotipharPairingSection: View {
         case .approved:
             HStack {
                 Label("Connected to Plotiphar", systemImage: "checkmark.seal.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppPalette.positive)
                 Spacer()
                 Button("Disconnect", role: .destructive) {
                     engine.disconnectPlotiphar()
@@ -61,7 +61,7 @@ public struct PlotipharPairingSection: View {
         case .expired:
             VStack(alignment: .leading, spacing: 10) {
                 Label("Pairing code expired", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                 Button("Try Again") {
                     engine.startPlotipharPairing()
                 }
@@ -70,7 +70,7 @@ public struct PlotipharPairingSection: View {
         case .error(let message):
             VStack(alignment: .leading, spacing: 10) {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppPalette.negative)
                 Button("Try Again") {
                     engine.startPlotipharPairing()
                 }
@@ -99,7 +99,7 @@ public struct PlotipharPairingSection: View {
             if hostRejected {
                 Text("Use a hostname or a wss:// or https:// address. Plain ws:// and http:// are not allowed.")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppPalette.negative)
             } else if hostDraft != engine.plotipharRelayHost {
                 Text("Changing the relay host disconnects from Plotiphar so the pairing token is never sent to a new host.")
                     .font(.caption)

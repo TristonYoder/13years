@@ -230,7 +230,7 @@ struct RunSheetTableView: View {
                     .help("Skipped")
             } else if isActive(item) {
                 Image(systemName: "play.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppPalette.timerOnTime)
                     .help("Running now")
             } else if isCompleted(item) {
                 Image(systemName: "checkmark")
@@ -257,7 +257,7 @@ struct RunSheetTableView: View {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.caption.weight(.semibold))
                             .font(.clock(.body))
-                            .foregroundStyle(drift > 0 ? Color.orange : Color.green)
+                            .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
                             .help(drift > 0 ? "Projected to start later than planned" : "Projected to start earlier than planned")
                     }
                 }
@@ -283,7 +283,7 @@ struct RunSheetTableView: View {
                     if isExcluded(item), let excludedLabel {
                         Text("Not in \(excludedLabel)")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppPalette.warning)
                             .lineLimit(1)
                     }
                     if isSkipped(item) {
@@ -335,7 +335,7 @@ struct RunSheetTableView: View {
                     if let live {
                         ProgressView(value: Double(min(live.elapsedSeconds, max(live.lengthInSeconds, 1))), total: Double(max(live.lengthInSeconds, 1)))
                             .progressViewStyle(.linear)
-                            .tint(live.isOvertime ? .orange : .green)
+                            .tint(live.isOvertime ? AppPalette.warning : AppPalette.timerOnTime)
                     }
                 }
                 .help(timeHelp(entry))
@@ -531,7 +531,7 @@ private struct RunSheetCellStyle: ViewModifier {
             .opacity(isExcluded ? 0.5 : 1)
             .background {
                 if isActive {
-                    Color.green.opacity(0.14)
+                    AppPalette.timerOnTime.opacity(0.14)
                         .padding(.horizontal, -12)
                         .padding(.vertical, -8)
                 }

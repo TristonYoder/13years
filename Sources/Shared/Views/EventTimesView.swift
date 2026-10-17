@@ -77,7 +77,7 @@ public struct EventTimesView: View {
         let isLive = engine.liveEventTime?.id == time.id
         return HStack {
             Image(systemName: isLive ? "dot.radiowaves.left.and.right" : "clock")
-                .foregroundStyle(isLive ? Color.green : Color.secondary)
+                .foregroundStyle(isLive ? AppPalette.positive : Color.secondary)
             Text(time.displayName(engine.clockFormat))
             Spacer()
             if time.pcoPlanTimeId != nil {
@@ -159,6 +159,7 @@ struct EventTimeEditorView: View {
                         #if os(tvOS)
                         LabeledContent("Starts") {
                             Text(TimeOfDay(date: startTime).formatted(engine.clockFormat))
+                                .font(.clock(.body, weight: .regular))
                         }
                         #else
                         DatePicker("Starts", selection: $startTime, displayedComponents: .hourAndMinute)

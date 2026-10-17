@@ -43,7 +43,7 @@ struct WatchChatView: View {
                     .foregroundStyle(isMine ? Color.white : Color.black)
                     .fixedSize(horizontal: false, vertical: true)
                 Text((model.presentation?.clockFormat ?? .systemDefault).string(from: message.timestamp))
-                    .font(.system(size: 8, weight: .regular))
+                    .font(.inter(size: 8, weight: .regular).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)

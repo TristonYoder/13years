@@ -30,17 +30,17 @@ public struct StoplightMarkView: View {
         public var green: Color
 
         public static let dark = Palette(
-            ink: Color(red: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF3 / 255),
-            red: Color(red: 0xFF / 255, green: 0x52 / 255, blue: 0x52 / 255),
-            yellow: Color(red: 0xFF / 255, green: 0xEB / 255, blue: 0x3B / 255),
-            green: Color(red: 0x66 / 255, green: 0xBB / 255, blue: 0x6A / 255)
+            ink: AppPalette.stoplightInkDark,
+            red: AppPalette.stoplightRedDark,
+            yellow: AppPalette.stoplightYellowDark,
+            green: AppPalette.stoplightGreenDark
         )
 
         public static let light = Palette(
-            ink: Color(red: 0x33 / 255, green: 0x33 / 255, blue: 0x33 / 255),
-            red: Color(red: 0xDC / 255, green: 0x14 / 255, blue: 0x3C / 255),
-            yellow: Color(red: 0xFF / 255, green: 0xD7 / 255, blue: 0x00 / 255),
-            green: Color(red: 0x22 / 255, green: 0x8B / 255, blue: 0x22 / 255)
+            ink: AppPalette.stoplightInkLight,
+            red: AppPalette.stoplightRedLight,
+            yellow: AppPalette.stoplightYellowLight,
+            green: AppPalette.stoplightGreenLight
         )
 
         public static func matching(_ scheme: ColorScheme) -> Palette {
@@ -199,12 +199,12 @@ public struct StoplightMarkView: View {
     StoplightMarkView(palette: .dark)
         .frame(width: 420)
         .padding(60)
-        .background(Color(red: 0x10 / 255, green: 0x10 / 255, blue: 0x14 / 255))
+        .background(AppPalette.brandGroundDark)
 }
 
 #Preview("Light") {
     StoplightMarkView(palette: .light)
         .frame(width: 420)
         .padding(60)
-        .background(Color(red: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF3 / 255))
+        .background(AppPalette.brandGroundLight)
 }

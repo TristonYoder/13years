@@ -84,7 +84,7 @@ struct RunSheetPlanPanel: View {
         Section("Plan") {
             if let error = engine.pcoPlanContextError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
             LabeledContent("Title", value: context.title ?? engine.planItems.first?.servicePlanTitle ?? "Untitled")
@@ -143,7 +143,7 @@ struct RunSheetPlanPanel: View {
                         HStack(spacing: 6) {
                             Text(starts, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
                             Text(range(starts, time.endsAt))
-                                .monospacedDigit()
+                                .font(.clock(.caption, weight: .regular))
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -186,7 +186,7 @@ struct RunSheetPlanPanel: View {
                 if !declined.isEmpty {
                     Text("Declined: \(declined.joined(separator: ", "))")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppPalette.negative)
                 }
             }
             Spacer()
@@ -206,7 +206,7 @@ struct RunSheetPlanPanel: View {
                     Text(needed.teamPositionReference ?? "Position")
                     Spacer()
                     Text("\u{00D7} \(needed.quantity)")
-                        .monospacedDigit()
+                        .font(.clock(.body, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -220,9 +220,9 @@ struct RunSheetPlanPanel: View {
 
         init(code: String) {
             switch code.uppercased() {
-            case "C": self = TeamStatus(label: "Confirmed", symbol: "checkmark.circle.fill", color: .green)
-            case "D": self = TeamStatus(label: "Declined", symbol: "xmark.circle.fill", color: .red)
-            default: self = TeamStatus(label: "Unconfirmed", symbol: "questionmark.circle.fill", color: .orange)
+            case "C": self = TeamStatus(label: "Confirmed", symbol: "checkmark.circle.fill", color: AppPalette.positive)
+            case "D": self = TeamStatus(label: "Declined", symbol: "xmark.circle.fill", color: AppPalette.negative)
+            default: self = TeamStatus(label: "Unconfirmed", symbol: "questionmark.circle.fill", color: AppPalette.warning)
             }
         }
 

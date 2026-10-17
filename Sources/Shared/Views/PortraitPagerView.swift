@@ -172,7 +172,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
         let details = presentation.currentDetailsLine()
         return VStack(spacing: m.margin * 0.3 * scale) {
             Text(item.title.uppercased())
-                .font(.inter(size: m.titleFontSize * scale, weight: .bold))
+                .font(.system(size: m.titleFontSize * scale, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -187,7 +187,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                     .minimumScaleFactor(0.3)
 
                 Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
-                    .font(.inter(size: m.tagFontSize * scale, weight: .bold))
+                    .font(.system(size: m.tagFontSize * scale, weight: .bold))
                     .tracking(2)
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -239,7 +239,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
 
     private func detailsText(_ m: PortraitMetrics, _ line: String, opacity: Double, scale: CGFloat) -> some View {
         Text(line)
-            .font(.inter(size: m.noteFontSize * scale, weight: .semibold))
+            .font(.system(size: m.noteFontSize * scale, weight: .semibold))
             .foregroundColor(.white.opacity(opacity))
             .lineLimit(1)
             .truncationMode(.tail)
@@ -252,7 +252,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                 VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
                     HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
                         Text(next.title.uppercased())
-                            .font(.inter(size: m.nextTitleFontSize * scale, weight: .bold))
+                            .font(.system(size: m.nextTitleFontSize * scale, weight: .bold))
                             .foregroundColor(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
@@ -280,7 +280,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             ForEach(notes, id: \.category) { note in
                 PagerNoteText.line(category: note.category, text: note.text)
-                    .font(.inter(size: m.noteFontSize * scale, weight: weight))
+                    .font(.system(size: m.noteFontSize * scale, weight: weight))
                     .foregroundColor(.white.opacity(opacity))
                     .fixedSize(horizontal: false, vertical: true)
             }

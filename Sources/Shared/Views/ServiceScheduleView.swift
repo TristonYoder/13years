@@ -147,14 +147,14 @@ public struct ServiceScheduleView: View {
             } label: {
                 Label("Edit\u{2026}", systemImage: "pencil")
             }
-            .tint(.blue)
+            .tint(AppPalette.info)
 
             Button {
                 engine.goLiveWithSchedule(id: schedule.id)
             } label: {
                 Label("Go Live Now", systemImage: "play.fill")
             }
-            .tint(.green)
+            .tint(AppPalette.positive)
 
             Button(role: .destructive) {
                 pendingDeleteSchedule = schedule
@@ -218,6 +218,7 @@ private struct ServiceScheduleEditorView: View {
                     #if os(tvOS)
                     LabeledContent("Starts At") {
                         Text(engine.clockFormat.dateTime(startsAt))
+                            .font(.clock(.body, weight: .regular))
                     }
                     #else
                     DatePicker("Starts At", selection: $startsAt)

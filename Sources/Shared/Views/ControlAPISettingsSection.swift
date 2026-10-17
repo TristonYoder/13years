@@ -51,7 +51,7 @@ public struct ControlAPISettingsSection: View {
 
                 LabeledContent("Connected Clients") {
                     Text("\(engine.controlAPIClientCount)")
-                        .foregroundStyle(engine.controlAPIClientCount > 0 ? .green : .secondary)
+                        .foregroundStyle(engine.controlAPIClientCount > 0 ? AppPalette.positive : .secondary)
                 }
             }
 
@@ -78,11 +78,11 @@ public struct ControlAPISettingsSection: View {
     private var statusRow: some View {
         if engine.isControlAPIRunning {
             Label("Listening", systemImage: "antenna.radiowaves.left.and.right")
-                .foregroundStyle(.green)
+                .foregroundStyle(AppPalette.positive)
                 .font(.footnote)
         } else {
             Label("Not listening — retrying (is port \(engine.controlAPIPort) already in use?)", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppPalette.warning)
                 .font(.footnote)
         }
     }

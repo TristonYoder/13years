@@ -152,7 +152,7 @@ struct AttachmentRows: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(loadError, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppPalette.warning)
                     Button("Try Again") { Task { await load(force: true) } }
                 }
             } else {

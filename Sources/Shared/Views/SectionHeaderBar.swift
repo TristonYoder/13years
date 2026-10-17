@@ -57,7 +57,7 @@ private struct SectionHeaderActionButton: View {
     var body: some View {
         configuration.label
             .font(.title2)
-            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(AppPalette.negative) : AnyShapeStyle(.primary))
             .frame(width: 52, height: 40)
             .background(
                 Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08),

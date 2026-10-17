@@ -130,7 +130,7 @@ public struct MessagesView: View {
                     if message.isHighPriority {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppPalette.negative)
                     }
                 }
 
@@ -144,7 +144,7 @@ public struct MessagesView: View {
                     )
 
                 Text(engine.displayClockFormat.string(from: message.timestamp))
-                    .font(.caption2)
+                    .font(.clock(.caption2, weight: .regular))
                     .foregroundStyle(.secondary)
             }
 
@@ -167,7 +167,7 @@ public struct MessagesView: View {
                 #if os(iOS) || os(macOS)
                 .toggleStyle(.button)
                 #endif
-                .tint(.red)
+                .tint(AppPalette.negative)
                 .help("Mark as high priority")
             }
 

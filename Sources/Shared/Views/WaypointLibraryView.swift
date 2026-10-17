@@ -124,7 +124,7 @@ public struct WaypointLibraryView: View {
             } label: {
                 Label("Rename\u{2026}", systemImage: "pencil")
             }
-            .tint(.blue)
+            .tint(AppPalette.info)
 
             Button(role: .destructive) {
                 pendingDeleteWaypoint = waypoint

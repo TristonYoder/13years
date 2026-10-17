@@ -72,7 +72,7 @@ public struct ProducerControlView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .blue : .secondary)
+                    .foregroundStyle(isSelected ? AppPalette.info : .secondary)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(role.name)
@@ -114,14 +114,14 @@ public struct ProducerControlView: View {
             HStack(spacing: 8) {
                 Button("Standby") { engine.setCueForRole(id: role.id, state: .standby) }
                     .buttonStyle(.borderedProminent)
-                    .tint(.yellow)
+                    .tint(AppPalette.cueStandby)
                     .foregroundStyle(.black)
                     .compactControlSize()
                     .frame(maxWidth: .infinity)
 
                 Button("GO!") { engine.setCueForRole(id: role.id, state: .go) }
                     .buttonStyle(.borderedProminent)
-                    .tint(.green)
+                    .tint(AppPalette.cueGo)
                     .compactControlSize()
                     .frame(maxWidth: .infinity)
 
@@ -141,7 +141,7 @@ public struct ProducerControlView: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(isSelected ? .blue : .clear, lineWidth: 2)
+                .strokeBorder(isSelected ? AppPalette.info : .clear, lineWidth: 2)
         )
         .overlay(alignment: .topTrailing) {
             if engine.hasUnreadMessage(forRoleId: role.id) {
@@ -160,7 +160,7 @@ private struct UnreadMessageBadge: View {
             .font(.system(size: 16, weight: .bold))
             .foregroundStyle(.white)
             .padding(8)
-            .background(Color.blue, in: Circle())
+            .background(AppPalette.info, in: Circle())
             .accessibilityLabel("Unread message")
     }
 }
@@ -170,7 +170,7 @@ private struct PulsingBlueFill: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 10)
-            .fill(Color.blue)
+            .fill(AppPalette.info)
             .opacity(isBright ? 0.3 : 0.04)
             .onAppear {
                 withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {

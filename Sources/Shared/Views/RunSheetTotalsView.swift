@@ -58,7 +58,7 @@ struct RunSheetTotalsView: View {
     }
 
     private var driftColor: Color {
-        (schedule.overUnderSeconds ?? 0) > 0 ? .orange : .green
+        (schedule.overUnderSeconds ?? 0) > 0 ? AppPalette.driftLate : AppPalette.driftEarly
     }
 
     @ViewBuilder

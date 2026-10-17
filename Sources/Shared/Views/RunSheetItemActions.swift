@@ -17,7 +17,7 @@ struct RunSheetItemActions: View {
         Button(action: onEdit) {
             Label("Edit\u{2026}", systemImage: "pencil")
         }
-        .tint(.blue)
+        .tint(AppPalette.info)
 
         if !item.isHeader {
             Button {
@@ -25,7 +25,7 @@ struct RunSheetItemActions: View {
             } label: {
                 Label("Go to This Item", systemImage: "play.fill")
             }
-            .tint(.green)
+            .tint(AppPalette.positive)
 
             Button {
                 engine.setDurationIsActual(id: item.id, isActual: !item.isDurationActual)

@@ -40,7 +40,7 @@ public struct SettingsView: View {
                 if let name = engine.pcoUserName {
                     HStack {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(AppPalette.positive)
                         Text("Signed in as **\(name)**")
                     }
                 }
@@ -191,7 +191,7 @@ public struct SettingsView: View {
                 if let sentAt = connectPingSentAt {
                     Label("Sent — check that device for \"Live\"", systemImage: "checkmark.circle.fill")
                         .font(.footnote)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppPalette.positive)
                         .id(sentAt)
                 }
 
@@ -256,11 +256,11 @@ public struct SettingsView: View {
         case .synced:
             Label("Role assignments synced from Plotiphar for this plan", systemImage: "checkmark.circle.fill")
                 .font(.footnote)
-                .foregroundStyle(.green)
+                .foregroundStyle(AppPalette.positive)
         case .error(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppPalette.warning)
         }
     }
 }
@@ -281,8 +281,7 @@ struct HourFormatOptionCard: View {
                 VStack(spacing: 2) {
                     ForEach(Self.sampleMinutes, id: \.self) { minutes in
                         Text(TimeFormatting.string(forSeconds: minutes * 60, threshold: threshold))
-                            .font(.system(.callout, design: .monospaced))
-                            .monospacedDigit()
+                            .font(.clock(.callout, weight: .regular))
                     }
                 }
                 .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)

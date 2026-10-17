@@ -86,7 +86,7 @@ public struct PCOPlanPickerView: View {
         List {
             if let error = engine.pcoLastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
 
@@ -114,7 +114,7 @@ public struct PCOPlanPickerView: View {
                     RowActionButton(
                         systemImage: isDefault ? "star.fill" : "star",
                         label: isDefault ? "Unset as default plan type" : "Set as default plan type",
-                        tint: isDefault ? .yellow : .secondary
+                        tint: isDefault ? AppPalette.favorite : .secondary
                     ) {
                         engine.setDefaultServiceType(isDefault ? nil : serviceType.id)
                     }
@@ -122,7 +122,7 @@ public struct PCOPlanPickerView: View {
                     if isDefault {
                         Label("Default", systemImage: "star.fill")
                             .labelStyle(.iconOnly)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(AppPalette.favorite)
                             .font(.caption)
                     }
                     #endif
@@ -145,7 +145,7 @@ public struct PCOPlanPickerView: View {
                         } label: {
                             Label("Set as Default", systemImage: "star.fill")
                         }
-                        .tint(.yellow)
+                        .tint(AppPalette.favorite)
                     }
                 }
             }
@@ -172,7 +172,7 @@ public struct PCOPlanPickerView: View {
 
             if let error = engine.pcoLastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
 

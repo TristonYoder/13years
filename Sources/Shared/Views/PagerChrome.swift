@@ -23,8 +23,8 @@ public enum CueDisplayStyle: String, CaseIterable, Identifiable, Sendable {
         CueDisplayStyle(rawValue: raw) ?? defaultStyle
     }
 
-    public static let ground = Color(red: 0.067, green: 0.067, blue: 0.078)
-    public static let darkText = Color(red: 0.1, green: 0.1, blue: 0.1)
+    public static let ground = AppPalette.pagerGround
+    public static let darkText = AppPalette.cueDarkText
 
     public var showsFrame: Bool { self == .outline }
     public var showsBadgePill: Bool { self == .outline }
@@ -107,10 +107,10 @@ struct PagerTopRow<RoleMenu: View>: View {
                 info: producerClock,
                 format: clockFormat,
                 font: .inter(size: sizes.timeFont, weight: .black),
-                color: Color(white: 0.96)
+                color: AppPalette.pagerClock
             )
             Text("LOCAL TIME")
-                .font(.inter(size: sizes.timeCaptionFont, weight: .bold))
+                .font(.system(size: sizes.timeCaptionFont, weight: .bold))
                 .tracking(sizes.timeCaptionFont * 0.25)
                 .foregroundColor(.white.opacity(0.5))
                 .lineLimit(1)
@@ -120,7 +120,7 @@ struct PagerTopRow<RoleMenu: View>: View {
 
     private func badgeLabel(_ word: String) -> some View {
         Text(word)
-            .font(.inter(size: sizes.badgeFont, weight: .black))
+            .font(.system(size: sizes.badgeFont, weight: .black))
             .foregroundColor(CueDisplayStyle.darkText)
             .lineLimit(1)
             .padding(.horizontal, style.showsBadgePill ? sizes.badgeFont * 0.3 : 0)
@@ -152,7 +152,7 @@ struct PagerTopRow<RoleMenu: View>: View {
             } label: {
                 HStack(spacing: sizes.roleFont * 0.35) {
                     Text(roleName)
-                        .font(.inter(size: sizes.roleFont, weight: .bold))
+                        .font(.system(size: sizes.roleFont, weight: .bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                     Image(systemName: "chevron.down")
@@ -301,9 +301,9 @@ public enum PagerLinkIndicator: Equatable, Sendable {
 
     public var tint: Color {
         switch self {
-        case .live: return .green
-        case .waitingForProducer, .connecting: return .orange
-        case .problem, .notConnected: return .red
+        case .live: return AppPalette.positive
+        case .waitingForProducer, .connecting: return AppPalette.warning
+        case .problem, .notConnected: return AppPalette.negative
         }
     }
 
@@ -380,7 +380,7 @@ struct PagerNoConnectionNotice: View {
         VStack {
             Spacer(minLength: 0)
             Label("Reconnecting…", systemImage: "wifi.slash")
-                .font(.inter(size: font, weight: .bold))
+                .font(.system(size: font, weight: .bold))
                 .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
                 .lineLimit(1)
                 .padding(.bottom, bottomInset)
@@ -431,12 +431,12 @@ struct PagerMessagePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: captionFontSize * 0.3) {
             Text(message.sender.uppercased())
-                .font(.inter(size: captionFontSize, weight: .heavy))
+                .font(.system(size: captionFontSize, weight: .heavy))
                 .tracking(captionFontSize * 0.15)
                 .foregroundColor(CueDisplayStyle.darkText.opacity(0.7))
                 .lineLimit(1)
             Text(message.text)
-                .font(.inter(size: fontSize, weight: .bold))
+                .font(.system(size: fontSize, weight: .bold))
                 .foregroundColor(CueDisplayStyle.darkText)
                 .multilineTextAlignment(.leading)
                 .lineLimit(maxLines)
@@ -446,7 +446,7 @@ struct PagerMessagePanel: View {
         .padding(padding)
         .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color.yellow)
+        .background(AppPalette.pagerMessage)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .offset(x: dragOffset)
         .opacity(opacity)

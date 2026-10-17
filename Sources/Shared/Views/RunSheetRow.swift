@@ -67,12 +67,12 @@ struct RunSheetRowBackground: View {
 
     private func overrunStyle(for item: PCOTimerItem) -> (color: Color, min: Double, max: Double) {
         if item.isOvertime {
-            return (Color(red: 0.80, green: 0.09, blue: 0.09), 0.28, 0.55)
+            return (AppPalette.timerOvertime, 0.28, 0.55)
         }
         if item.lengthInSeconds > 0, Double(item.remainingSeconds) <= Double(item.lengthInSeconds) * 0.1 {
-            return (.yellow, 0.14, 0.34)
+            return (AppPalette.timerWarning, 0.14, 0.34)
         }
-        return (.green, 0.12, 0.30)
+        return (AppPalette.timerOnTime, 0.12, 0.30)
     }
 }
 
@@ -298,7 +298,7 @@ struct RunSheetRow: View {
                        let projected = entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.clock(.caption2, weight: .semibold))
-                            .foregroundStyle(drift > 0 ? Color.orange : Color.green)
+                            .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
                             .help(drift > 0 ? "Projected to start later than planned" : "Projected to start earlier than planned")
                     }
                 }
@@ -403,16 +403,16 @@ struct RunSheetRow: View {
             if item.pcoPlanId != nil {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.caption2)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(AppPalette.info)
                     .help("Synced with Planning Center")
             }
             if isExcluded, let excludedLabel {
                 Text("Not in \(excludedLabel)")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(AppPalette.warning.opacity(0.15), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .lineLimit(1)
             }
             if isSkipped {
@@ -471,6 +471,7 @@ struct RunSheetRow: View {
                 }
                 if let bpm {
                     Text("\(bpm) BPM")
+                        .font(.clock(.caption, weight: .regular))
                 }
                 if let meter {
                     Text(meter)
@@ -506,7 +507,7 @@ struct RunSheetRow: View {
                 HStack(spacing: 8) {
                     Image(systemName: "play.circle.fill")
                         .font(.title2.weight(.bold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppPalette.timerOnTime)
                         .frame(width: 52, height: 52)
 
                     Button {
@@ -532,7 +533,7 @@ struct RunSheetRow: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: 10))
-                .tint(.green)
+                .tint(AppPalette.positive)
                 .accessibilityLabel("Go")
                 .help("Jump to this item and make it active")
             }
@@ -588,12 +589,12 @@ struct RunSheetRow: View {
             engine.setDurationIsActual(id: item.id, isActual: !item.isDurationActual)
         } label: {
             Text(item.isDurationActual ? "ACT" : "PROJ")
-                .font(.inter(size: 9, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(item.isDurationActual ? Color.white : Color.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(
-                    item.isDurationActual ? Color.blue : Color.secondary.opacity(0.15),
+                    item.isDurationActual ? AppPalette.info : Color.secondary.opacity(0.15),
                     in: RoundedRectangle(cornerRadius: 4, style: .continuous)
                 )
         }

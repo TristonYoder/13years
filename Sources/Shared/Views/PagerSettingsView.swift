@@ -135,7 +135,7 @@ public struct PagerSettingsView: View {
                     if let master = engine.connectedMasterName, linkIndicator.isLinked {
                         LabeledContent("Connected Master") {
                             Text(master)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(AppPalette.positive)
                                 .fontWeight(.medium)
                         }
                     } else {

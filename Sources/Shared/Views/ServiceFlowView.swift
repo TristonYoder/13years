@@ -215,7 +215,7 @@ public struct ServiceFlowView: View {
         VStack(spacing: 16) {
             if let error = engine.pcoLastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
 
@@ -267,7 +267,7 @@ public struct ServiceFlowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let error = engine.pcoLastError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppPalette.warning)
                         .font(.footnote)
                 }
                 HStack(spacing: 16) {
@@ -390,7 +390,7 @@ public struct ServiceFlowView: View {
         if let error = engine.pcoLastError {
             Section {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
         }

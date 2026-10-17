@@ -170,7 +170,7 @@ struct WatchCueView: View {
 
             HStack(spacing: 3) {
                 Circle()
-                    .fill(model.signal == .live ? Color.green : (model.signal == .stale ? Color.orange : Color.red))
+                    .fill(model.signal == .live ? AppPalette.positive : (model.signal == .stale ? AppPalette.warning : AppPalette.negative))
                     .frame(width: 6, height: 6)
                 Text(model.signal == .live ? "Live" : (model.signal == .stale ? "Reconnecting…" : "Offline"))
                     .font(.system(size: 10, weight: .semibold))
@@ -191,7 +191,7 @@ struct WatchCueView: View {
     private var stateBlock: some View {
         VStack(spacing: 2) {
             Text(currentState.displayName.uppercased())
-                .font(.system(size: 40, weight: .black, design: .rounded))
+                .font(.system(size: 40, weight: .black))
                 .foregroundStyle(contentTextColor)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
@@ -216,7 +216,8 @@ struct WatchCueView: View {
 
             if !item.isHeader, let threshold = presentation?.hourFormatThreshold {
                 Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: threshold))
-                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .font(.inter(size: 26, weight: .black))
+                    .monospacedDigit()
                     .foregroundStyle(contentTextColor)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)

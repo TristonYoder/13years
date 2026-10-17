@@ -121,7 +121,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     private var screen: some View {
         VStack(spacing: 2) {
             Text(editBuffer.isEmpty ? (isEndAt ? "Type a time (24h, or pick AM/PM)…" : "Type a time…") : editBuffer)
-                .font(.inter(size: 17, weight: .medium))
+                .font(editBuffer.isEmpty ? .system(size: 17, weight: .medium) : .inter(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
@@ -149,7 +149,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
             toggleEndAt()
         } label: {
             Text("End @")
-                .font(.system(.body, design: .monospaced).weight(.medium))
+                .font(.body.weight(.medium))
                 .frame(maxWidth: .infinity)
         }
         .producerSecondaryButton()

@@ -178,7 +178,7 @@ public struct PlanItemEditorView: View {
             Text("Length")
             Spacer()
             Text(formattedLength)
-                .font(.system(.body, design: .monospaced))
+                .font(.clock(.body, weight: .regular))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)

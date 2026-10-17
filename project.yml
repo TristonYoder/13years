@@ -189,6 +189,7 @@ targets:
       - path: Sources/ProducerWatch
         excludes:
           - "ExtensionInfo.plist"
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/AppPalette.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/CueState.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/HourFormatThreshold.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/InterTeamMessage.swift

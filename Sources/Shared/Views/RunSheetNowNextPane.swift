@@ -10,10 +10,10 @@ struct RunSheetKeyPill: View {
     var body: some View {
         Text(key)
             .font(.caption.weight(.bold))
-            .foregroundStyle(.purple)
+            .foregroundStyle(AppPalette.keyPill)
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
-            .background(Color.purple.opacity(0.16), in: Capsule())
+            .background(AppPalette.keyPill.opacity(0.16), in: Capsule())
             .lineLimit(1)
             .accessibilityLabel("Key \(key)")
     }
@@ -83,7 +83,7 @@ private struct RunSheetFocusCard: View {
                 Text(role == .now ? "NOW" : "NEXT")
                     .font(.caption.weight(.heavy))
                     .tracking(1.2)
-                    .foregroundStyle(role == .now ? Color.green : Color.accentColor)
+                    .foregroundStyle(role == .now ? AppPalette.timerOnTime : Color.accentColor)
 
                 if let item {
                     content(for: item)
@@ -177,7 +177,7 @@ private struct RunSheetFocusCard: View {
         if key != nil || bpm != nil || meter != nil || arrangement != nil {
             RunSheetFlowLayout(spacing: 8) {
                 if let key { RunSheetKeyPill(key: key) }
-                if let bpm { Text("\(bpm) BPM") }
+                if let bpm { Text("\(bpm) BPM").font(.clock(.caption, weight: .regular)) }
                 if let meter { Text(meter) }
                 if let arrangement { Text(arrangement) }
             }

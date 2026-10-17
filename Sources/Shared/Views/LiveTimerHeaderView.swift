@@ -21,7 +21,7 @@ private struct DocumentSaveStatusLabel: View {
         let status = indicator.status
         let label = Text(status.text)
             .font(.system(size: 10))
-            .foregroundStyle(status == .failed ? Color.orange : Color.secondary.opacity(0.8))
+            .foregroundStyle(status == .failed ? AppPalette.warning : Color.secondary.opacity(0.8))
             .lineLimit(1)
         if status.isActionable {
             Button(action: { indicator.onActivate?() }) { label }
@@ -44,14 +44,14 @@ public struct LiveTimerHeaderView: View {
         VStack(spacing: 10) {
             if !engine.isLANConnected {
                 Label("Not connected to the LAN cue network — retrying in the background", systemImage: "wifi.exclamationmark")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppPalette.negative)
                     .font(.footnote)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if let error = engine.pcoLastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -102,7 +102,7 @@ public struct LiveTimerHeaderView: View {
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .producerButtonShape()
-                                .tint(item.isRunning ? .blue : .green)
+                                .tint(item.isRunning ? AppPalette.info : AppPalette.positive)
                                 .help(item.isRunning ? "Pause the timer" : "Start the timer")
 
                                 Button(action: { engine.resetTimer() }) {
@@ -163,7 +163,7 @@ public struct LiveTimerHeaderView: View {
             }
             .buttonStyle(.borderedProminent)
             .producerButtonShape()
-            .tint(.yellow)
+            .tint(AppPalette.cueStandby)
             .foregroundStyle(.black)
             .help("Set STANDBY for the \(count) selected role(s)")
 
@@ -176,7 +176,7 @@ public struct LiveTimerHeaderView: View {
             }
             .buttonStyle(.borderedProminent)
             .producerButtonShape()
-            .tint(.green)
+            .tint(AppPalette.cueGo)
             .help("Set GO for the \(count) selected role(s)")
 
             Button(action: { engine.setCueForSelectedRoles(.off) }) {
@@ -212,7 +212,7 @@ public struct LiveTimerHeaderView: View {
     private func remainingTimeControl(_ item: PCOTimerItem) -> some View {
         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold))
             .font(.inter(size: 52, weight: .black))
-            .foregroundStyle(isEditingTimer ? Color.primary : (item.isOvertime ? .red : .primary))
+            .foregroundStyle(isEditingTimer ? Color.primary : (item.isOvertime ? AppPalette.timerOvertime : .primary))
             #if !os(tvOS)
             .contentTransition(.numericText())
             #endif

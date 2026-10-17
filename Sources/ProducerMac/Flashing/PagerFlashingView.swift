@@ -98,7 +98,7 @@ struct PagerFlashingView: View {
             } else {
                 Label("This build is missing its pager firmware.",
                       systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppPalette.negative)
             }
         } header: {
             Text("Firmware")
@@ -134,7 +134,7 @@ struct PagerFlashingView: View {
             if let validation = provisioning.validationError, !ssid.isEmpty || !producerIP.isEmpty {
                 Label(validation, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
             }
         } header: {
             Text("Wi-Fi and role")
@@ -209,18 +209,18 @@ struct PagerFlashingView: View {
         case .running:
             ProgressView().controlSize(.small)
         case .succeeded:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(AppPalette.positive)
         case .flashedButNotProvisioned:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(AppPalette.warning)
         case .failed:
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+            Image(systemName: "xmark.circle.fill").foregroundStyle(AppPalette.negative)
         }
     }
 
     private var statusColor: Color {
         switch job.state {
-        case .failed: return .red
-        case .flashedButNotProvisioned: return .orange
+        case .failed: return AppPalette.negative
+        case .flashedButNotProvisioned: return AppPalette.warning
         default: return .secondary
         }
     }

@@ -179,7 +179,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             if let item = presentation.activeTimerItem {
                 VStack(spacing: m.margin * 0.2) {
                     Text(item.title.uppercased())
-                        .font(.inter(size: m.titleFontSize, weight: .bold))
+                        .font(.system(size: m.titleFontSize, weight: .bold))
                         .foregroundColor(primary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -194,7 +194,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                             .minimumScaleFactor(0.3)
 
                         Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
-                            .font(.inter(size: m.tagFontSize, weight: .bold))
+                            .font(.system(size: m.tagFontSize, weight: .bold))
                             .tracking(m.tagFontSize * 0.12)
                             .foregroundColor(style.secondaryText(for: state, opacity: 0.6))
                     }
@@ -248,7 +248,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
 
     private func detailsText(_ m: LandscapeMetrics, _ line: String, opacity: Double, scale: CGFloat) -> some View {
         Text(line)
-            .font(.inter(size: m.noteFontSize * scale, weight: .semibold))
+            .font(.system(size: m.noteFontSize * scale, weight: .semibold))
             .foregroundColor(.white.opacity(opacity))
             .lineLimit(1)
             .truncationMode(.tail)
@@ -257,7 +257,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
     private func currentContent(_ m: LandscapeMetrics, details: String?, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
             Text("CURRENT")
-                .font(.inter(size: m.captionFontSize * scale, weight: .heavy))
+                .font(.system(size: m.captionFontSize * scale, weight: .heavy))
                 .tracking(2)
                 .foregroundColor(.white.opacity(0.5))
             if let details {
@@ -273,7 +273,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
                 HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
                     Text(next.title.uppercased())
-                        .font(.inter(size: m.nextTitleFontSize * scale, weight: .bold))
+                        .font(.system(size: m.nextTitleFontSize * scale, weight: .bold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -296,7 +296,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             ForEach(notes, id: \.category) { note in
                 PagerNoteText.line(category: note.category, text: note.text)
-                    .font(.inter(size: m.noteFontSize * scale, weight: weight))
+                    .font(.system(size: m.noteFontSize * scale, weight: weight))
                     .foregroundColor(.white.opacity(opacity))
                     .fixedSize(horizontal: false, vertical: true)
             }

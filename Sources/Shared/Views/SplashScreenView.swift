@@ -14,8 +14,8 @@ public struct SplashScreenView: View {
 
     public static func ground(for scheme: ColorScheme) -> Color {
         scheme == .dark
-            ? Color(red: 0x10 / 255, green: 0x10 / 255, blue: 0x14 / 255)
-            : Color(red: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF3 / 255)
+            ? AppPalette.brandGroundDark
+            : AppPalette.brandGroundLight
     }
 
     public var body: some View {
@@ -34,7 +34,7 @@ public struct SplashScreenView: View {
 
                 if let status {
                     Text(status)
-                        .font(.inter(size: 13, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(palette.ink.opacity(0.55))
                         .transition(.opacity)
                         .id(status)
