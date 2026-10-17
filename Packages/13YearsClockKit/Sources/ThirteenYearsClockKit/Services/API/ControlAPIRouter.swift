@@ -793,6 +793,9 @@ public final class ControlAPIRouter {
             guard engine.currentPCOPlanId != nil else {
                 return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
             }
+            guard engine.isPCOConnected else {
+                return Self.error(409, "Not signed in to Planning Center", detail: "Sign in with POST /v1/pco/sign-in first.")
+            }
             let engine = engine
             Task { @MainActor in await engine.refreshPCOPlanContext() }
             return accepted(pcoStatus())
@@ -835,6 +838,9 @@ public final class ControlAPIRouter {
             guard allows(method, "POST") else { return methodNotAllowed() }
             guard engine.currentPCOPlanId != nil else {
                 return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            guard engine.isPCOConnected else {
+                return Self.error(409, "Not signed in to Planning Center", detail: "Sign in with POST /v1/pco/sign-in first.")
             }
             let changes = engine.actualLengthChanges()
             guard !changes.isEmpty else {
@@ -973,6 +979,46 @@ public final class ControlAPIRouter {
         }
     }
 
+    private func validate(_ details: PCOItemDetails) -> HTTPResponse? {
+        if let tooLong = tooLong(details.description ?? "", ContentLimits.noteValue, "Description") { return tooLong }
+        if let tooLong = tooLong(details.htmlDetails ?? "", ContentLimits.noteValue * 8, "htmlDetails") { return tooLong }
+        if let tooLong = tooLong(details.keyName ?? "", ContentLimits.name, "keyName") { return tooLong }
+        let shortFields: [(String?, String)] = [
+            (details.key?.id, "key id"), (details.key?.name, "key name"), (details.key?.startingKey, "startingKey"),
+            (details.key?.endingKey, "endingKey"), (details.arrangement?.id, "arrangement id"),
+            (details.arrangement?.name, "arrangement name"), (details.arrangement?.meter, "meter"),
+            (details.arrangement?.notes, "arrangement notes"), (details.song?.id, "song id"),
+            (details.song?.title, "song title"), (details.song?.author, "song author"),
+            (details.song?.copyright, "song copyright"), (details.media?.id, "media id"),
+            (details.media?.title, "media title"), (details.media?.mediaType, "mediaType"),
+            (details.media?.thumbnailURL, "thumbnailURL"),
+        ]
+        for (value, label) in shortFields {
+            if let tooLong = tooLong(value ?? "", ContentLimits.noteValue, label) { return tooLong }
+        }
+        let lists: [([String], String, Int)] = [
+            (details.customSequence, "customSequence", ContentLimits.name),
+            (details.customSequenceShort, "customSequenceShort", ContentLimits.sequenceToken),
+            (details.arrangement?.sequence ?? [], "arrangement sequence", ContentLimits.name),
+            (details.arrangement?.sequenceShort ?? [], "arrangement sequenceShort", ContentLimits.sequenceToken),
+            (details.key?.alternateKeys ?? [], "alternateKeys", ContentLimits.name),
+            (details.song?.themes ?? [], "song themes", ContentLimits.name),
+            (details.media?.themes ?? [], "media themes", ContentLimits.name),
+        ]
+        for (values, label, limit) in lists {
+            guard values.count <= ContentLimits.maxDetailListEntries else { return limitReached(label, ContentLimits.maxDetailListEntries) }
+            for value in values {
+                if let tooLong = tooLong(value, limit, label) { return tooLong }
+            }
+        }
+        guard details.itemTimes.count <= CueEngine.maxEventTimes * 2 else { return limitReached("itemTimes", CueEngine.maxEventTimes * 2) }
+        for time in details.itemTimes {
+            if let tooLong = tooLong(time.id, ContentLimits.identifier, "itemTime id") { return tooLong }
+            if let tooLong = tooLong(time.planTimeId ?? "", ContentLimits.identifier, "itemTime planTimeId") { return tooLong }
+        }
+        return nil
+    }
+
     private func validate(_ request: ControlAPIRequests.DocumentLoadBody) -> HTTPResponse? {
         if let tooLong = tooLong(request.title ?? "", ContentLimits.title, "Plan title") { return tooLong }
         guard request.items.count <= ContentLimits.maxPlanItems else { return limitReached("plan items", ContentLimits.maxPlanItems) }
@@ -1001,6 +1047,7 @@ public final class ControlAPIRouter {
             for waypointId in item.waypointIds {
                 if let tooLong = tooLong(waypointId, ContentLimits.identifier, "Waypoint id") { return tooLong }
             }
+            if let details = item.details, let rejected = validate(details) { return rejected }
         }
         if let times = request.eventTimes {
             guard times.count <= CueEngine.maxEventTimes else { return limitReached("event times", CueEngine.maxEventTimes) }

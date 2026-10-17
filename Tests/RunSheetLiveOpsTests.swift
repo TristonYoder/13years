@@ -39,7 +39,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
         )
     }
 
-    private func makeEngine(_ items: [PCOTimerItem]? = nil, eventTimes: Bool = true) -> CueEngine {
+    private func makeEngine(_ items: [PCOTimerItem]? = nil, eventTimes: Bool = true, started: Bool = true) -> CueEngine {
         let engine = CueEngine(startsNetworking: false)
         engine.timerClock = { [unowned self] in self.clock }
         engine.outboundObserver = { [unowned self] packet, target in self.sent.append((packet, target)) }
@@ -51,6 +51,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
             ]
             engine.liveEventTimeId = "e1"
         }
+        if started, let first = engine.activeTimerItem?.id { engine.setActivePlanItem(id: first) }
         sent = []
         return engine
     }
@@ -105,6 +106,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
 
     func testLiveActualIncludesTheRunningItem() {
         let engine = makeEngine()
+        engine.setActivePlanItem(id: "a")
         setElapsed(engine, 75)
         XCTAssertEqual(engine.actualLength(forItemId: "a"), 75)
         let entry = engine.runSheetSchedule(now: clock).entry(forItemId: "a")
@@ -114,6 +116,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
 
     func testSwitchingEventTimesSplitsTheRunningItem() {
         let engine = makeEngine()
+        engine.setActivePlanItem(id: "a")
         setElapsed(engine, 60)
         engine.setLiveEventTime(id: "e2")
         XCTAssertEqual(actual(engine, "a", eventTimeId: "e1")?.lengthSeconds, 60)
@@ -145,6 +148,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
 
     func testRehearsalModeDoesNotLogAndRestoresTheLiveTime() {
         let engine = makeEngine()
+        engine.setActivePlanItem(id: "a")
         setElapsed(engine, 40)
         engine.setRehearsalMode(true)
         XCTAssertEqual(actual(engine, "a")?.lengthSeconds, 40)
@@ -311,6 +315,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
 
     func testSaveActualLengthsWritesEachChangedSyncedItem() async throws {
         let engine = makeEngine([item("a", length: 300), item("b", length: 300), item("c", length: 300), item("local", length: 60, planId: nil)])
+        engine.isPCOConnected = true
         engine.pcoChangeTracking.pushDelay = 0
         var writes: [(String, Int)] = []
         engine.pcoChangeTracking.writeLength = { serviceTypeId, planId, itemId, seconds in
@@ -346,6 +351,7 @@ final class RunSheetLiveOpsTests: XCTestCase {
 
     func testUseActualAsPlannedLengthUpdatesLocallyAndPushes() async throws {
         let engine = makeEngine()
+        engine.setActivePlanItem(id: "a")
         engine.pcoChangeTracking.pushDelay = 0
         var writes: [(String, Int)] = []
         engine.pcoChangeTracking.writeLength = { _, _, itemId, seconds in writes.append((itemId, seconds)) }
@@ -458,6 +464,107 @@ final class RunSheetLiveOpsTests: XCTestCase {
         other.apply(stale)
         XCTAssertTrue(other.itemActuals.isEmpty)
         XCTAssertTrue(other.skippedItemIds.isEmpty)
+    }
+
+    func testImportAloneDoesNotLogActuals() {
+        let engine = makeEngine(started: false)
+        clock.addTimeInterval(120)
+        setElapsed(engine, 120)
+        XCTAssertTrue(engine.itemActuals.isEmpty)
+        XCTAssertTrue(engine.itemActualsIncludingLive.isEmpty)
+        engine.eventTimes = [EventTime(id: "e1", name: "Early"), EventTime(id: "e2", name: "Late")]
+        engine.liveEventTimeId = "e2"
+        XCTAssertTrue(engine.itemActualsIncludingLive.isEmpty)
+    }
+
+    func testFirstExplicitGoLogsFromThatMoment() {
+        let engine = makeEngine(started: false)
+        clock.addTimeInterval(300)
+        engine.setActivePlanItem(id: "c")
+        XCTAssertEqual(engine.activeTimerItem?.id, "c")
+        XCTAssertNil(actual(engine, "a"))
+        XCTAssertEqual(actual(engine, "c")?.startedAt, clock)
+        setElapsed(engine, 40)
+        engine.nextPlanItem()
+        XCTAssertEqual(actual(engine, "c")?.lengthSeconds, 40)
+    }
+
+    func testResumingThePausedTimerStartsLogging() {
+        let engine = makeEngine(started: false)
+        engine.toggleTimerRunning()
+        setElapsed(engine, 30)
+        XCTAssertTrue(engine.itemActualsIncludingLive.isEmpty)
+        clock.addTimeInterval(30)
+        engine.toggleTimerRunning()
+        XCTAssertEqual(actual(engine, "a")?.startedAt, clock)
+        setElapsed(engine, 50)
+        engine.nextPlanItem()
+        XCTAssertEqual(actual(engine, "a")?.lengthSeconds, 20)
+    }
+
+    func testNextAfterImportLogsOnlyFromTheFirstExplicitStart() {
+        let engine = makeEngine(started: false)
+        setElapsed(engine, 90)
+        engine.nextPlanItem()
+        setElapsed(engine, 45)
+        engine.nextPlanItem()
+        XCTAssertNil(actual(engine, "a"))
+        XCTAssertEqual(actual(engine, "b")?.lengthSeconds, 45)
+    }
+
+    func testReloadingThePlanResetsTheStartedFlag() {
+        let engine = makeEngine(started: false)
+        engine.nextPlanItem()
+        XCTAssertTrue(engine.hasStartedPlan)
+        engine.importFlow(title: "Plan", items: [item("a"), item("b"), item("c"), item("d")])
+        XCTAssertFalse(engine.hasStartedPlan)
+        setElapsed(engine, 60)
+        XCTAssertFalse(engine.itemActualsIncludingLive.contains { $0.itemId == "a" && $0.eventTimeId == "e1" && $0.startedAt > clock })
+        engine.applyPlan(of: engine.makeDocument())
+        XCTAssertFalse(engine.hasStartedPlan)
+    }
+
+    func testTappingAHeaderWhenEveryItemIsSkippedStillLandsOnAnItem() {
+        let header = PCOTimerItem(id: "h", title: "Header", itemType: "Header", lengthInSeconds: 0)
+        let engine = makeEngine([item("a"), header, item("c")])
+        engine.setItemSkipped(id: "a", skipped: true)
+        engine.setItemSkipped(id: "c", skipped: true)
+        engine.setActivePlanItem(id: "h")
+        XCTAssertEqual(engine.activeTimerItem?.id, "c")
+        XCTAssertFalse(engine.activeTimerItem?.isHeader ?? true)
+
+        engine.removePlanItem(id: "c")
+        XCTAssertEqual(engine.activeTimerItem?.id, "a")
+    }
+
+    func testSavingActualsToPCORequiresSignIn() {
+        let engine = makeEngine()
+        setElapsed(engine, 100)
+        engine.nextPlanItem()
+        let router = ControlAPIRouter(engine: engine)
+        func call(_ path: String) -> HTTPResponse {
+            router.handle(HTTPRequest(method: "POST", path: path, body: Data()))
+        }
+        XCTAssertTrue(engine.actualLengthChanges().isEmpty)
+        XCTAssertEqual(call("/v1/plan/actuals/save-to-pco").status, 409)
+        XCTAssertEqual(call("/v1/pco/plan-context/refresh").status, 409)
+        XCTAssertEqual(engine.planItems.first { $0.id == "a" }?.lengthInSeconds, 300)
+        engine.isPCOConnected = true
+        XCTAssertEqual(engine.actualLengthChanges().map(\.itemId), ["a"])
+    }
+
+    func testSwitchingRehearsalTimesRebroadcastsTheNextItem() {
+        let excluded = PCOItemTimeInfo(id: "x", planTimeId: "r2", exclude: true)
+        let engine = makeEngine([item("a"), item("b", times: [excluded]), item("c")])
+        engine.pcoPlanContext = PCOPlanContext(planId: "plan1", serviceTypeId: "st", times: [
+            PCOPlanTimeInfo(id: "r1", timeType: "rehearsal"), PCOPlanTimeInfo(id: "r2", timeType: "rehearsal"),
+        ])
+        XCTAssertTrue(engine.setRehearsalMode(true, planTimeId: "r1"))
+        XCTAssertEqual(engine.nextItemForBroadcast?.id, "b")
+        sent = []
+        XCTAssertTrue(engine.setRehearsalMode(true, planTimeId: "r2"))
+        XCTAssertEqual(engine.nextItemForBroadcast?.id, "c")
+        XCTAssertTrue(sent.contains { $0.packet.nextItem?.id == "c" })
     }
 
     func testStateSnapshotAndRoutesExposeLiveOps() throws {

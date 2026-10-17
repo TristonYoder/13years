@@ -90,6 +90,7 @@ extension CueEngine {
             return
         }
         guard let next = nextEventTime, planItems.contains(where: { !$0.isHeader }) else { return }
+        markPlanStarted()
         liveEventTimeId = next.id
         guard let firstIndex = planItems.firstIndex(where: { !$0.isHeader && !isOmittedFromNavigation($0) })
             ?? planItems.firstIndex(where: { !$0.isHeader }) else { return }

@@ -69,6 +69,9 @@ public final class DocumentAutosaver: ObservableObject {
             engine.$waypoints.map { _ in }.eraseToAnyPublisher(),
             engine.$serviceSchedules.map { _ in }.eraseToAnyPublisher(),
             engine.$planItems.map { _ in }.eraseToAnyPublisher(),
+            engine.$skippedItemIds.map { _ in }.eraseToAnyPublisher(),
+            engine.$itemActuals.map { _ in }.eraseToAnyPublisher(),
+            engine.$pcoPlanContext.map { _ in }.eraseToAnyPublisher(),
             engine.$activeItemIndex.map { _ in }.eraseToAnyPublisher(),
             engine.$hourFormatThreshold.map { _ in }.eraseToAnyPublisher(),
             engine.$clockFormat.map { _ in }.eraseToAnyPublisher(),
@@ -137,6 +140,7 @@ public final class DocumentAutosaver: ObservableObject {
         let remaining = indexThrottle - Date().timeIntervalSince(last)
         guard remaining > 0, var probe = current else { return false }
         probe.activeItemIndex = baseline.activeItemIndex
+        probe.itemActuals = baseline.itemActuals
         guard probe == baseline else { return false }
         throttleItem?.cancel()
         let item = DispatchWorkItem { [weak self] in

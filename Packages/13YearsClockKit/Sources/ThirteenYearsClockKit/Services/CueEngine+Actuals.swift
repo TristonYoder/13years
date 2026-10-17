@@ -21,7 +21,16 @@ public struct ActualLengthChange: Equatable, Sendable, Identifiable {
 
 extension CueEngine {
     var isLoggingActuals: Bool {
-        !isRemoteMirror && isMasterServer && !isRehearsalMode
+        !isRemoteMirror && isMasterServer && !isRehearsalMode && hasStartedPlan
+    }
+
+    func markPlanStarted() {
+        guard !hasStartedPlan else { return }
+        hasStartedPlan = true
+        guard !isRemoteMirror, isMasterServer else { return }
+        let active = activeTimerItem
+        openActualRun(for: active)
+        startActualRunIfRunning(active)
     }
 
     public var actualsEventTimeId: String? {
@@ -96,6 +105,7 @@ extension CueEngine {
     }
 
     func resetLiveOperations() {
+        hasStartedPlan = false
         isRehearsalMode = false
         rehearsalPlanTimeId = nil
         actualRun = nil
@@ -166,7 +176,7 @@ extension CueEngine {
     }
 
     public func actualLengthChanges() -> [ActualLengthChange] {
-        guard !isRehearsalMode else { return [] }
+        guard !isRehearsalMode, isPCOConnected else { return [] }
         let key = actualsEventTimeId
         let closed = Dictionary(
             itemActuals.filter { $0.eventTimeId == key && $0.endedAt != nil }.map { ($0.itemId, $0) },

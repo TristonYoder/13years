@@ -42,6 +42,24 @@ final class DocumentLoadRouterTests: XCTestCase {
         ]
     }
 
+    func testDocumentLoadBoundsItemDetails() throws {
+        let engine = CueEngine()
+        var oversized = PCOItemDetails(description: String(repeating: "d", count: ContentLimits.noteValue + 1))
+        var items = [PCOTimerItem(id: "a", title: "Song", details: oversized)]
+        XCTAssertEqual(try put(engine, ControlAPIRequests.DocumentLoadBody(items: items)).status, 400)
+
+        oversized = PCOItemDetails(customSequenceShort: Array(repeating: "V1", count: ContentLimits.maxDetailListEntries + 1))
+        items = [PCOTimerItem(id: "a", title: "Song", details: oversized)]
+        XCTAssertEqual(try put(engine, ControlAPIRequests.DocumentLoadBody(items: items)).status, 409)
+
+        oversized = PCOItemDetails(customSequenceShort: [String(repeating: "x", count: ContentLimits.sequenceToken + 1)])
+        items = [PCOTimerItem(id: "a", title: "Song", details: oversized)]
+        XCTAssertEqual(try put(engine, ControlAPIRequests.DocumentLoadBody(items: items)).status, 400)
+
+        items = [PCOTimerItem(id: "a", title: "Song", details: PCOItemDetails(description: "Fine", customSequenceShort: ["V1", "C"]))]
+        XCTAssertEqual(try put(engine, ControlAPIRequests.DocumentLoadBody(items: items)).status, 200)
+    }
+
     func testDocumentModeKeepsEveryFieldAndActiveIndex() throws {
         let engine = CueEngine()
         let waypoints = [Waypoint(id: "w1", name: "Open"), Waypoint(id: "w2", name: "Close")]

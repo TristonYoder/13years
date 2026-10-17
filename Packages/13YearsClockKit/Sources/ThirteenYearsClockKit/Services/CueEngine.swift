@@ -66,8 +66,14 @@ public final class CueEngine: ObservableObject {
             rebroadcastIfNextItemChanged()
         }
     }
-    @Published public internal(set) var rehearsalPlanTimeId: String?
+    @Published public internal(set) var rehearsalPlanTimeId: String? {
+        didSet {
+            guard rehearsalPlanTimeId != oldValue, isRehearsalMode else { return }
+            rebroadcastIfNextItemChanged()
+        }
+    }
     var actualRun: ActualRun?
+    var hasStartedPlan = false
     @Published public var nextItem: PCOTimerItem?
     @Published public var nextItemStartsAtMs: Int?
     @Published var isActiveTimerActualOverride: Bool = false
@@ -819,6 +825,7 @@ public final class CueEngine: ObservableObject {
         isRehearsalMode = false
         rehearsalPlanTimeId = nil
         actualRun = nil
+        hasStartedPlan = false
         itemActuals = ItemActuals.pruned(document.itemActuals ?? [], validItemIds: validIds)
         skippedItemIds = ItemActuals.skips(from: document.skippedItemIds, validItemIds: validIds)
         planItems = items
@@ -847,6 +854,7 @@ public final class CueEngine: ObservableObject {
         if newPlanId == nil || newPlanId != planItems.first?.pcoPlanId {
             resetLiveOperations()
         }
+        hasStartedPlan = false
         var stamped = items
         for index in stamped.indices {
             stamped[index].sequence = index + 1
@@ -1003,6 +1011,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard let tappedIndex = planItems.firstIndex(where: { $0.id == id }) else { return }
+        markPlanStarted()
         let index = resolveSelectableIndex(startingAt: tappedIndex)
         let previousIndex = activeItemIndex
         activeItemIndex = index
@@ -1633,6 +1642,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard !planItems.isEmpty, let targetIndex = nextSelectableIndex(after: activeItemIndex) else { return }
+        markPlanStarted()
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
@@ -1649,6 +1659,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard !planItems.isEmpty, let targetIndex = previousSelectableIndex(before: activeItemIndex) else { return }
+        markPlanStarted()
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
@@ -1696,19 +1707,19 @@ public final class CueEngine: ObservableObject {
         broadcastTimerUpdate()
     }
 
-    private func nextSelectableIndex(after index: Int) -> Int? {
+    private func nextSelectableIndex(after index: Int, includingOmitted: Bool = false) -> Int? {
         var candidate = index + 1
         while candidate < planItems.count {
-            if !planItems[candidate].isHeader, !isOmittedFromNavigation(planItems[candidate]) { return candidate }
+            if !planItems[candidate].isHeader, includingOmitted || !isOmittedFromNavigation(planItems[candidate]) { return candidate }
             candidate += 1
         }
         return nil
     }
 
-    private func previousSelectableIndex(before index: Int) -> Int? {
+    private func previousSelectableIndex(before index: Int, includingOmitted: Bool = false) -> Int? {
         var candidate = index - 1
         while candidate >= 0 {
-            if !planItems[candidate].isHeader, !isOmittedFromNavigation(planItems[candidate]) { return candidate }
+            if !planItems[candidate].isHeader, includingOmitted || !isOmittedFromNavigation(planItems[candidate]) { return candidate }
             candidate -= 1
         }
         return nil
@@ -1725,6 +1736,8 @@ public final class CueEngine: ObservableObject {
         if !planItems[index].isHeader { return index }
         if let forward = nextSelectableIndex(after: index - 1) { return forward }
         if let backward = previousSelectableIndex(before: index + 1) { return backward }
+        if let forward = nextSelectableIndex(after: index - 1, includingOmitted: true) { return forward }
+        if let backward = previousSelectableIndex(before: index + 1, includingOmitted: true) { return backward }
         return index
     }
 
@@ -1767,6 +1780,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard var item = activeTimerItem, !item.isHeader else { return }
+        if !item.isRunning { markPlanStarted() }
         item.isRunning.toggle()
         activeTimerItem = item
         broadcastTimerUpdate()

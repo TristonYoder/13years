@@ -14,6 +14,8 @@ public enum ContentLimits {
     public static let maxSchedules = 100
     public static let maxNoteCategories = 64
     public static let identifier = 200
+    public static let maxDetailListEntries = 64
+    public static let sequenceToken = 16
 }
 
 public enum NetworkLimits {
