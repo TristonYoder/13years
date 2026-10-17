@@ -49,7 +49,7 @@ struct RunSheetNowNextPane: View {
     private static let handleWidth: CGFloat = 9
     private static let minimumCardHeight: CGFloat = 120
     private static let splitHandleHeight: CGFloat = 9
-    private static let coveredColumnIds: Set<String> = ["status", "title", "start"]
+    private static let coveredColumnIds: Set<String> = ["status", "title", "start", "leader", "leaderPhoto"]
 
     @State private var widthDrag: (start: CGFloat, width: CGFloat)?
     @State private var splitDrag: (start: CGFloat, nowHeight: CGFloat)?
@@ -426,14 +426,21 @@ private struct RunSheetFocusCard: View {
 
     @ViewBuilder
     private func leadersBlock(_ leaders: [PCOItemLeader]) -> some View {
-        if !leaders.isEmpty {
+        let hidden = engine.runSheetLayout.hiddenSet
+        let showsName = !hidden.contains("leader")
+        let showsPhoto = !hidden.contains("leaderPhoto")
+        if !leaders.isEmpty, showsName || showsPhoto {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(leaders) { leader in
                     HStack(spacing: 10) {
-                        LeaderAvatar(leader: leader, size: 40)
-                        (Text("Leader: ").foregroundStyle(.secondary) + Text(leader.name).fontWeight(.medium))
-                            .font(.callout)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if showsPhoto {
+                            LeaderAvatar(leader: leader, size: 40)
+                        }
+                        if showsName {
+                            (Text("Leader: ").foregroundStyle(.secondary) + Text(leader.name).fontWeight(.medium))
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }

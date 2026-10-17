@@ -43,7 +43,7 @@ struct RunSheetTableView: View {
         }
         let layout = engine.runSheetLayout
         let hidden = layout.hiddenSet
-        return RunSheetTableColumn.ordered(knownCategories, layout: layout).filter { !hidden.contains($0.id) }
+        return RunSheetTableColumn.ordered(knownCategories, layout: layout).filter { !hidden.contains($0.id) && !$0.isItemPart }
     }
 
     private var groups: [CardGroup] {
@@ -460,44 +460,48 @@ struct RunSheetTableView: View {
     }
 
     private func itemCell(_ item: PCOTimerItem, detailed: Bool) -> some View {
-        let subtitle = detailed && !item.isHeader ? item.runSheetTableSubtitle : nil
+        let hidden = engine.runSheetLayout.hiddenSet
         let leaders = detailed && !item.isHeader ? item.runSheetLeaders : []
-        let pills = detailed && !item.isHeader ? item.runSheetNotePills(layout: engine.runSheetLayout) : []
+        let showsPhoto = !hidden.contains("leaderPhoto") && !leaders.isEmpty
+        let showsLeader = !hidden.contains("leader") && !leaders.isEmpty
+        let highlighted = engine.runSheetLayout.highlightedSet
         return styled(item) {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    if !item.isHeader, let glyph = kindGlyph(item) {
-                        Image(systemName: glyph)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(item.isHeader ? item.title.uppercased() : item.title)
-                        .fontWeight(isActive(item) ? .semibold : (item.isHeader ? .heavy : .regular))
-                        .foregroundStyle(item.isHeader ? .secondary : .primary)
-                        .lineLimit(1)
-                        .layoutPriority(1)
-                    if isExcluded(item), let excludedLabel {
-                        Text("Not in \(excludedLabel)")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppPalette.warning)
-                            .lineLimit(1)
-                    }
-                    if isSkipped(item) {
-                        Text("Skipped")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    RunSheetNotePillsRow(pills: pills, highlightedColumns: engine.runSheetLayout.highlightedSet)
+            HStack(spacing: 8) {
+                if showsPhoto, let first = leaders.first {
+                    LeaderAvatar(leader: first, size: Self.rowHeight - 6)
+                        .help(leaders.map(\.name).joined(separator: ", "))
                 }
-                if !leaders.isEmpty {
-                    RunSheetByline(leaders: leaders, subtitle: subtitle)
-                } else if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .help(subtitle)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        if !item.isHeader, let glyph = kindGlyph(item) {
+                            Image(systemName: glyph)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(item.isHeader ? item.title.uppercased() : item.title)
+                            .fontWeight(isActive(item) ? .semibold : (item.isHeader ? .heavy : .regular))
+                            .foregroundStyle(item.isHeader ? .secondary : .primary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        if isExcluded(item), let excludedLabel {
+                            Text("Not in \(excludedLabel)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppPalette.warning)
+                                .lineLimit(1)
+                        }
+                        if isSkipped(item) {
+                            Text("Skipped")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    if showsLeader {
+                        (Text("Leader: ").foregroundStyle(.secondary) + Text(leaders.map(\.name).joined(separator: ", ")))
+                            .font(.caption)
+                            .lineLimit(1)
+                            .markerHighlight(highlighted.contains("leader"))
+                    }
                 }
             }
         }
@@ -688,6 +692,7 @@ struct RunSheetTableColumn: Identifiable {
     let title: String
     var fixedWidth: CGFloat?
     var flexMinWidth: CGFloat = 0
+    var isItemPart = false
 
     var minWidth: CGFloat { fixedWidth ?? flexMinWidth }
 
@@ -703,6 +708,8 @@ struct RunSheetTableColumn: Identifiable {
         .init(id: "status", title: "", fixedWidth: 22),
         .init(id: "start", title: "Start", fixedWidth: 84),
         .init(id: "title", title: "Item", flexMinWidth: 160),
+        .init(id: "leaderPhoto", title: "Leader photo", isItemPart: true),
+        .init(id: "leader", title: "Leader", isItemPart: true),
         .init(id: "time", title: "Time", fixedWidth: 112),
         .init(id: "drift", title: "Drift", fixedWidth: 64),
         .init(id: "key", title: "Key", fixedWidth: 52),
@@ -727,7 +734,7 @@ struct RunSheetTableColumn: Identifiable {
     }
 
     static func all(_ categories: [String]) -> [RunSheetTableColumn] {
-        Array(fixed.prefix(7)) + noteColumns(categories) + Array(fixed.dropFirst(7))
+        Array(fixed.prefix(9)) + noteColumns(categories) + Array(fixed.dropFirst(9))
     }
 
     static func ordered(_ categories: [String], layout: RunSheetLayoutSettings) -> [RunSheetTableColumn] {
@@ -873,20 +880,6 @@ private struct RunSheetColumnReorder: ViewModifier {
                 }
         } else {
             content
-        }
-    }
-}
-
-extension PCOTimerItem {
-    fileprivate var runSheetTableSubtitle: String? {
-        switch runSheetKind {
-        case .song:
-            let parts = [runSheetAuthor, runSheetBPMText.map { "\($0) BPM" }, runSheetMeter, runSheetArrangementName].compactMap { $0 }
-            return parts.isEmpty ? runSheetDescription : parts.joined(separator: " \u{00B7} ")
-        case .media, .item:
-            return runSheetDescription
-        case .header:
-            return nil
         }
     }
 }
