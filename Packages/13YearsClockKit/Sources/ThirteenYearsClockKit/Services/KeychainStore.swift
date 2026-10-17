@@ -7,6 +7,9 @@ import Security
 
 enum KeychainStore {
     private static let service = "dev.7co.13years"
+    private static let isEphemeral = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private static let ephemeralLock = NSLock()
+    nonisolated(unsafe) private static var ephemeral: [String: Data] = [:]
 
     static func setString(_ value: String?, forKey key: String) {
         guard let value, !value.isEmpty else {
@@ -35,6 +38,10 @@ enum KeychainStore {
     }
 
     private static func set(_ data: Data, forKey key: String) {
+        if isEphemeral {
+            ephemeralLock.withLock { ephemeral[key] = data }
+            return
+        }
         let query = baseQuery(forKey: key)
         let attributesToUpdate: [String: Any] = [kSecValueData as String: data]
 
@@ -48,6 +55,9 @@ enum KeychainStore {
     }
 
     private static func data(forKey key: String) -> Data? {
+        if isEphemeral {
+            return ephemeralLock.withLock { ephemeral[key] }
+        }
         var query = baseQuery(forKey: key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -59,6 +69,10 @@ enum KeychainStore {
     }
 
     private static func delete(forKey key: String) {
+        if isEphemeral {
+            ephemeralLock.withLock { ephemeral[key] = nil }
+            return
+        }
         SecItemDelete(baseQuery(forKey: key) as CFDictionary)
     }
 
