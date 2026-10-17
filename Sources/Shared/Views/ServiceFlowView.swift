@@ -448,7 +448,7 @@ public struct ServiceFlowView: View {
                 newWaypointTargetItemId = item.id
             }
         )
-        .listRowBackground(RunSheetRowBackground(item: item, isActive: isActive, isSelected: isSelected))
+        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected))
         .rowActions {
             RunSheetItemActions(
                 item: item,

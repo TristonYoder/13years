@@ -40,8 +40,8 @@ struct RunSheetFlowLayout: Layout {
 }
 
 struct RunSheetRowBackground: View {
-    @EnvironmentObject var engine: CueEngine
     let item: PCOTimerItem
+    let activeItem: PCOTimerItem?
     let isActive: Bool
     let isSelected: Bool
 
@@ -50,7 +50,7 @@ struct RunSheetRowBackground: View {
             if item.isHeader {
                 Color.gray.opacity(0.14)
             } else {
-                let liveItem = isActive ? (engine.activeTimerItem ?? item) : item
+                let liveItem = isActive ? (activeItem ?? item) : item
                 if isActive && liveItem.isRunning {
                     let style = overrunStyle(for: liveItem)
                     PulsingRowBackground(color: style.color, minOpacity: style.min, maxOpacity: style.max)
