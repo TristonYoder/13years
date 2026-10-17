@@ -189,6 +189,11 @@ public struct PCOItemTimeInfo: Codable, Equatable, Hashable, Sendable {
         self.liveEndAt = liveEndAt
     }
 
+    public var liveLengthSeconds: Int? {
+        guard let liveStartAt, let liveEndAt, liveEndAt >= liveStartAt else { return nil }
+        return Int(liveEndAt.timeIntervalSince(liveStartAt).rounded())
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, planTimeId, length, lengthOffset, exclude, liveStartAt, liveEndAt
     }

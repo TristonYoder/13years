@@ -11,6 +11,9 @@ struct RunSheetTotalsView: View {
         VStack(spacing: 0) {
             Divider()
             HStack(alignment: .firstTextBaseline, spacing: 20) {
+                if engine.isRehearsalMode {
+                    RehearsalBadge()
+                }
                 total("Planned", duration(schedule.plannedLength))
                 if let plannedEnd = schedule.plannedEnd {
                     total("Ends", clock(plannedEnd))
@@ -25,8 +28,14 @@ struct RunSheetTotalsView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                if schedule.actualElapsedSeconds > 0 {
+                    total("Actual", duration(schedule.actualElapsedSeconds))
+                    if let drift = schedule.actualDriftSeconds, abs(drift) >= RunSheetActualStyle.lengthThreshold {
+                        total("Drift", RunSheetActualStyle.signed(drift, threshold: engine.hourFormatThreshold), tint: RunSheetActualStyle.color(forDelta: drift))
+                    }
+                }
                 Spacer(minLength: 0)
-                if let label = engine.liveEventTimeLabel, engine.eventTimes.count > 1 {
+                if let label = engine.liveEventTimeLabel, engine.eventTimes.count > 1, !engine.isRehearsalMode {
                     Label(label, systemImage: "clock")
                         .font(.caption)
                         .foregroundStyle(.secondary)

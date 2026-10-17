@@ -18,6 +18,7 @@ struct PCOChangeTracking {
     var reorderRemote: (@MainActor (_ serviceTypeId: String, _ planId: String, _ itemIds: [String]) async throws -> Void)?
     var fetchContext: (@MainActor (_ serviceTypeId: String, _ planId: String) async throws -> PCOPlanContext)?
     var contextRefreshInterval: TimeInterval = 120
+    var writeLength: (@MainActor (_ serviceTypeId: String, _ planId: String, _ itemId: String, _ seconds: Int) async throws -> Void)?
 }
 
 extension CueEngine {
@@ -190,7 +191,8 @@ extension CueEngine {
         guard !isRemoteMirror, pcoChangeTracking.pollTask == nil else { return }
         pcoChangeTracking.pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                let interval = self?.pcoChangeTracking.pollInterval ?? 30
+                var interval = self?.pcoChangeTracking.pollInterval ?? 30
+                if self?.isPCOLiveSyncEnabled == true { interval = min(interval, 10) }
                 try? await Task.sleep(nanoseconds: UInt64(max(interval, 1) * 1_000_000_000))
                 guard !Task.isCancelled, let engine = self else { return }
                 await engine.checkPCOForChanges()
@@ -247,7 +249,7 @@ extension CueEngine {
         pcoPendingChanges = nil
     }
 
-    private func schedulePCOPush(key: String, _ work: @escaping @MainActor (CueEngine) async -> Void) {
+    func schedulePCOPush(key: String, _ work: @escaping @MainActor (CueEngine) async -> Void) {
         ensurePCOBaseline()
         pcoChangeTracking.debounces[key]?.cancel()
         pcoChangeTracking.writeGeneration += 1
@@ -278,13 +280,17 @@ extension CueEngine {
         update(&pcoChangeTracking.baseline[index])
     }
 
-    private func writeItemLengthToPCO(id: String) async {
+    func writeItemLengthToPCO(id: String) async {
         guard let item = planItems.first(where: { $0.id == id }),
               let serviceTypeId = item.pcoServiceTypeId,
               let planId = item.pcoPlanId else { return }
         let length = item.lengthInSeconds
         do {
-            try await pcoClient.updateItemLength(serviceTypeId: serviceTypeId, planId: planId, itemId: id, lengthInSeconds: length)
+            if let writeLength = pcoChangeTracking.writeLength {
+                try await writeLength(serviceTypeId, planId, id, length)
+            } else {
+                try await pcoClient.updateItemLength(serviceTypeId: serviceTypeId, planId: planId, itemId: id, lengthInSeconds: length)
+            }
             recordPCOWrite(itemId: id) { $0.lengthInSeconds = length }
             pcoLastError = nil
         } catch {

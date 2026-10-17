@@ -35,6 +35,7 @@ public struct ControlAPIState: Codable, Sendable {
     public var waypoints: [WaypointStatus]
     public var schedules: ScheduleStatus
     public var eventTimes: EventTimeStatus? = nil
+    public var liveOps: LiveOpsStatus? = nil
     public var epoch: Int? = nil
     public var utcOffsetSeconds: Int? = nil
 
@@ -138,6 +139,14 @@ public struct ControlAPIState: Codable, Sendable {
         public var itemId: String?
         public var itemTitle: String?
         public var itemIndex: Int?
+    }
+
+    public struct LiveOpsStatus: Codable, Sendable {
+        public var isRehearsalMode: Bool
+        public var rehearsalPlanTimeId: String?
+        public var actualsEventTimeId: String?
+        public var actuals: [ItemActual]
+        public var skippedItemIds: [String: [String]]
     }
 
     public struct EventTimeStatus: Codable, Sendable {
@@ -330,6 +339,33 @@ public enum ControlAPIRequests {
         public var isDurationActual: Bool?
         public var description: String?
         public var servicePosition: PCOServicePosition?
+    }
+
+    public struct SkipBody: Decodable, Sendable {
+        public var skipped: Bool?
+    }
+
+    public struct RehearsalBody: Decodable, Sendable {
+        public var enabled: Bool
+        public var planTimeId: String?
+    }
+
+    public struct ActualsStatus: Encodable, Sendable {
+        public var eventTimeId: String?
+        public var isLogging: Bool
+        public var actuals: [ItemActual]
+    }
+
+    public struct SkipsStatus: Encodable, Sendable {
+        public var eventTimeId: String?
+        public var skippedItemIds: [String]
+        public var all: [String: [String]]
+    }
+
+    public struct RehearsalStatus: Encodable, Sendable {
+        public var enabled: Bool
+        public var planTimeId: String?
+        public var availableTimes: [PCOPlanTimeInfo]
     }
 
     public struct PlanReorderBody: Decodable, Sendable {

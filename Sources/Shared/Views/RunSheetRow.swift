@@ -220,6 +220,7 @@ struct RunSheetRow: View {
     let onNewWaypoint: () -> Void
 
     private var isExcluded: Bool { entry?.isExcluded ?? false }
+    private var isSkipped: Bool { entry?.isSkipped ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -244,7 +245,7 @@ struct RunSheetRow: View {
 
                 trailingControls
             }
-            .opacity(isExcluded ? 0.5 : 1)
+            .opacity(isExcluded || isSkipped ? 0.5 : 1)
 
             if isExpanded {
                 InlineItemEditor(item: item, knownCategories: knownCategories)
@@ -255,7 +256,7 @@ struct RunSheetRow: View {
 
     private var startColumn: some View {
         Group {
-            if let entry, !entry.isExcluded, let planned = entry.plannedStart {
+            if let entry, !entry.isOmitted, let planned = entry.plannedStart {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.caption.monospacedDigit())
@@ -292,10 +293,13 @@ struct RunSheetRow: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                     durationModeBadge
+                    if let entry {
+                        RunSheetActualText(entry: entry)
+                    }
                 }
             }
         }
-        .frame(width: 44, alignment: .leading)
+        .frame(width: 58, alignment: .leading)
     }
 
     private var content: some View {
@@ -376,6 +380,15 @@ struct RunSheetRow: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .lineLimit(1)
+            }
+            if isSkipped {
+                Text("Skipped")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .lineLimit(1)
             }
         }

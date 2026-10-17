@@ -62,6 +62,10 @@ public struct ServiceFlowView: View {
                 .help("Show or hide the Planning Center plan details: notes, times and team")
                 #endif
 
+                RehearsalBadge()
+
+                RunSheetActualsMenu()
+
                 Button(action: { showingImportText = true }) {
                     Label("Import Text", systemImage: "text.badge.plus")
                 }
@@ -220,7 +224,8 @@ public struct ServiceFlowView: View {
     private var tableControls: some View {
         let hasLiveToggle = engine.planItems.first?.pcoPlanId != nil
         let hasTimes = engine.eventTimes.count > 1
-        if engine.pcoLastError != nil || hasLiveToggle || hasTimes || engine.isAtEndOfPlan {
+        let hasRehearsal = engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty
+        if engine.pcoLastError != nil || hasLiveToggle || hasTimes || hasRehearsal || engine.isAtEndOfPlan {
             VStack(alignment: .leading, spacing: 6) {
                 if let error = engine.pcoLastError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -236,6 +241,7 @@ public struct ServiceFlowView: View {
                         LiveEventTimePicker()
                             .fixedSize()
                     }
+                    RehearsalControl()
                     Spacer(minLength: 0)
                     StartNextEventButton()
                 }
@@ -359,9 +365,12 @@ public struct ServiceFlowView: View {
             }
         }
 
-        if engine.eventTimes.count > 1 {
+        if engine.eventTimes.count > 1 || engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty {
             Section {
-                LiveEventTimePicker()
+                if engine.eventTimes.count > 1 {
+                    LiveEventTimePicker()
+                }
+                RehearsalControl()
             }
         }
 

@@ -195,6 +195,7 @@ targets:
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOTimerItem.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOItemDetails.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOPlanContext.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ItemActual.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/RoleCue.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerAnchor.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerLimits.swift

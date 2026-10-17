@@ -75,6 +75,18 @@ struct RunSheetTableView: View {
         .width(min: 48, ideal: 60, max: 100)
         .customizationID("length")
 
+        TableColumn("Actual") { item in
+            actualCell(item)
+        }
+        .width(min: 48, ideal: 64, max: 110)
+        .customizationID("actual")
+
+        TableColumn("Drift") { item in
+            driftCell(item)
+        }
+        .width(min: 44, ideal: 56, max: 90)
+        .customizationID("drift")
+
         TableColumn("Title") { item in
             titleCell(item)
         }
@@ -127,6 +139,13 @@ struct RunSheetTableView: View {
         .width(min: 100, ideal: 220)
         .customizationID("description")
         .defaultVisibility(.hidden)
+
+        TableColumn("PCO Actual") { item in
+            cell(item, text: pcoActualText(item), monospaced: true)
+        }
+        .width(min: 56, ideal: 72, max: 110)
+        .customizationID("pco-actual")
+        .defaultVisibility(.hidden)
     }
 
     private func isActive(_ item: PCOTimerItem) -> Bool {
@@ -135,6 +154,56 @@ struct RunSheetTableView: View {
 
     private func isExcluded(_ item: PCOTimerItem) -> Bool {
         schedule.entry(forItemId: item.id)?.isExcluded ?? false
+    }
+
+    private func isSkipped(_ item: PCOTimerItem) -> Bool {
+        schedule.entry(forItemId: item.id)?.isSkipped ?? false
+    }
+
+    private func isDimmed(_ item: PCOTimerItem) -> Bool {
+        schedule.entry(forItemId: item.id)?.isOmitted ?? false
+    }
+
+    private func format(_ seconds: Int) -> String {
+        TimeFormatting.string(forSeconds: seconds, threshold: engine.hourFormatThreshold)
+    }
+
+    private func pcoActualText(_ item: PCOTimerItem) -> String? {
+        schedule.entry(forItemId: item.id)?.pcoActualLength.map(format)
+    }
+
+    private func actualCell(_ item: PCOTimerItem) -> some View {
+        let entry = schedule.entry(forItemId: item.id)
+        return HStack(spacing: 4) {
+            if let actual = entry?.actualLength {
+                Text(format(actual))
+                    .monospacedDigit()
+                    .foregroundStyle(entry?.isActualComplete == true ? Color.primary : Color.accentColor)
+                if let pco = entry?.pcoActualLength {
+                    Text("PCO \(format(pco))")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .help("Planning Center recorded \(format(pco)) for this item")
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .lineLimit(1)
+        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
+    }
+
+    private func driftCell(_ item: PCOTimerItem) -> some View {
+        let delta = schedule.entry(forItemId: item.id)?.actualDeltaSeconds
+        return HStack(spacing: 0) {
+            if let delta, abs(delta) >= RunSheetActualStyle.lengthThreshold {
+                Text(RunSheetActualStyle.signed(delta, threshold: engine.hourFormatThreshold))
+                    .monospacedDigit()
+                    .foregroundStyle(RunSheetActualStyle.color(forDelta: delta))
+            }
+            Spacer(minLength: 0)
+        }
+        .lineLimit(1)
+        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
     private func lengthText(_ item: PCOTimerItem) -> String? {
@@ -153,7 +222,7 @@ struct RunSheetTableView: View {
             .foregroundStyle(item.isHeader ? .secondary : .primary)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isExcluded(item)))
+            .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
     private func titleCell(_ item: PCOTimerItem) -> some View {
@@ -173,15 +242,21 @@ struct RunSheetTableView: View {
                     .foregroundStyle(.orange)
                     .lineLimit(1)
             }
+            if isSkipped(item) {
+                Text("Skipped")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
         }
-        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isExcluded(item)))
+        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
     private func startCell(_ item: PCOTimerItem) -> some View {
         let entry = schedule.entry(forItemId: item.id)
         return HStack(spacing: 6) {
-            if let entry, !entry.isExcluded, let planned = entry.plannedStart {
+            if let entry, !entry.isOmitted, let planned = entry.plannedStart {
                 Text(engine.clockFormat.string(from: planned))
                     .monospacedDigit()
                     .foregroundStyle(item.isHeader ? .secondary : .primary)
@@ -196,7 +271,7 @@ struct RunSheetTableView: View {
             Spacer(minLength: 0)
         }
         .lineLimit(1)
-        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isExcluded(item)))
+        .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
     @ViewBuilder

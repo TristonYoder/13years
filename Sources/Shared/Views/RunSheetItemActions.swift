@@ -36,6 +36,27 @@ struct RunSheetItemActions: View {
             } label: {
                 Label("Assign Waypoints\u{2026}", systemImage: Waypoint.symbolName)
             }
+
+            if !engine.isPCOExcluded(item) {
+                let skipped = engine.isItemSkipped(item.id)
+                Button {
+                    engine.setItemSkipped(id: item.id, skipped: !skipped)
+                } label: {
+                    Label(skipped ? "Unskip" : "Skip in \(engine.liveEventTimeLabel ?? "This Event")",
+                          systemImage: skipped ? "arrow.uturn.backward" : "forward.end")
+                }
+            }
+
+            if let actual = engine.actualLength(forItemId: item.id), actual > 0 {
+                Button {
+                    engine.useActualAsPlannedLength(itemId: item.id)
+                } label: {
+                    Label("Use Actual as Planned Length", systemImage: "stopwatch")
+                }
+                .help(item.pcoPlanId != nil
+                    ? "Sets this item's length to the recorded actual and updates it in Planning Center for every event time"
+                    : "Sets this item's length to the recorded actual")
+            }
         }
 
         Button(role: .destructive, action: onDelete) {

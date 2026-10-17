@@ -141,6 +141,16 @@ public final class ControlAPIRouter {
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(planStatus())
 
+        case "rehearsal":
+            if allows(method, "GET") { return json(rehearsalStatus()) }
+            guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.RehearsalBody.self, body) else { return badBody() }
+            if let tooLong = tooLong(request.planTimeId ?? "", ContentLimits.identifier, "planTimeId") { return tooLong }
+            guard engine.setRehearsalMode(request.enabled, planTimeId: request.planTimeId) else {
+                return Self.error(404, "Unknown rehearsal plan time id", detail: request.planTimeId ?? "")
+            }
+            return json(rehearsalStatus())
+
         case "messages":
             if allows(method, "GET") { return json(engine.recentMessages) }
             if allows(method, "DELETE") {
@@ -420,6 +430,16 @@ public final class ControlAPIRouter {
             }
             engine.setActivePlanItem(id: request.itemId)
             return json(snapshot())
+
+        case ("plan", "actuals"):
+            if allows(method, "GET") { return json(actualsStatus()) }
+            guard allows(method, "DELETE") else { return methodNotAllowed() }
+            engine.clearActuals()
+            return json(actualsStatus())
+
+        case ("plan", "skips"):
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            return json(skipsStatus())
 
         case ("plan", "context"):
             guard allows(method, "GET") else { return methodNotAllowed() }
@@ -811,6 +831,18 @@ public final class ControlAPIRouter {
             engine.syncPlotipharAssignments()
             return accepted(plotipharStatus())
 
+        case ("plan", "actuals", "save-to-pco"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.currentPCOPlanId != nil else {
+                return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            let changes = engine.actualLengthChanges()
+            guard !changes.isEmpty else {
+                return Self.error(409, "No actual lengths to save", detail: "No synced item has a recorded actual that differs from its planned length.")
+            }
+            engine.saveActualLengthsToPCO()
+            return accepted(["count": changes.count])
+
         case ("plan", "items", "reorder"):
             guard allows(method, "POST", "PUT") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.PlanReorderBody.self, body) else { return badBody() }
@@ -894,6 +926,30 @@ public final class ControlAPIRouter {
             }
             guard let request = decode(ControlAPIRequests.FlagBody.self, body), let isActual = request.isActual else { return badBody() }
             engine.setDurationIsActual(id: itemId, isActual: isActual)
+            return json(planStatus())
+
+        case ("plan", "items", let itemId, "skip"):
+            guard allows(method, "POST", "PUT", "DELETE") else { return methodNotAllowed() }
+            guard let item = engine.planItems.first(where: { $0.id == itemId }) else {
+                return Self.error(404, "Unknown plan item id", detail: itemId)
+            }
+            guard !item.isHeader else { return Self.error(400, "Headers cannot be skipped") }
+            var skipped = !allows(method, "DELETE")
+            if !body.isEmpty {
+                guard let request = decode(ControlAPIRequests.SkipBody.self, body) else { return badBody() }
+                if let value = request.skipped, !allows(method, "DELETE") { skipped = value }
+            }
+            engine.setItemSkipped(id: itemId, skipped: skipped)
+            return json(skipsStatus())
+
+        case ("plan", "items", let itemId, "use-actual"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.planItems.contains(where: { $0.id == itemId }) else {
+                return Self.error(404, "Unknown plan item id", detail: itemId)
+            }
+            guard engine.useActualAsPlannedLength(itemId: itemId) else {
+                return Self.error(409, "No actual length recorded for this item", detail: itemId)
+            }
             return json(planStatus())
 
         case ("plan", "items", let itemId, "waypoints"):
@@ -1167,6 +1223,7 @@ public final class ControlAPIRouter {
             waypoints: waypointStatuses(),
             schedules: scheduleStatus(),
             eventTimes: eventTimeStatus(),
+            liveOps: liveOpsStatus(),
             epoch: engine.syncV2.epoch,
             utcOffsetSeconds: engine.timeZoneProvider().secondsFromGMT()
         )
@@ -1308,6 +1365,40 @@ public final class ControlAPIRouter {
             recurrence: schedule.recurrence.rawValue,
             isEnabled: schedule.isEnabled,
             lastFiredAt: schedule.lastFiredAt
+        )
+    }
+
+    private func liveOpsStatus() -> ControlAPIState.LiveOpsStatus {
+        ControlAPIState.LiveOpsStatus(
+            isRehearsalMode: engine.isRehearsalMode,
+            rehearsalPlanTimeId: engine.rehearsalPlanTimeId,
+            actualsEventTimeId: engine.actualsEventTimeId,
+            actuals: engine.itemActualsIncludingLive,
+            skippedItemIds: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
+        )
+    }
+
+    private func actualsStatus() -> ControlAPIRequests.ActualsStatus {
+        ControlAPIRequests.ActualsStatus(
+            eventTimeId: engine.actualsEventTimeId,
+            isLogging: !engine.isRehearsalMode,
+            actuals: engine.currentItemActuals
+        )
+    }
+
+    private func skipsStatus() -> ControlAPIRequests.SkipsStatus {
+        ControlAPIRequests.SkipsStatus(
+            eventTimeId: engine.actualsEventTimeId,
+            skippedItemIds: (engine.skippedItemIds[engine.skipsKey] ?? []).sorted(),
+            all: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
+        )
+    }
+
+    private func rehearsalStatus() -> ControlAPIRequests.RehearsalStatus {
+        ControlAPIRequests.RehearsalStatus(
+            enabled: engine.isRehearsalMode,
+            planTimeId: engine.rehearsalPlanTimeId,
+            availableTimes: engine.rehearsalPlanTimes
         )
     }
 

@@ -7,19 +7,25 @@ extension CueEngine {
     public func runSheetSchedule(now: Date = Date()) -> RunSheetSchedule {
         let live = liveEventTime
         let active = activeTimerItem
+        let rehearsalStart = isRehearsalMode
+            ? rehearsalPlanTimes.first(where: { $0.id == rehearsalPlanTimeId })?.startsAt
+            : nil
         let activeIndex = active.flatMap { active in planItems.firstIndex { $0.id == active.id } }
         return RunSheetSchedule(
             items: planItems,
-            startDate: live?.startDate(onOrAfter: now),
-            planTimeId: live?.pcoPlanTimeId,
+            startDate: rehearsalStart ?? live?.startDate(onOrAfter: now),
+            planTimeId: activePlanTimeId,
             activeIndex: active?.isRunning == true ? activeIndex : nil,
             activeElapsed: active?.elapsedSeconds ?? 0,
             activeLength: active?.lengthInSeconds,
+            actuals: scheduleActuals(),
+            skippedItemIds: skippedItemIds[skipsKey] ?? [],
             now: now
         )
     }
 
     public var liveEventTimeLabel: String? {
+        if isRehearsalMode { return rehearsalLabel }
         guard let live = liveEventTime else { return nil }
         if let name = live.name, !name.isEmpty { return name }
         return live.startTime.map { $0.formatted(clockFormat) } ?? live.displayName(clockFormat)
