@@ -120,29 +120,31 @@ struct RunSheetTableView: View {
     var body: some View {
         GeometryReader { geometry in
             let widths = resolvedWidths(for: geometry.size.width)
-            ScrollView(.horizontal) {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical) {
-                        LazyVStack(spacing: Self.cardGap, pinnedViews: [.sectionHeaders]) {
-                            Section {
-                                ForEach(groups) { group in
-                                    card(group, widths: widths)
-                                }
-                            } header: {
-                                columnHeader(widths)
+            let rowWidth = self.rowWidth(widths)
+            ScrollViewReader { proxy in
+                ScrollView([.horizontal, .vertical]) {
+                    LazyVStack(alignment: .leading, spacing: Self.cardGap, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            ForEach(groups) { group in
+                                card(group, widths: widths, rowWidth: rowWidth)
                             }
+                        } header: {
+                            columnHeader(widths)
+                                .frame(width: rowWidth, alignment: .leading)
+                                .padding(.horizontal, Self.outerPadding)
+                                .background(.background)
                         }
-                        .padding(.horizontal, Self.outerPadding)
-                        .padding(.bottom, Self.outerPadding)
                     }
-                    .focusable()
-                    .focused($isFocused)
-                    .focusEffectDisabled()
-                    .onKeyPress(.upArrow) { moveSelection(-1, proxy: proxy) }
-                    .onKeyPress(.downArrow) { moveSelection(1, proxy: proxy) }
-                    .onKeyPress(.return) { performPrimaryAction() }
+                    .padding(.bottom, Self.outerPadding)
+                    .frame(minWidth: geometry.size.width, alignment: .leading)
                 }
-                .frame(width: max(geometry.size.width, minContentWidth), height: geometry.size.height)
+                .scrollIndicators(.visible)
+                .focusable()
+                .focused($isFocused)
+                .focusEffectDisabled()
+                .onKeyPress(.upArrow) { moveSelection(-1, proxy: proxy) }
+                .onKeyPress(.downArrow) { moveSelection(1, proxy: proxy) }
+                .onKeyPress(.return) { performPrimaryAction() }
             }
         }
     }
@@ -213,12 +215,19 @@ struct RunSheetTableView: View {
             .help("Drag to resize this column. Double-click to reset it.")
     }
 
-    private func card(_ group: CardGroup, widths: [String: CGFloat]) -> some View {
+    private func rowWidth(_ widths: [String: CGFloat]) -> CGFloat {
+        let cols = columns
+        let total = cols.reduce(CGFloat(0)) { $0 + (widths[$1.id] ?? $1.minWidth) }
+        return total + Self.columnSpacing * CGFloat(max(cols.count - 1, 0)) + 2 * Self.rowPadding
+    }
+
+    private func card(_ group: CardGroup, widths: [String: CGFloat], rowWidth: CGFloat) -> some View {
         let isCollapsed = group.header.map { collapsedIds.contains($0.id) } ?? false
         let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
-        return VStack(spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             if let header = group.header {
                 headerRow(header, group: group, isCollapsed: isCollapsed)
+                    .frame(width: rowWidth, alignment: .leading)
             }
             if !isCollapsed {
                 ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
@@ -226,12 +235,15 @@ struct RunSheetTableView: View {
                         separator
                     }
                     itemRow(item, widths: widths)
+                        .frame(width: rowWidth, alignment: .leading)
                 }
             }
         }
+        .frame(width: rowWidth, alignment: .leading)
         .background(AppPalette.sectionCard)
         .clipShape(shape)
         .overlay(shape.strokeBorder(AppPalette.sectionCardBorder, lineWidth: 0.75))
+        .padding(.horizontal, Self.outerPadding)
     }
 
     private var separator: some View {
@@ -286,6 +298,7 @@ struct RunSheetTableView: View {
         }
         .padding(.horizontal, Self.rowPadding)
         .frame(maxWidth: .infinity, minHeight: Self.headerHeight, alignment: .leading)
+        .clipped()
         .opacity(isDimmed(header) ? 0.5 : 1)
         .background(rowBackground(header, tint: AppPalette.sectionHeaderTint))
         .modifier(RunSheetRowInteraction(
