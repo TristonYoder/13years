@@ -113,20 +113,23 @@ public struct LiveTimerHeaderView: View {
                             }
 
                             if engine.isAtEndOfPlan && engine.canAdvanceToNextEventTime {
+                                let nextName = engine.nextEventTime?.displayName(engine.clockFormat) ?? "the next event time"
                                 Button(action: { engine.advanceToNextEventTime() }) {
-                                    Label(engine.nextEventTime?.displayName(engine.clockFormat) ?? "Next Time", systemImage: "arrow.uturn.forward")
+                                    Image(systemName: "arrow.uturn.forward").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .producerButtonShape()
                                 .disabled(engine.isChangingEventTime)
-                                .help("Make the next event time live and return to the top of the run sheet")
+                                .accessibilityLabel("Start \(nextName)")
+                                .help("Start \(nextName): make it live and return to the top of the run sheet")
                             } else if engine.isAtEndOfPlan && engine.canLoadNextService {
                                 Button(action: { engine.loadNextService() }) {
-                                    Label("Next Service", systemImage: "calendar.badge.clock")
+                                    Image(systemName: "calendar.badge.clock").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .producerButtonShape()
-                                .help("Load the next scheduled service from Planning Center")
+                                .accessibilityLabel("Load the next event")
+                                .help("Load the next scheduled event from Planning Center")
                             } else {
                                 Button(action: { engine.nextPlanItem() }) {
                                     Image(systemName: "chevron.right").font(.title2.weight(.semibold)).frame(maxWidth: .infinity, maxHeight: .infinity)
