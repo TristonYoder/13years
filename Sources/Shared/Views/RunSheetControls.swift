@@ -22,7 +22,7 @@ struct PCOLiveSyncToggle: View {
     }
 
     static var explanation: String {
-        "Takes control of Planning Center Live and mirrors item navigation to it \u{2014} also happens automatically the moment you move to another item, since Live can't advance without control. Only use this on the plan you're actually running."
+        "Takes control of Planning Center Live and mirrors item navigation to it. Only use this on the plan you're actually running."
     }
 }
 

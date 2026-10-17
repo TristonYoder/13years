@@ -1489,7 +1489,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func mirrorToPCOLive(direction: PCOClient.PCOLiveDirection, count: Int = 1, targetItemId: String? = nil) {
-        guard count > 0, !isRehearsalMode,
+        guard count > 0, isPCOLiveSyncEnabled, !isRehearsalMode,
               let serviceTypeId = currentPCOServiceTypeId,
               let planId = currentPCOPlanId else { return }
         Task {
