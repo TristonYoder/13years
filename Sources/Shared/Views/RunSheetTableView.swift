@@ -650,32 +650,54 @@ struct RunSheetColumnsMenu: View {
         Set(hiddenRaw.split(separator: ",").map(String.init))
     }
 
+    @State private var isPresented = false
+
     var body: some View {
-        Menu {
-            Section("Columns") {
-                ForEach(RunSheetTableColumn.fixed) { column in
-                    toggle(column)
-                }
-            }
-            let notes = RunSheetTableColumn.noteColumns(categories)
-            if !notes.isEmpty {
-                Section("Notes") {
-                    ForEach(notes) { column in
-                        toggle(column)
-                    }
-                }
-            }
-            Divider()
-            Button("Show All Columns") {
-                hiddenRaw = ""
-            }
-            Button("Reset Columns") {
-                hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
-            }
-        } label: {
+        Button(action: { isPresented.toggle() }) {
             Label("Columns", systemImage: "tablecells.badge.ellipsis")
         }
         .help("Choose which columns the run sheet table shows")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            picker
+        }
+    }
+
+    private var picker: some View {
+        let notes = RunSheetTableColumn.noteColumns(categories)
+        return VStack(alignment: .leading, spacing: 10) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    section("Columns", RunSheetTableColumn.fixed)
+                    if !notes.isEmpty {
+                        section("Notes", notes)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 420)
+            Divider()
+            HStack {
+                Button("Show All") { hiddenRaw = "" }
+                Button("Reset") { hiddenRaw = RunSheetTableColumn.defaultHiddenRaw }
+                Spacer()
+                Button("Done") { isPresented = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+        .frame(width: 260)
+    }
+
+    private func section(_ title: String, _ columns: [RunSheetTableColumn]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(columns) { column in
+                toggle(column)
+                    .toggleStyle(.checkbox)
+            }
+        }
     }
 
     private func toggle(_ column: RunSheetTableColumn) -> some View {
