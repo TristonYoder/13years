@@ -15,6 +15,10 @@ enum RunSheetActualStyle {
         guard let delta, abs(delta) >= lengthThreshold else { return .secondary }
         return delta > 0 ? AppPalette.driftLate : AppPalette.driftEarly
     }
+
+    static func fillColor(forDelta delta: Int) -> Color {
+        delta > 0 ? AppPalette.driftLateFill : AppPalette.driftEarlyFill
+    }
 }
 
 struct RunSheetActualText: View {
@@ -62,7 +66,7 @@ struct RehearsalBadge: View {
                 .foregroundStyle(AppPalette.rehearsal)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(AppPalette.rehearsal.opacity(0.15), in: Capsule())
+                .background(AppPalette.rehearsalFill, in: Capsule())
                 .lineLimit(1)
                 .help("Rehearsal mode: actual times aren't recorded and Planning Center Live isn't stepped")
         }

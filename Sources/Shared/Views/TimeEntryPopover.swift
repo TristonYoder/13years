@@ -136,7 +136,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         .frame(minWidth: 220)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.accentColor.opacity(0.5), lineWidth: 1.5)

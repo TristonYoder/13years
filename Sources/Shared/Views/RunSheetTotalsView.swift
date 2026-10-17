@@ -46,7 +46,7 @@ struct RunSheetTotalsView: View {
             .padding(.vertical, 8)
         }
         #if os(tvOS)
-        .background(Color.black.opacity(0.2))
+        .background(AppPalette.scrimFaint)
         #else
         .background(.bar)
         #endif

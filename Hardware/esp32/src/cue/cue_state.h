@@ -3,6 +3,7 @@
 
 #pragma once
 #include <Arduino.h>
+#include "../ui/palette.h"
 
 enum class CueState {
   Off,
@@ -39,12 +40,12 @@ inline const char *cueStateLogName(CueState s) {
 }
 
 inline uint32_t cueStateBgColor(CueState s) {
-  if (cueStateIsStandby(s)) return 0xF5B826;
-  if (cueStateIsGo(s)) return 0x26C759;
-  return 0x000000;
+  if (cueStateIsStandby(s)) return kCueStandbyHex;
+  if (cueStateIsGo(s)) return kCueGoHex;
+  return kDisplayBlackHex;
 }
 
 inline uint32_t cueStateTextColor(CueState s) {
-  if (cueStateIsStandby(s)) return 0x000000;
-  return 0xFFFFFF;
+  if (cueStateIsStandby(s)) return kCueDarkTextHex;
+  return kCueLightTextHex;
 }

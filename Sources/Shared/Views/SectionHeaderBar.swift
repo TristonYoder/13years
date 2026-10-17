@@ -60,7 +60,7 @@ private struct SectionHeaderActionButton: View {
             .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(AppPalette.negative) : AnyShapeStyle(.primary))
             .frame(width: 52, height: 40)
             .background(
-                Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08),
+                configuration.isPressed ? AppPalette.surfaceControlPressed : AppPalette.surfaceControl,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

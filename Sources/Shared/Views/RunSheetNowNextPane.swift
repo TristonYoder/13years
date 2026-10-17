@@ -10,10 +10,10 @@ struct RunSheetKeyPill: View {
     var body: some View {
         Text(key)
             .font(.caption.weight(.bold))
-            .foregroundStyle(AppPalette.keyPill)
+            .foregroundStyle(AppPalette.keyPillText)
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
-            .background(AppPalette.keyPill.opacity(0.16), in: Capsule())
+            .background(AppPalette.keyPillFill, in: Capsule())
             .lineLimit(1)
             .accessibilityLabel("Key \(key)")
     }
@@ -28,7 +28,7 @@ struct RunSheetSequenceChip: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .lineLimit(1)
             .fixedSize()
     }

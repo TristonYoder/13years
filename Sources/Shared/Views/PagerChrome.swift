@@ -35,11 +35,11 @@ public enum CueDisplayStyle: String, CaseIterable, Identifiable, Sendable {
 
     public func frameColor(for state: CueState) -> Color? {
         guard showsFrame else { return nil }
-        return state == .off ? Color.white.opacity(0.06) : state.color
+        return state == .off ? AppPalette.glassFaint : state.color
     }
 
     public var cardFill: Color {
-        self == .fullscreen ? Color.black.opacity(0.28) : Color.white.opacity(0.1)
+        self == .fullscreen ? AppPalette.scrimSoft : AppPalette.glassSoft
     }
 
     public func primaryText(for state: CueState) -> Color {
@@ -161,8 +161,8 @@ struct PagerTopRow<RoleMenu: View>: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, sizes.roleFont * 0.5)
                 .padding(.vertical, sizes.roleFont * 0.25)
-                .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous).stroke(Color.white.opacity(0.25), lineWidth: 1))
+                .background(AppPalette.scrimMedium, in: RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: sizes.cornerRadius, style: .continuous).stroke(AppPalette.glassBorder, lineWidth: 1))
             }
             #if os(tvOS)
             .buttonStyle(.card)
@@ -398,7 +398,7 @@ struct PagerDisconnectOverlay: View {
         case .live:
             EmptyView()
         case .dimmed:
-            Color.gray.opacity(0.45)
+            AppPalette.pagerDimmed
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .transition(.opacity)

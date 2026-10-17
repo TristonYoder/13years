@@ -107,7 +107,7 @@ public struct PagerChatView: View {
                     .padding(.vertical, 8)
                     .foregroundStyle(isMine ? Color.white : Color.primary)
                     .background(
-                        isMine ? AppPalette.info : Color.gray.opacity(0.2),
+                        isMine ? AppPalette.info : AppPalette.bubbleReceived,
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
 
@@ -158,11 +158,11 @@ private struct TVFocusableRow: ViewModifier {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(isFocused ? 0.12 : 0))
+                    .fill(isFocused ? AppPalette.glassSoft : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(isFocused ? 0.8 : 0), lineWidth: 3)
+                    .stroke(isFocused ? AppPalette.focusRing : Color.clear, lineWidth: 3)
             )
             .focusable()
     }

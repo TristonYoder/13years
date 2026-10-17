@@ -199,7 +199,7 @@ private struct PagerPreviewPane: View {
                     RoundedRectangle(cornerRadius: 44, style: .continuous)
                         .strokeBorder(.black, lineWidth: 10)
                 )
-                .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+                .shadow(color: AppPalette.scrimSoft, radius: 20, y: 10)
                 .scaleEffect(scale)
                 .frame(width: Self.phoneSize.width * scale, height: Self.phoneSize.height * scale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

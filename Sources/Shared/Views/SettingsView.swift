@@ -291,7 +291,7 @@ struct HourFormatOptionCard: View {
             .foregroundStyle(isSelected ? Color.white : Color.primary)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.12))
+                    .fill(isSelected ? Color.accentColor : AppPalette.surfaceSubtle)
             )
         }
         .buttonStyle(.plain)

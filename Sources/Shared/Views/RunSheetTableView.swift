@@ -361,7 +361,7 @@ struct RunSheetTableView: View {
                     .foregroundStyle(color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(color.opacity(0.16), in: Capsule())
+                    .background(RunSheetActualStyle.fillColor(forDelta: delta), in: Capsule())
                     .lineLimit(1)
                     .help(delta > 0 ? "Ran longer than planned" : "Ran shorter than planned")
             }
@@ -531,7 +531,7 @@ private struct RunSheetCellStyle: ViewModifier {
             .opacity(isExcluded ? 0.5 : 1)
             .background {
                 if isActive {
-                    AppPalette.timerOnTime.opacity(0.14)
+                    AppPalette.rowActive
                         .padding(.horizontal, -12)
                         .padding(.vertical, -8)
                 }

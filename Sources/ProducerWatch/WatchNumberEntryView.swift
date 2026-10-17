@@ -149,7 +149,7 @@ struct WatchNumberEntryView: View {
                 .frame(height: height)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(white: 0.16))
+                        .fill(AppPalette.keypadKey)
                 )
         }
         .buttonStyle(.plain)
@@ -165,7 +165,7 @@ struct WatchNumberEntryView: View {
                 .frame(height: height)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(white: 0.16))
+                        .fill(AppPalette.keypadKey)
                 )
         }
         .buttonStyle(.plain)

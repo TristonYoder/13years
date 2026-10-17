@@ -149,7 +149,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 .minimumScaleFactor(0.3)
                 .padding(.horizontal, m.fontSize * 0.22)
                 .padding(.vertical, m.fontSize * 0.12)
-                .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+                .background(AppPalette.scrimSoft, in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
             if let details = presentation.currentDetailsLine() {
                 Text(details)
                     .font(.system(size: m.fontSize * 0.28, weight: .semibold))
@@ -249,7 +249,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, m.controlFontSize * 0.6)
                     .padding(.vertical, m.controlFontSize * 0.3)
-                    .background(Color.black.opacity(0.7), in: Capsule())
+                    .background(AppPalette.scrimStrong, in: Capsule())
                 }
                 .buttonStyle(.plain)
 
@@ -267,7 +267,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 .font(.system(size: m.controlFontSize))
                 .foregroundColor(.white)
                 .padding(m.controlFontSize * 0.4)
-                .background(Color.black.opacity(0.7), in: Circle())
+                .background(AppPalette.scrimStrong, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

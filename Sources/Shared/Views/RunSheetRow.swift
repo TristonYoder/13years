@@ -48,7 +48,7 @@ struct RunSheetRowBackground: View {
     var body: some View {
         ZStack {
             if item.isHeader {
-                Color.gray.opacity(0.14)
+                AppPalette.rowHeader
             } else {
                 let liveItem = isActive ? (activeItem ?? item) : item
                 if isActive && liveItem.isRunning {
@@ -60,7 +60,7 @@ struct RunSheetRowBackground: View {
             }
 
             if isSelected {
-                Color.accentColor.opacity(0.22)
+                AppPalette.rowSelected
             }
         }
     }
@@ -343,7 +343,7 @@ struct RunSheetRow: View {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     default:
-                        Color.secondary.opacity(0.15)
+                        AppPalette.surfaceMuted
                     }
                 }
                 .frame(width: 64, height: 36)
@@ -412,7 +412,7 @@ struct RunSheetRow: View {
                     .foregroundStyle(AppPalette.warning)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(AppPalette.warning.opacity(0.15), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(AppPalette.warningFill, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .lineLimit(1)
             }
             if isSkipped {
@@ -421,7 +421,7 @@ struct RunSheetRow: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(AppPalette.surfaceMuted, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .lineLimit(1)
             }
         }
@@ -439,7 +439,7 @@ struct RunSheetRow: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
         case .item, .header:
             EmptyView()
@@ -492,7 +492,7 @@ struct RunSheetRow: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
             }
         }
@@ -567,7 +567,7 @@ struct RunSheetRow: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
             Menu {
                 RunSheetWaypointMenuItems(item: item, onNewWaypoint: onNewWaypoint)
@@ -577,7 +577,7 @@ struct RunSheetRow: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
             .menuIndicator(.hidden)
             .help("Assign waypoints\u{2026}")
@@ -594,7 +594,7 @@ struct RunSheetRow: View {
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(
-                    item.isDurationActual ? AppPalette.info : Color.secondary.opacity(0.15),
+                    item.isDurationActual ? AppPalette.info : AppPalette.surfaceMuted,
                     in: RoundedRectangle(cornerRadius: 4, style: .continuous)
                 )
         }

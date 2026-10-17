@@ -22,7 +22,7 @@ public struct PagerWaitingView: View {
 
     public var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            AppPalette.displayBlack.ignoresSafeArea()
 
             SkeletonLoaderView(ink: ink, layout: .pager)
 
@@ -38,8 +38,8 @@ public struct PagerWaitingView: View {
                     stops: [
                         .init(color: .black, location: 0.0),
                         .init(color: .black, location: 0.55),
-                        .init(color: .black.opacity(0.85), location: 0.75),
-                        .init(color: .black.opacity(0), location: 1.0),
+                        .init(color: AppPalette.displayBlack.opacity(0.85), location: 0.75),
+                        .init(color: AppPalette.displayBlack.opacity(0), location: 1.0),
                     ],
                     center: .center,
                     startRadius: 0,

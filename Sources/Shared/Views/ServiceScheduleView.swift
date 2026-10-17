@@ -106,7 +106,7 @@ public struct ServiceScheduleView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         }
                     }
                     Text("\(engine.clockFormat.dateTime(schedule.startsAt)) \u{2014} live at \(engine.clockFormat.string(from: schedule.goLiveAt))")

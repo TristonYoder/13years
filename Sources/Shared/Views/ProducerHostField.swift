@@ -40,7 +40,7 @@ struct ProducerHostField: View {
                     .frame(height: rowHeight)
                     .background(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(Color.white.opacity(0.1))
+                            .fill(AppPalette.glassSoft)
                     )
                     .overlay(
                         Text("IP or hostname, optional :port")
@@ -54,7 +54,7 @@ struct ProducerHostField: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .stroke(Color.white.opacity(focused ? 0.6 : 0.3), lineWidth: 1)
+                            .stroke(focused ? AppPalette.glassBorderFocus : AppPalette.glassBorder, lineWidth: 1)
                     )
                     #if os(macOS)
                     .focusEffectDisabled()

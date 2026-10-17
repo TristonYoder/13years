@@ -40,7 +40,7 @@ struct WatchChatView: View {
                 }
                 Text(message.text)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isMine ? Color.white : Color.black)
+                    .foregroundStyle(isMine ? AppPalette.displayWhite : AppPalette.displayBlack)
                     .fixedSize(horizontal: false, vertical: true)
                 Text((model.presentation?.clockFormat ?? .systemDefault).string(from: message.timestamp))
                     .font(.inter(size: 8, weight: .regular).monospacedDigit())
@@ -48,7 +48,7 @@ struct WatchChatView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(isMine ? Color.accentColor : Color.white)
+            .background(isMine ? Color.accentColor : AppPalette.displayWhite)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             if !isMine { Spacer(minLength: 30) }
         }

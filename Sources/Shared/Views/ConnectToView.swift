@@ -233,7 +233,7 @@ struct RemoteProducerContainerView: View {
                 .disabled(!session.isLive)
                 .overlay {
                     if !session.isLive {
-                        Color.black.opacity(0.18).allowsHitTesting(false)
+                        AppPalette.scrimFaint.allowsHitTesting(false)
                     }
                 }
         }
@@ -307,7 +307,7 @@ struct RemoteProducerContainerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(AppPalette.scrimSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .foregroundStyle(.white)
                     }
                 }
@@ -396,7 +396,7 @@ struct RemoteConnectingOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.25).ignoresSafeArea()
+            AppPalette.scrimSoft.ignoresSafeArea()
             VStack(spacing: 14) {
                 ProgressView()
                 Text("Connecting to \(name)…")

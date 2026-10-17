@@ -139,7 +139,7 @@ public struct MessagesView: View {
                     .padding(.vertical, 8)
                     .foregroundStyle(isFromProducer ? Color.white : Color.primary)
                     .background(
-                        isFromProducer ? Color.accentColor : Color.primary.opacity(0.1),
+                        isFromProducer ? Color.accentColor : AppPalette.bubbleReceived,
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
 

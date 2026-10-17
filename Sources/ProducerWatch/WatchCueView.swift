@@ -162,7 +162,7 @@ struct WatchCueView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.black.opacity(0.18))
+                .background(AppPalette.scrimFaint)
                 .clipShape(Capsule())
             }
 
@@ -230,7 +230,7 @@ struct WatchCueView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.22))
+        .background(AppPalette.scrimFaint)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
@@ -267,7 +267,7 @@ struct WatchCueView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.black.opacity(emphasized ? 0.3 : 0.16))
+        .background(emphasized ? AppPalette.scrimSoft : AppPalette.scrimFaint)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 

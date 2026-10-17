@@ -198,7 +198,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
 
             if !item.isHeader && !notes.isEmpty {
                 Rectangle()
-                    .fill(Color.white.opacity(0.18))
+                    .fill(AppPalette.glassMedium)
                     .frame(height: 1)
                     .padding(.vertical, m.margin * 0.2 * scale)
                 noteLines(m, notes, weight: .bold, opacity: 1, scale: scale)
