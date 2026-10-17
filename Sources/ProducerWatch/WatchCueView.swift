@@ -114,6 +114,15 @@ struct WatchCueView: View {
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
                         .padding(.horizontal, 8)
+                    if let details = presentation?.currentDetailsLine(now: model.lastSuccessfulPollAt ?? Date()) {
+                        Text(details)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(contentTextColor.opacity(0.85))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
                 }
                 .foregroundStyle(contentTextColor)
                 .frame(width: geo.size.width)

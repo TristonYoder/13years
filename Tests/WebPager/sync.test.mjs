@@ -13,6 +13,7 @@ const names = [
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
+  "pagerFieldsForRole", "itemDetailSegments", "itemDetailsLine", "currentStartMs", "nextStartMs", "detailBpmText", "titleCaseWords",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -1184,4 +1185,67 @@ test("formatProducerClock tolerates a missing offset", () => {
   const base = Date.UTC(2026, 0, 4, 15, 7, 8, 0);
   assert.equal(core.formatProducerClock(base, null, 0, "en-GB"), "15:07:08");
   assert.equal(typeof core.formatProducerClock(base, null, null, "en-GB"), "string");
+});
+
+const richItem = {
+  id: "s1", title: "Song", itemType: "song", lengthInSeconds: 300,
+  details: {
+    description: "  Walk on\n  slowly  ",
+    servicePosition: "pre",
+    keyName: "Ab",
+    key: { id: "k", name: "Ab", startingKey: "G" },
+    arrangement: { id: "a", name: "Default", bpm: 72, meter: "4/4", sequenceShort: ["V1", "C", "V2", "C"] },
+    customSequenceShort: [],
+    media: { id: "m", mediaType: "background_video" },
+  },
+};
+const allFields = ["startTime", "servicePosition", "mediaType", "description", "sequence", "arrangement", "meter", "bpm", "key"];
+
+test("pagerFieldsForRole keeps canonical order and drops unknown values", () => {
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["bpm", "key", "bogus", "sequence"] })), ["key", "bpm", "sequence"]);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({})), []);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(null)), []);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: "key" })), []);
+});
+
+test("details line matches the native formatter", () => {
+  assert.equal(core.itemDetailsLine(richItem, ["key", "bpm", "meter", "sequence"]), "G \u00b7 72 BPM \u00b7 4/4 \u00b7 V1 C V2 C");
+  assert.equal(
+    core.itemDetailsLine(richItem, core.pagerFieldsForRole({ pagerFields: allFields }), 1760000000000, 0, "twentyFourHour"),
+    "G \u00b7 72 BPM \u00b7 4/4 \u00b7 Default \u00b7 V1 C V2 C \u00b7 Walk on slowly \u00b7 Background Video \u00b7 Pre-service \u00b7 @ 08:53"
+  );
+});
+
+test("details line honours custom sequence, key fallbacks and BPM rounding", () => {
+  const item = { id: "s", itemType: "song", details: { keyName: "Bb", customSequenceShort: ["C", "B"], arrangement: { bpm: 90.5, sequenceShort: ["V1"] } } };
+  assert.equal(core.itemDetailsLine(item, ["key", "bpm", "sequence"]), "Bb \u00b7 90.5 BPM \u00b7 C B");
+  assert.equal(core.itemDetailsLine({ details: { key: { name: "E" } } }, ["key"]), "E");
+  assert.equal(core.detailBpmText(0), null);
+  assert.equal(core.detailBpmText(72), "72");
+});
+
+test("details line skips headers, empty data and during-service position", () => {
+  assert.equal(core.itemDetailsLine({ itemType: "header", details: richItem.details }, ["key"]), "");
+  assert.equal(core.itemDetailsLine({ itemType: "item" }, ["key", "bpm"]), "");
+  assert.equal(core.itemDetailsLine(null, ["key"]), "");
+  assert.equal(core.itemDetailsLine({ itemType: "item", details: { servicePosition: "during" } }, ["servicePosition"]), "");
+  assert.equal(core.itemDetailsLine(richItem, []), "");
+  assert.equal(core.itemDetailsLine(richItem, ["startTime"], null, 0, "twelveHour"), "");
+});
+
+test("start time renders in the producer UTC offset and clock format", () => {
+  assert.equal(core.itemDetailsLine(richItem, ["startTime"], 1760000000000, -4 * 3600, "twentyFourHour"), "@ 04:53");
+  assert.match(core.itemDetailsLine(richItem, ["startTime"], 1760000000000, 9 * 3600, "twelveHour"), /^@ 5:53\s?PM$/);
+});
+
+test("current and next start times", () => {
+  assert.equal(core.currentStartMs(richItem, 200, true, 1000000), 1000000 - 100000);
+  assert.equal(core.currentStartMs(richItem, 300, false, 1000000), null);
+  assert.equal(core.currentStartMs({ itemType: "header", lengthInSeconds: 0 }, 0, true, 5), null);
+  assert.equal(core.nextStartMs(null, 60, true, 1000), 61000);
+  assert.equal(core.nextStartMs(500000, 60, true, 1000), 500000);
+  assert.equal(core.nextStartMs(500, 60, true, 1000), 61000);
+  assert.equal(core.nextStartMs(500, -30, true, 1000), 1000);
+  assert.equal(core.nextStartMs(500, 60, false, 1000), 500);
+  assert.equal(core.nextStartMs(null, 60, false, 1000), null);
 });

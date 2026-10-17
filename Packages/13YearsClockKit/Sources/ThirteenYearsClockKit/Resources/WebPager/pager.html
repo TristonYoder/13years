@@ -341,6 +341,24 @@
     border-radius: 0.2em;
   }
 
+  #ltDetails {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0.04em;
+    font-size: 0.26em;
+    font-weight: 700;
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+  }
+
+  #lowerthird.hasdetails #ltTitle { font-size: 0.72em; }
+
+  #lowerthird.message #ltDetails { display: none; }
+
   #lowerthird.message #ltClock { display: none; }
 
   #lowerthird.message #ltTitle {
@@ -587,6 +605,17 @@
   #standard .fr-next-title, #standard .fr-next-length { font-size: calc(var(--u) * 0.04 * var(--k)); }
   .fr-next-notes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01 * var(--k)); overflow: hidden; }
   .fr-next-notes:empty { display: none; }
+  .fr-details {
+    font-size: calc(var(--u) * 0.026 * var(--k, 1));
+    font-weight: 700;
+    opacity: 0.88;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  #standard .fr-details { font-size: calc(var(--u) * 0.032 * var(--k, 1)); }
+  #ptDetails { text-align: center; }
   .fr .note {
     font-size: calc(var(--u) * 0.026 * var(--k, 1));
     font-weight: 600;
@@ -840,6 +869,7 @@
           <div id="ptTitle"></div>
           <div id="ptCountdown" class="tnum"></div>
           <div id="ptTag"></div>
+          <div id="ptDetails" class="fr-details hidden"></div>
           <div id="ptNotes"></div>
         </div>
       </div>
@@ -850,6 +880,7 @@
             <div id="ptNextTitle" class="fr-next-title"></div>
             <div id="ptNextLength" class="fr-next-length tnum"></div>
           </div>
+          <div id="ptNextDetails" class="fr-details hidden"></div>
           <div id="ptNextNotes" class="fr-next-notes"></div>
         </div>
         <button id="ptMessage" type="button" class="fr-msg hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
@@ -905,6 +936,7 @@
         <span id="ltClockLabel" class="lt-tag">LOCAL TIME</span>
       </span>
       <span id="ltTitle">—</span>
+      <span id="ltDetails" class="hidden"></span>
       <span id="ltCountdown" class="tnum">
         <span id="ltCountdownValue">--:--</span>
         <span id="ltDuration" class="lt-tag">PROJECTED</span>
@@ -933,6 +965,7 @@
             <div id="lsNextTitle" class="fr-next-title"></div>
             <div id="lsNextLength" class="fr-next-length tnum"></div>
           </div>
+          <div id="lsNextDetails" class="fr-details hidden"></div>
           <div id="lsNextNotes" class="fr-next-notes"></div>
         </div>
       </div>
@@ -1291,6 +1324,90 @@ function notesForRole(item, role) {
   return categories
     .map((category) => ({ category, text: item.notes[category] }))
     .filter((note) => note.text);
+}
+
+const PAGER_FIELD_ORDER = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime"];
+const PAGER_DETAILS_SEPARATOR = " \u00b7 ";
+
+function pagerFieldsForRole(role) {
+  const chosen = role && Array.isArray(role.pagerFields) ? role.pagerFields : [];
+  return PAGER_FIELD_ORDER.filter((field) => chosen.indexOf(field) !== -1);
+}
+
+function detailText(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function detailBpmText(bpm) {
+  if (typeof bpm !== "number" || !isFinite(bpm) || bpm <= 0) return null;
+  return bpm === Math.round(bpm) ? String(Math.round(bpm)) : bpm.toFixed(1);
+}
+
+function titleCaseWords(text) {
+  return String(text).replace(/_/g, " ").toLowerCase().replace(/(^|\s)(\S)/g, (match, lead, letter) => lead + letter.toUpperCase());
+}
+
+function itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat) {
+  if (!item || isHeaderItem(item) || !fields || fields.length === 0) return [];
+  const details = item.details || {};
+  const arrangement = details.arrangement || {};
+  const key = details.key || {};
+  const segments = [];
+  for (const field of fields) {
+    if (field === "key") {
+      const value = detailText(key.startingKey) || detailText(details.keyName) || detailText(key.name);
+      if (value) segments.push(value);
+    } else if (field === "bpm") {
+      const bpm = detailBpmText(arrangement.bpm);
+      if (bpm) segments.push(bpm + " BPM");
+    } else if (field === "meter") {
+      const meter = detailText(arrangement.meter);
+      if (meter) segments.push(meter);
+    } else if (field === "arrangement") {
+      const name = detailText(arrangement.name);
+      if (name) segments.push(name);
+    } else if (field === "sequence") {
+      const custom = Array.isArray(details.customSequenceShort) ? details.customSequenceShort : [];
+      const base = Array.isArray(arrangement.sequenceShort) ? arrangement.sequenceShort : [];
+      const sequence = custom.length > 0 ? custom : base;
+      if (sequence.length > 0) segments.push(sequence.join(" "));
+    } else if (field === "description") {
+      const flat = String(details.description || "").split(/\s+/).filter(Boolean).join(" ");
+      if (flat) segments.push(flat);
+    } else if (field === "mediaType") {
+      const mediaType = detailText(details.media && details.media.mediaType);
+      if (mediaType) segments.push(titleCaseWords(mediaType));
+    } else if (field === "servicePosition") {
+      if (details.servicePosition === "pre") segments.push("Pre-service");
+      else if (details.servicePosition === "post") segments.push("Post-service");
+    } else if (field === "startTime") {
+      if (typeof startMs === "number" && isFinite(startMs)) {
+        const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);
+        const shifted = new Date(hasUtc ? startMs + utcOffsetSeconds * 1000 : startMs);
+        segments.push("@ " + formatLocalTime(shifted, undefined, hasUtc ? "UTC" : undefined, clockFormat));
+      }
+    }
+  }
+  return segments;
+}
+
+function itemDetailsLine(item, fields, startMs, utcOffsetSeconds, clockFormat) {
+  const segments = itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat);
+  return segments.length > 0 ? segments.join(PAGER_DETAILS_SEPARATOR) : "";
+}
+
+function currentStartMs(item, remaining, running, nowMs) {
+  if (!item || isHeaderItem(item) || typeof remaining !== "number" || typeof item.lengthInSeconds !== "number") return null;
+  const elapsed = item.lengthInSeconds - remaining;
+  if (!running && elapsed <= 0) return null;
+  return nowMs - elapsed * 1000;
+}
+
+function nextStartMs(projectedMs, remaining, running, nowMs) {
+  const candidates = [];
+  if (typeof projectedMs === "number" && isFinite(projectedMs)) candidates.push(projectedMs);
+  if (running && typeof remaining === "number") candidates.push(nowMs + Math.max(0, remaining) * 1000);
+  return candidates.length > 0 ? Math.max.apply(null, candidates) : null;
 }
 
 function escapeHtml(value) {
@@ -1971,6 +2088,10 @@ const el = {
   ltCountdown: document.getElementById("ltCountdown"),
   ltCountdownValue: document.getElementById("ltCountdownValue"),
   ltDuration: document.getElementById("ltDuration"),
+  ltDetails: document.getElementById("ltDetails"),
+  ptDetails: document.getElementById("ptDetails"),
+  ptNextDetails: document.getElementById("ptNextDetails"),
+  lsNextDetails: document.getElementById("lsNextDetails"),
   waiting: document.getElementById("waiting"),
   offline: document.getElementById("offline"),
   waitingText: document.getElementById("waitingText"),
@@ -2144,6 +2265,40 @@ function nextItem() { return nextItemFor(snapshot); }
 
 function notesFor(item) { return notesForRole(item, activeRole()); }
 
+function pagerNowMs() {
+  return link.clockReady ? link.producerNow() : Date.now();
+}
+
+function timerRunning() {
+  const timer = snapshot && snapshot.timer;
+  if (!timer) return false;
+  return timer.anchor ? Boolean(timer.anchor.isRunning) : Boolean(timer.isRunning);
+}
+
+function currentDetails() {
+  const fields = pagerFieldsForRole(activeRole());
+  if (fields.length === 0) return "";
+  const item = activeItem();
+  const start = fields.indexOf("startTime") !== -1 ? currentStartMs(item, remainingSeconds(), timerRunning(), pagerNowMs()) : null;
+  return itemDetailsLine(item, fields, start, producerUtcOffsetSeconds, effectiveClockFormat());
+}
+
+function nextDetails() {
+  const fields = pagerFieldsForRole(activeRole());
+  if (fields.length === 0) return "";
+  const upcoming = nextItem();
+  const timer = snapshot && snapshot.timer;
+  const start = fields.indexOf("startTime") !== -1
+    ? nextStartMs(timer && timer.nextStartsAtMs, remainingSeconds(), timerRunning(), pagerNowMs())
+    : null;
+  return itemDetailsLine(upcoming, fields, start, producerUtcOffsetSeconds, effectiveClockFormat());
+}
+
+function setDetails(node, text) {
+  setText(node, text);
+  setHidden(node, !text);
+}
+
 function buildNote(category, text, current) {
   const node = document.createElement("div");
   node.className = "note";
@@ -2216,10 +2371,16 @@ function renderCountdown(view, hideEmpty) {
   if (hideEmpty) setHidden(view.countdown, !hasCountdown);
 }
 
-function fillNotes(container, signature, notes) {
+function fillNotes(container, signature, notes, details) {
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   container.innerHTML = "";
+  if (details) {
+    const line = document.createElement("div");
+    line.className = "fr-details";
+    line.textContent = details;
+    container.appendChild(line);
+  }
   notes.forEach((n, index) => container.appendChild(buildNote(n.category, n.text, index === 0)));
 }
 
@@ -2244,8 +2405,9 @@ function renderLandscape() {
   const current = notesFor(item);
   const upcoming = nextItem();
   const message = activeNotification();
-  const mode = bottomRowMode(Boolean(message), current.length > 0, Boolean(upcoming));
-  fillNotes(el.lsNotes, current.map((n) => n.category + n.text).join("|"), current);
+  const currentLine = currentDetails();
+  const mode = bottomRowMode(Boolean(message), current.length > 0 || Boolean(currentLine), Boolean(upcoming));
+  fillNotes(el.lsNotes, currentLine + "\u0002" + current.map((n) => n.category + n.text).join("|"), current, currentLine);
   setHidden(el.lsBottom, mode === "message" || mode === "none");
   setHidden(el.lsMessage, mode !== "message");
   setHidden(el.lsNotes, mode === "right");
@@ -2255,6 +2417,7 @@ function renderLandscape() {
     setText(el.lsNextTitle, (upcoming.title || "").toUpperCase());
     const length = upcoming.lengthInSeconds;
     setText(el.lsNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
+    setDetails(el.lsNextDetails, nextDetails());
     const nextNotes = notesFor(upcoming);
     fillNotes(
       el.lsNextNotes,
@@ -2282,6 +2445,7 @@ function renderPortrait() {
 
   const current = isHeader ? [] : notesFor(item);
   fillNotes(el.ptNotes, current.map((n) => n.category + n.text).join("|"), current);
+  setDetails(el.ptDetails, isHeader ? "" : currentDetails());
   setHidden(el.ptCard, !title && el.ptCountdown.classList.contains("hidden") && current.length === 0);
 
   const upcoming = nextItem();
@@ -2290,6 +2454,7 @@ function renderPortrait() {
     setText(el.ptNextTitle, (upcoming.title || "").toUpperCase());
     const length = upcoming.lengthInSeconds;
     setText(el.ptNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
+    setDetails(el.ptNextDetails, nextDetails());
     const nextNotes = notesFor(upcoming);
     fillNotes(
       el.ptNextNotes,
@@ -2311,7 +2476,7 @@ function fitPortrait(hasMessage) {
   const u = Math.min(window.innerWidth, window.innerHeight);
   const key = [
     u, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
-    el.ptNotes.dataset.signature, el.ptNext.classList.contains("hidden") ? 0 : 1,
+    el.ptNotes.dataset.signature, el.ptDetails.textContent, el.ptNextDetails.textContent, el.ptNext.classList.contains("hidden") ? 0 : 1,
     el.ptNextNotes.dataset.signature, el.ptNextTitle.textContent, el.ptNextLength.textContent,
     el.ptMessageText.textContent, el.ptMessageFrom.textContent,
     el.ptCard.classList.contains("hidden") ? 0 : 1, el.ptTag.textContent,
@@ -2358,7 +2523,7 @@ function fitPortrait(hasMessage) {
 
 function fitLandscapeBottom(mode) {
   const u = Math.min(window.innerWidth, window.innerHeight);
-  const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
+  const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextDetails.textContent, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
   if (key === lastFitKey) return;
   lastFitKey = key;
   if (mode === "message") {
@@ -2404,6 +2569,9 @@ function renderLowerThird() {
     ? message.text
     : item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "—";
   setText(el.ltTitle, title);
+  const detailsText = message ? "" : currentDetails();
+  setDetails(el.ltDetails, detailsText);
+  el.lowerthird.classList.toggle("hasdetails", Boolean(detailsText));
 
   const isHeader = item && (item.itemType || "").toLowerCase() === "header";
   const remaining = remainingSeconds();
@@ -2420,7 +2588,7 @@ function renderLowerThird() {
 
   const key = [
     title, isMessage ? 1 : 0, window.innerWidth, window.innerHeight,
-    clockText.length, effectiveClockFormat(), countdownText.length, durationText,
+    clockText.length, effectiveClockFormat(), countdownText.length, durationText, detailsText,
   ].join("|");
   if (key === lastLtKey) return;
   lastLtKey = key;

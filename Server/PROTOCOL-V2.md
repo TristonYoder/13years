@@ -122,7 +122,9 @@ nextItem: {
   "title": string,
   "itemType": string,
   "lengthInSeconds": int,
-  "notes": { "<category>": "<text>" }
+  "notes": { "<category>": "<text>" },
+  "details": { ... },
+  "startsAtMs": int
 }
 ```
 
@@ -131,6 +133,7 @@ nextItem: {
 - When the next item changes without the timer changing (a plan edit, a reorder), the producer sends a new `TIMER_ANCHOR` (with a new `rev`) carrying the new `nextItem`.
 - The 4096-byte limit on a v2 `PONG` still holds: drop the oldest messages first, then the longest note values of `nextItem`.
 - `nextItem` is not part of any digest hash. A pager that misses a change recovers on the next catch-up.
+- `details` and `startsAtMs` (additive, optional) serve per-role pager fields. `roleCues[].pagerFields` lists the fields a role shows (`key`, `bpm`, `meter`, `arrangement`, `sequence`, `description`, `mediaType`, `servicePosition`, `startTime`). `details` has the same shape as `timerItem.details` but holds only the keys the union of all roles' fields needs (`servicePosition`, `keyName`, `key.name`, `key.startingKey`, `arrangement.name`/`bpm`/`meter`/`sequenceShort`, `customSequenceShort`, `media.mediaType`, `description` cut to 140 characters), and is absent when no role chose a field. `startsAtMs` is the next item's projected start in producer epoch milliseconds, present only when a role chose `startTime`; it is not compared when deciding whether `nextItem` changed. A `PONG` over the size limit drops `nextItem.details` last.
 - Control API: `timer.nextItem` carries the full next item (all notes) in the snapshot and the `timer` event, so clients that already hold the plan need no extra data.
 
 ## Pager presentation rules

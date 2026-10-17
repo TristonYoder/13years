@@ -15,6 +15,8 @@
 #endif
 #endif
 
+#include "../src/sync/details_line.h"
+
 static int failures = 0;
 static int checks = 0;
 
@@ -513,6 +515,170 @@ static void testNextItemFilter() {
 #endif
 }
 
+static std::string detailsLine(const pagersync::ItemDetails &d, uint16_t fields, bool haveStart = false, int64_t startMs = 0, int64_t utc = 0, bool use24h = false, size_t cap = 160) {
+  std::vector<char> buf(cap);
+  pagersync::formatDetailsLine(d, fields, haveStart, startMs, utc, use24h, buf.data(), cap);
+  return buf.data();
+}
+
+static void testDetailsLine() {
+  using namespace pagersync;
+  CHECK(parsePagerField("key") == kFieldKey);
+  CHECK(parsePagerField("startTime") == kFieldStartTime);
+  CHECK(parsePagerField("servicePosition") == kFieldServicePosition);
+  CHECK(parsePagerField("bogus") == 0);
+  CHECK(parsePagerField(nullptr) == 0);
+
+  ItemDetails d;
+  strcpy(d.key, "G");
+  strcpy(d.bpm, "72");
+  strcpy(d.meter, "4/4");
+  strcpy(d.arrangement, "Default");
+  strcpy(d.sequence, "V1 C V2 C B C");
+  strcpy(d.description, "Walk on slowly");
+  strcpy(d.mediaType, "Background Video");
+  d.position = ServicePosition::Pre;
+
+  CHECK_STR(detailsLine(d, kFieldKey | kFieldBpm | kFieldMeter | kFieldSequence), "G | 72 BPM | 4/4 | V1 C V2 C B C");
+  CHECK_STR(detailsLine(d, kFieldSequence | kFieldKey), "G | V1 C V2 C B C");
+  CHECK_STR(detailsLine(d, 0x1FF, true, 1760000000000LL, 0, true),
+            "G | 72 BPM | 4/4 | Default | V1 C V2 C B C | Walk on slowly | Background Video | Pre-service | @ 08:53");
+  CHECK_STR(detailsLine(d, kFieldStartTime, true, 1760000000000LL, 9 * 3600, false), "@ 5:53 PM");
+  CHECK_STR(detailsLine(d, kFieldStartTime, false), "");
+  CHECK_STR(detailsLine(d, 0), "");
+  ItemDetails empty;
+  CHECK_STR(detailsLine(empty, 0x1FF), "");
+  d.position = ServicePosition::During;
+  CHECK_STR(detailsLine(d, kFieldServicePosition), "");
+  d.position = ServicePosition::Post;
+  CHECK_STR(detailsLine(d, kFieldServicePosition), "Post-service");
+
+  CHECK_STR(detailsLine(d, kFieldKey | kFieldBpm | kFieldMeter | kFieldSequence, false, 0, 0, false, 16), "G | 72 BPM | 4/");
+  CHECK_STR(detailsLine(d, kFieldSequence, false, 0, 0, false, 5), "V1 C");
+  CHECK_STR(detailsLine(d, kFieldKey | kFieldBpm, false, 0, 0, false, 4), "G");
+
+  char hm[24];
+  formatClockHM(0, 0, false, hm, sizeof(hm));
+  CHECK_STR(hm, "12:00 AM");
+  formatClockHM(12 * 3600 * 1000LL, 0, false, hm, sizeof(hm));
+  CHECK_STR(hm, "12:00 PM");
+  formatClockHM(-60 * 1000LL, 0, true, hm, sizeof(hm));
+  CHECK_STR(hm, "23:59");
+
+  char t[24];
+  formatBpm(72, t, sizeof(t));
+  CHECK_STR(t, "72");
+  formatBpm(90.5, t, sizeof(t));
+  CHECK_STR(t, "90.5");
+  formatBpm(0, t, sizeof(t));
+  CHECK_STR(t, "");
+
+  char m[32];
+  titleCaseWords(m, sizeof(m), "background_video");
+  CHECK_STR(m, "Background Video");
+  titleCaseWords(m, sizeof(m), "VIDEO");
+  CHECK_STR(m, "Video");
+  collapseWhitespace(m, sizeof(m), "  Walk on\n  slowly  ");
+  CHECK_STR(m, "Walk on slowly");
+  collapseWhitespace(m, 8, "abc def ghi");
+  CHECK_STR(m, "abc def");
+
+  int64_t out = 0;
+  CHECK(currentStartMs(true, 100, 1000000, out) && out == 900000);
+  CHECK(!currentStartMs(false, 0, 1000000, out));
+  CHECK(currentStartMs(false, 5, 1000000, out) && out == 995000);
+  CHECK(nextStartMs(false, 0, true, 60, 1000, out) && out == 61000);
+  CHECK(nextStartMs(true, 500000, true, 60, 1000, out) && out == 500000);
+  CHECK(nextStartMs(true, 500, true, 60, 1000, out) && out == 61000);
+  CHECK(nextStartMs(true, 500, true, -30, 1000, out) && out == 1000);
+  CHECK(nextStartMs(true, 500, false, 60, 1000, out) && out == 500);
+  CHECK(!nextStartMs(false, 0, false, 60, 1000, out));
+}
+
+static void testDetailsJson() {
+#ifdef HAVE_ARDUINOJSON
+  using namespace pagersync;
+  JsonDocument filter;
+  filter["type"] = true;
+  buildTimerItemFilter(filter["timerItem"].to<JsonObject>());
+  buildNextItemFilter(filter["nextItem"].to<JsonObject>());
+  filter["roleCues"] = true;
+
+  const char *src =
+      "{\"type\":\"TIMER_ANCHOR\",\"timerItem\":{\"id\":\"i1\",\"title\":\"Song\",\"itemType\":\"song\",\"lengthInSeconds\":300,"
+      "\"elapsedSeconds\":12,\"isRunning\":true,\"isDurationActual\":false,\"servicePlanTitle\":\"Easter\",\"waypointIds\":[\"w\"],"
+      "\"notes\":{\"Band\":\"Count in\"},\"noteIds\":{\"Band\":\"n1\"},"
+      "\"details\":{\"servicePosition\":\"during\",\"description\":\"Slow\\n  build\",\"htmlDetails\":\"<p>lyrics lyrics</p>\","
+      "\"keyName\":\"Ab\",\"key\":{\"id\":\"k\",\"name\":\"Ab\",\"startingKey\":\"G\",\"alternateKeys\":[\"A\",\"B\"],\"endingKey\":\"G\"},"
+      "\"song\":{\"id\":\"s\",\"title\":\"Heavy\",\"themes\":[\"x\",\"y\"]},"
+      "\"arrangement\":{\"id\":\"a\",\"name\":\"Default\",\"bpm\":72,\"meter\":\"4/4\",\"sequence\":[\"Verse 1\",\"Chorus\"],\"sequenceShort\":[\"V1\",\"C\",\"V2\"],\"hasChords\":true,\"notes\":\"long notes\"},"
+      "\"customSequence\":[],\"customSequenceShort\":[],"
+      "\"media\":{\"id\":\"m\",\"title\":\"clip\",\"mediaType\":\"background_video\",\"themes\":[\"t\"],\"thumbnailURL\":\"http://x\"},"
+      "\"itemTimes\":[{\"id\":\"t1\",\"planTimeId\":\"p\",\"length\":300}]}},"
+      "\"nextItem\":{\"id\":\"n1\",\"title\":\"Sermon\",\"itemType\":\"item\",\"lengthInSeconds\":1800,\"notes\":{},\"startsAtMs\":1760000000000,"
+      "\"details\":{\"servicePosition\":\"post\",\"customSequenceShort\":[\"C\",\"B\"],\"arrangement\":{\"id\":\"a\",\"bpm\":90.5,\"sequenceShort\":[\"V1\"]},\"htmlDetails\":\"<p>x</p>\"}},"
+      "\"roleCues\":[{\"id\":\"r\",\"name\":\"Band\",\"state\":\"OFF\",\"pagerFields\":[\"bpm\",\"key\",\"bogus\",\"startTime\"]},{\"id\":\"s\",\"name\":\"Host\",\"state\":\"OFF\"}]}";
+  JsonDocument doc;
+  CHECK(!deserializeJson(doc, src, strlen(src), DeserializationOption::Filter(filter)));
+
+  JsonObjectConst timer = doc["timerItem"].as<JsonObjectConst>();
+  CHECK(timer["servicePlanTitle"].isNull());
+  CHECK(timer["waypointIds"].isNull());
+  CHECK(timer["noteIds"].isNull());
+  CHECK(timer["lengthInSeconds"].as<int>() == 300);
+  CHECK(timer["isRunning"].as<bool>());
+  CHECK_STR(timer["notes"]["Band"].as<const char *>(), "Count in");
+  JsonObjectConst details = timer["details"].as<JsonObjectConst>();
+  CHECK(details["htmlDetails"].isNull());
+  CHECK(details["song"].isNull());
+  CHECK(details["itemTimes"].isNull());
+  CHECK(details["customSequence"].isNull());
+  CHECK(details["key"]["alternateKeys"].isNull());
+  CHECK(details["key"]["endingKey"].isNull());
+  CHECK(details["key"]["id"].isNull());
+  CHECK(details["arrangement"]["sequence"].isNull());
+  CHECK(details["arrangement"]["notes"].isNull());
+  CHECK(details["arrangement"]["hasChords"].isNull());
+  CHECK(details["arrangement"]["id"].isNull());
+  CHECK(details["media"]["title"].isNull());
+  CHECK(details["media"]["themes"].isNull());
+  CHECK(details["media"]["thumbnailURL"].isNull());
+
+  ItemDetails d;
+  parseItemDetails(d, doc["timerItem"]["details"]);
+  CHECK_STR(d.key, "G");
+  CHECK_STR(d.bpm, "72");
+  CHECK_STR(d.meter, "4/4");
+  CHECK_STR(d.arrangement, "Default");
+  CHECK_STR(d.sequence, "V1 C V2");
+  CHECK_STR(d.description, "Slow build");
+  CHECK_STR(d.mediaType, "Background Video");
+  CHECK(d.position == ServicePosition::During);
+
+  ItemDetails n;
+  parseItemDetails(n, doc["nextItem"]["details"]);
+  CHECK_STR(n.sequence, "C B");
+  CHECK_STR(n.bpm, "90.5");
+  CHECK(n.position == ServicePosition::Post);
+  CHECK(doc["nextItem"]["startsAtMs"].is<int64_t>());
+  CHECK(doc["nextItem"]["startsAtMs"].as<int64_t>() == 1760000000000LL);
+  CHECK(doc["nextItem"]["itemType"].isNull());
+  CHECK(doc["nextItem"]["details"]["htmlDetails"].isNull());
+
+  CHECK(parsePagerFields(doc["roleCues"][0]["pagerFields"]) == (kFieldBpm | kFieldKey | kFieldStartTime));
+  CHECK(parsePagerFields(doc["roleCues"][1]["pagerFields"]) == 0);
+
+  ItemDetails none;
+  strcpy(none.key, "stale");
+  parseItemDetails(none, doc["timerItem"]["missing"]);
+  CHECK_STR(none.key, "");
+
+  std::string slimFiltered;
+  serializeJson(doc["timerItem"], slimFiltered);
+  CHECK(slimFiltered.size() < 520);
+#endif
+}
+
 static void testJson64() {
 #ifdef HAVE_ARDUINOJSON
   JsonDocument doc;
@@ -755,6 +921,8 @@ int main() {
   testLinkPhase();
   testUtcOffsetFilter();
   testClockFormat();
+  testDetailsLine();
+  testDetailsJson();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

@@ -69,6 +69,7 @@ public final class CueEngine: ObservableObject {
     @Published public internal(set) var rehearsalPlanTimeId: String?
     var actualRun: ActualRun?
     @Published public var nextItem: PCOTimerItem?
+    @Published public var nextItemStartsAtMs: Int?
     @Published var isActiveTimerActualOverride: Bool = false
     var actualOverrideItemId: String?
     @Published public var isPCOConnected: Bool = false
@@ -104,6 +105,11 @@ public final class CueEngine: ObservableObject {
         }
         if isMasterServer || isRemoteMirror { return clockFormat }
         return producerClockFormat ?? clockFormat
+    }
+
+    public var displayPagerFields: [PagerItemField] {
+        let fields = roles.first(where: { selectedRoleIds.contains($0.id) && $0.pagerFields != nil })?.pagerFields
+        return PagerItemField.normalized(fields ?? [])
     }
 
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
@@ -1612,7 +1618,11 @@ public final class CueEngine: ObservableObject {
     var activeTimerItemForBroadcast: PCOTimerItem? {
         guard var item = activeTimerItem else { return nil }
         item.isDurationActual = activeTimerActualForDisplay
-        return item.broadcastTrimmed
+        return item.broadcastTrimmed(fields: broadcastPagerFields)
+    }
+
+    var broadcastPagerFields: Set<PagerItemField> {
+        Set(roles.flatMap { $0.pagerFields ?? [] })
     }
 
     public func nextPlanItem(startTimer: Bool = true) {
@@ -1655,13 +1665,32 @@ public final class CueEngine: ObservableObject {
 
     var nextItemForBroadcast: CueNextItem? {
         guard let item = derivedNextPlanItem else { return nil }
-        return CueNextItem(item: item, noteCategories: Set(roles.flatMap(\.assignedNoteCategories)))
+        let fields = broadcastPagerFields
+        return CueNextItem(
+            item: item,
+            noteCategories: Set(roles.flatMap(\.assignedNoteCategories)),
+            pagerFields: fields,
+            startsAtMs: fields.contains(.startTime) ? projectedStartMs(ofItemId: item.id) : nil
+        )
+    }
+
+    func projectedStartMs(ofItemId itemId: String, now: Date = Date()) -> Int? {
+        let fromSchedule = runSheetSchedule(now: now).entry(forItemId: itemId)?.projectedStart
+        let running = activeTimerItem.flatMap { $0.isRunning ? now.addingTimeInterval(TimeInterval(max(0, $0.remainingSeconds))) : nil }
+        guard let date = fromSchedule ?? running else { return nil }
+        return Int((date.timeIntervalSince1970).rounded()) * 1000
+    }
+
+    public var nextItemStartDate: Date? {
+        if let ms = nextItemStartsAtMs { return Date(timeIntervalSince1970: TimeInterval(ms) / 1000) }
+        guard !planItems.isEmpty, let next = derivedNextPlanItem else { return nil }
+        return projectedStartMs(ofItemId: next.id).map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
     }
 
     private func rebroadcastIfNextItemChanged() {
         guard isMasterServer, !isRemoteMirror, let active = activeTimerItem,
               planItems.indices.contains(activeItemIndex), planItems[activeItemIndex].id == active.id,
-              nextItemForBroadcast != syncV2.lastNextItem else { return }
+              nextItemForBroadcast?.withoutStart != syncV2.lastNextItem?.withoutStart else { return }
         broadcastTimerUpdate()
     }
 
@@ -1861,6 +1890,25 @@ public final class CueEngine: ObservableObject {
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         roles[index].clockFormat = format
         broadcastState()
+    }
+
+    public func setPagerFields(forRoleId roleId: String, _ fields: [PagerItemField]?) {
+        let normalized = fields.map(PagerItemField.normalized)
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["pagerFields": (normalized ?? []).map(\.rawValue)])))
+            return
+        }
+        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        roles[index].pagerFields = normalized
+        broadcastState()
+        if activeTimerItem != nil { broadcastTimerUpdate() }
+    }
+
+    public func setPagerField(forRoleId roleId: String, field: PagerItemField, isOn: Bool) {
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        var fields = Set(role.pagerFields ?? [])
+        if isOn { fields.insert(field) } else { fields.remove(field) }
+        setPagerFields(forRoleId: roleId, PagerItemField.normalized(Array(fields)))
     }
 
     @discardableResult

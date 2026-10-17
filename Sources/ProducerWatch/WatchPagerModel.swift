@@ -229,7 +229,9 @@ extension PagerPresentationState {
             clockFormat: apiState.roles.first(where: { $0.id == selectedRoleId })?.clockFormat
                 ?? ClockFormat(rawValue: apiState.settings.clockFormat)
                 ?? .systemDefault,
-            receivedNextItem: apiState.timer?.nextItem
+            receivedNextItem: apiState.timer?.nextItem,
+            producerUTCOffsetSeconds: apiState.utcOffsetSeconds,
+            nextItemStartDate: apiState.timer?.nextStartsAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
         )
     }
 }

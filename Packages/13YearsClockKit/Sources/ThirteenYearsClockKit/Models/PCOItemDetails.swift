@@ -305,6 +305,45 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         itemTime(forPlanTimeId: planTimeId)?.exclude ?? false
     }
 
+    public func broadcastTrimmed(fields: Set<PagerItemField>) -> PCOItemDetails? {
+        var slim = PCOItemDetails()
+        var hasContent = false
+        if fields.contains(.servicePosition), servicePosition != .during {
+            slim.servicePosition = servicePosition
+            hasContent = true
+        }
+        if fields.contains(.key) {
+            slim.keyName = keyName
+            if let key {
+                slim.key = PCOKeyInfo(id: key.id, name: key.name, startingKey: key.startingKey)
+            }
+            hasContent = hasContent || displayKey != nil
+        }
+        if fields.contains(.description), let description, !description.isEmpty {
+            slim.description = String(description.prefix(Self.broadcastDescriptionLimit))
+            hasContent = true
+        }
+        if let arrangement, !fields.isDisjoint(with: [.bpm, .meter, .arrangement, .sequence]) {
+            slim.arrangement = PCOArrangementInfo(
+                id: arrangement.id,
+                name: fields.contains(.arrangement) ? arrangement.name : nil,
+                bpm: fields.contains(.bpm) ? arrangement.bpm : nil,
+                meter: fields.contains(.meter) ? arrangement.meter : nil,
+                sequenceShort: fields.contains(.sequence) ? arrangement.sequenceShort : []
+            )
+            hasContent = true
+        }
+        if fields.contains(.sequence), !customSequenceShort.isEmpty {
+            slim.customSequenceShort = customSequenceShort
+            hasContent = true
+        }
+        if fields.contains(.mediaType), let media {
+            slim.media = PCOMediaInfo(id: media.id, mediaType: media.mediaType)
+            hasContent = true
+        }
+        return hasContent ? slim : nil
+    }
+
     public var broadcastTrimmed: PCOItemDetails {
         var slim = PCOItemDetails(servicePosition: servicePosition, keyName: keyName)
         if let description, !description.isEmpty {

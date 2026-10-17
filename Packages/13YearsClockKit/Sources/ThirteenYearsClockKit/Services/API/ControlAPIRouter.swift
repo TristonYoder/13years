@@ -1088,6 +1088,17 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(category, ContentLimits.identifier, "Note category") { return tooLong }
             }
         }
+        var pagerFields: [PagerItemField]?
+        if let raw = request.pagerFields {
+            var parsed: [PagerItemField] = []
+            for value in raw {
+                guard let field = PagerItemField(rawValue: value) else {
+                    return Self.error(400, "Unknown pagerFields value", detail: PagerItemField.allCases.map(\.rawValue).joined(separator: ", "))
+                }
+                parsed.append(field)
+            }
+            pagerFields = parsed
+        }
         if let name = request.name?.trimmingCharacters(in: .whitespaces) {
             guard !name.isEmpty else { return Self.error(400, "Role name cannot be empty") }
             engine.renameRole(id: id, name: name)
@@ -1113,6 +1124,9 @@ public final class ControlAPIRouter {
             for category in current.subtracting(desired) {
                 engine.setNoteCategory(forRoleId: id, category: category, isOn: false)
             }
+        }
+        if let pagerFields {
+            engine.setPagerFields(forRoleId: id, pagerFields)
         }
         if let rawState = request.state {
             guard let state = Self.cueState(rawState) else { return unknownCueState() }
@@ -1241,7 +1255,8 @@ public final class ControlAPIRouter {
             formattedRemaining: TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold),
             isDurationActualForDisplay: engine.activeTimerActualForDisplay,
             anchor: anchor,
-            nextItem: engine.derivedNextPlanItem
+            nextItem: engine.derivedNextPlanItem,
+            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil
         )
     }
 

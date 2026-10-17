@@ -401,11 +401,14 @@ final class PCOItemDetailsEngineTests: XCTestCase {
     }
 
     func testBroadcastItemIsTrimmed() throws {
-        var rich = item("a")
+        var rich = item("a", key: "G")
         rich.details?.htmlDetails = "<p>lyrics</p>"
         rich.details?.itemTimes = [PCOItemTimeInfo(id: "t")]
         let engine = makeEngine([rich])
+        XCTAssertNil(engine.activeTimerItemForBroadcast?.details)
+        engine.roles[0].pagerFields = [.key]
         let broadcast = try XCTUnwrap(engine.activeTimerItemForBroadcast)
+        XCTAssertEqual(broadcast.details?.displayKey, "G")
         XCTAssertNil(broadcast.details?.htmlDetails)
         XCTAssertTrue(broadcast.details?.itemTimes.isEmpty ?? false)
         XCTAssertNotNil(engine.activeTimerItem?.details?.htmlDetails)

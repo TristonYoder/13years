@@ -203,6 +203,7 @@ static lv_obj_t *cuePill = nullptr, *cueLabel = nullptr;
 static lv_obj_t *roleBtn = nullptr, *roleBtnLabel = nullptr, *roleBtnChevron = nullptr;
 static lv_obj_t *noConnLabel = nullptr;
 static lv_obj_t *itemCard = nullptr, *itemTitleLabel = nullptr, *timerLabel = nullptr, *projActualLabel = nullptr;
+static lv_obj_t *itemDetailsLabel = nullptr, *nextDetailsLabel = nullptr;
 static lv_obj_t *itemDivider = nullptr, *itemDividerLine = nullptr, *itemNotes = nullptr;
 static lv_obj_t *bottomStack = nullptr;
 static lv_obj_t *nextCard = nullptr, *nextRow = nullptr, *nextTitleLabel = nullptr, *nextLenLabel = nullptr, *nextNote = nullptr;
@@ -349,6 +350,14 @@ static void buildPagerScreen() {
   lv_obj_set_style_text_letter_space(projActualLabel, 1, 0);
   lv_obj_set_style_text_opa(projActualLabel, LV_OPA_70, 0);
 
+  itemDetailsLabel = lv_label_create(itemCard);
+  lv_obj_set_style_text_font(itemDetailsLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_opa(itemDetailsLabel, LV_OPA_90, 0);
+  lv_label_set_long_mode(itemDetailsLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(itemDetailsLabel, kInnerW, lv_font_get_line_height(&inter_regular_14));
+  lv_obj_set_style_text_align(itemDetailsLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_add_flag(itemDetailsLabel, LV_OBJ_FLAG_HIDDEN);
+
   itemDivider = lv_obj_create(itemCard);
   lv_obj_remove_style_all(itemDivider);
   lv_obj_set_size(itemDivider, kInnerW, 2 * kDividerGap + 1);
@@ -396,6 +405,13 @@ static void buildPagerScreen() {
   lv_obj_set_width(nextTitleLabel, kInnerW - lenW - 6);
   lv_obj_move_to_index(nextTitleLabel, 0);
 
+  nextDetailsLabel = lv_label_create(nextCard);
+  lv_obj_set_style_text_font(nextDetailsLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_opa(nextDetailsLabel, LV_OPA_80, 0);
+  lv_label_set_long_mode(nextDetailsLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(nextDetailsLabel, kInnerW, lv_font_get_line_height(&inter_regular_14));
+  lv_obj_add_flag(nextDetailsLabel, LV_OBJ_FLAG_HIDDEN);
+
   nextNote = makeNoteGroup(nextCard);
 
   msgPanel = lv_obj_create(bottomStack);
@@ -431,6 +447,8 @@ struct PagerCache {
   bool actual = false;
   bool actualValid = false;
   String notesSig = "\1";
+  String details = "\1";
+  String nextDetails = "\1";
   bool nextShown = false;
   String nextTitle = "\1";
   int nextLen = -1;
@@ -484,7 +502,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
   lv_obj_center(cueLabel);
 
   lv_obj_t *labels[] = {clockLabel, clockCaption, noConnLabel, roleBtnLabel, itemTitleLabel, timerLabel,
-                        projActualLabel, nextTitleLabel, nextLenLabel};
+                        projActualLabel, nextTitleLabel, nextLenLabel, itemDetailsLabel, nextDetailsLabel};
   for (lv_obj_t *l : labels) lv_obj_set_style_text_color(l, ink, 0);
   lv_obj_set_style_bg_color(itemDividerLine, ink, 0);
   lv_obj_set_style_img_recolor(roleBtnChevron, ink, 0);
@@ -502,6 +520,8 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
 
   pc.notesSig = "\1";
   pc.nextNoteSig = "\1";
+  pc.details = "\1";
+  pc.nextDetails = "\1";
   pc.layoutDirty = true;
 }
 
@@ -652,6 +672,15 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
       }
     }
 
+    char detailsBuf[160];
+    engine.timerDetailsLine(detailsBuf, sizeof(detailsBuf));
+    if (!pc.details.equals(detailsBuf)) {
+      pc.details = detailsBuf;
+      lv_label_set_text(itemDetailsLabel, detailsBuf);
+      setHidden(itemDetailsLabel, detailsBuf[0] == '\0');
+      pc.layoutDirty = true;
+    }
+
     String sig;
     int noteCount = header ? 0 : engine.roleNoteCount();
     for (int i = 0; i < noteCount; i++) {
@@ -684,9 +713,18 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
     pc.nextTitle = "\1";
     pc.nextLen = -1;
     pc.nextNoteSig = "\1";
+    pc.nextDetails = "\1";
     pc.layoutDirty = true;
   }
   if (nextShown) {
+    char nextDetailsBuf[160];
+    engine.nextDetailsLine(nextDetailsBuf, sizeof(nextDetailsBuf));
+    if (!pc.nextDetails.equals(nextDetailsBuf)) {
+      pc.nextDetails = nextDetailsBuf;
+      lv_label_set_text(nextDetailsLabel, nextDetailsBuf);
+      setHidden(nextDetailsLabel, nextDetailsBuf[0] == '\0');
+      pc.layoutDirty = true;
+    }
     const char *nextTitleSrc = engine.nextTitle();
     if (!pc.nextTitle.equals(nextTitleSrc)) {
       pc.nextTitle = nextTitleSrc;

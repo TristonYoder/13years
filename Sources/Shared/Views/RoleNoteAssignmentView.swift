@@ -26,6 +26,8 @@ public struct RoleNoteAssignmentView: View {
                     noteCategorySection(for: role)
                 }
 
+                pagerDetailsSection
+
                 if categories.isEmpty {
                     Section {
                         Text("No note categories yet — sync from Planning Center or add a note to any item in the Run Sheet.")
@@ -199,5 +201,39 @@ public struct RoleNoteAssignmentView: View {
                 Text("Checked categories show on this role's pager as its Current/Next note panel.")
             }
         }
+    }
+
+    private var pagerDetailsSection: some View {
+        Section {
+            ForEach(engine.roles) { role in
+                LabeledContent(role.name) {
+                    Menu {
+                        ForEach(PagerItemField.allCases) { field in
+                            Toggle(field.label, isOn: Binding(
+                                get: { role.pagerFields?.contains(field) ?? false },
+                                set: { engine.setPagerField(forRoleId: role.id, field: field, isOn: $0) }
+                            ))
+                        }
+                        Divider()
+                        Button("Clear") { engine.setPagerFields(forRoleId: role.id, nil) }
+                            .disabled((role.pagerFields ?? []).isEmpty)
+                    } label: {
+                        Text(pagerFieldsSummary(for: role))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+            }
+        } header: {
+            Text("Pager Details")
+        } footer: {
+            Text("Choose which song and item details show on each role's pager as a compact line under the current and next item, such as key, BPM, meter and sequence. Roles with nothing chosen show no details line.")
+        }
+    }
+
+    private func pagerFieldsSummary(for role: RoleCue) -> String {
+        let fields = PagerItemField.normalized(role.pagerFields ?? [])
+        guard !fields.isEmpty else { return "None" }
+        return fields.map(\.label).joined(separator: ", ")
     }
 }

@@ -7,6 +7,7 @@
 #include <esp_timer.h>
 #include "cue_state.h"
 #include "sync/sync_core.h"
+#include "sync/details_line.h"
 
 namespace cue {
 
@@ -20,6 +21,7 @@ struct RoleView {
   pagersync::ClockFormat clockFormat = pagersync::ClockFormat::Unset;
   String assignedNoteCategories[kMaxNoteCategoriesPerRole];
   int assignedNoteCategoryCount = 0;
+  uint16_t pagerFields = 0;
   CueState state = CueState::Off;
 
   bool hasNoteCategory(const String &category) const {
@@ -85,6 +87,9 @@ struct NextItemView {
   int lengthInSeconds = 0;
   Note notes[kMaxNotes];
   int noteCount = 0;
+  pagersync::ItemDetails details;
+  bool hasStartsAt = false;
+  int64_t startsAtMs = 0;
 };
 
 class Engine {
@@ -135,6 +140,8 @@ public:
   const char *nextNoteText() const;
   bool nextFirstNote(const char *&category, const char *&text) const;
   int nextLengthSeconds() const { return next_.lengthInSeconds; }
+  bool timerDetailsLine(char *out, size_t cap) const;
+  bool nextDetailsLine(char *out, size_t cap) const;
   int roleNoteCount() const;
   bool roleNoteAt(int index, const char *&category, const char *&text) const;
 
@@ -174,6 +181,7 @@ private:
   NoteEntry notes_[kMaxNoteCategories];
   int noteCount_ = 0;
   NextItemView next_;
+  pagersync::ItemDetails timerDetails_;
   MessageView messages_[kMaxMessages];
   int messageCount_ = 0;
 

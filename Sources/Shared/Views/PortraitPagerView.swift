@@ -169,6 +169,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
 
     private func currentCard(_ m: PortraitMetrics, item: PCOTimerItem, scale: CGFloat) -> some View {
         let notes = presentation.currentNotes
+        let details = presentation.currentDetailsLine()
         return VStack(spacing: m.margin * 0.3 * scale) {
             Text(item.title.uppercased())
                 .font(.inter(size: m.titleFontSize * scale, weight: .bold))
@@ -189,6 +190,10 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                     .font(.inter(size: m.tagFontSize * scale, weight: .bold))
                     .tracking(2)
                     .foregroundColor(.white.opacity(0.5))
+            }
+
+            if !item.isHeader, let details {
+                detailsText(m, details, opacity: 0.85, scale: scale)
             }
 
             if !item.isHeader && !notes.isEmpty {
@@ -232,8 +237,17 @@ public struct PortraitPagerView<RoleMenu: View>: View {
         }
     }
 
+    private func detailsText(_ m: PortraitMetrics, _ line: String, opacity: Double, scale: CGFloat) -> some View {
+        Text(line)
+            .font(.inter(size: m.noteFontSize * scale, weight: .semibold))
+            .foregroundColor(.white.opacity(opacity))
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
     private func nextCard(_ m: PortraitMetrics, next: PCOTimerItem) -> some View {
-        FirstFittingLayout(maxHeight: m.nextCardContentMaxHeight) {
+        let details = presentation.nextDetailsLine()
+        return FirstFittingLayout(maxHeight: m.nextCardContentMaxHeight) {
             ForEach(Array(PortraitMetrics.fitScales.enumerated()), id: \.offset) { _, scale in
                 VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
                     HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
@@ -248,6 +262,9 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                             .monospacedDigit()
                             .foregroundColor(.white.opacity(0.7))
                             .lineLimit(1)
+                    }
+                    if let details {
+                        detailsText(m, details, opacity: 0.8, scale: scale)
                     }
                     noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85, scale: scale)
                 }

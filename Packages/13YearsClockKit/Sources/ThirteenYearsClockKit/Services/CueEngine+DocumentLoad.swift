@@ -22,6 +22,7 @@ extension CueEngine {
                         merged[index].clockFormat = role.clockFormat
                         merged[index].pcoTeamPosition = role.pcoTeamPosition
                         merged[index].assignedNoteCategories = role.assignedNoteCategories
+                        merged[index].pagerFields = role.pagerFields
                     } else if merged.count < ContentLimits.maxRoles {
                         var added = role
                         added.state = .off

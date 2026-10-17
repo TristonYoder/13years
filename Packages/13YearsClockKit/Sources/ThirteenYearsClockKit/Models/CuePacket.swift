@@ -21,27 +21,47 @@ public struct CueNextItem: Codable, Equatable, Sendable {
     public var itemType: String
     public var lengthInSeconds: Int
     public var notes: [String: String]
+    public var details: PCOItemDetails?
+    public var startsAtMs: Int?
 
-    public init(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]) {
+    public init(
+        id: String,
+        title: String,
+        itemType: String,
+        lengthInSeconds: Int,
+        notes: [String: String],
+        details: PCOItemDetails? = nil,
+        startsAtMs: Int? = nil
+    ) {
         self.id = id
         self.title = title
         self.itemType = itemType
         self.lengthInSeconds = lengthInSeconds
         self.notes = notes
+        self.details = details
+        self.startsAtMs = startsAtMs
     }
 
-    public init(item: PCOTimerItem, noteCategories: Set<String>) {
+    public init(item: PCOTimerItem, noteCategories: Set<String>, pagerFields: Set<PagerItemField> = [], startsAtMs: Int? = nil) {
         self.init(
             id: item.id,
             title: item.title,
             itemType: item.itemType,
             lengthInSeconds: item.lengthInSeconds,
-            notes: item.notes.filter { noteCategories.contains($0.key) }
+            notes: item.notes.filter { noteCategories.contains($0.key) },
+            details: item.details?.broadcastTrimmed(fields: pagerFields),
+            startsAtMs: pagerFields.contains(.startTime) ? startsAtMs : nil
         )
     }
 
     public var timerItem: PCOTimerItem {
-        PCOTimerItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes)
+        PCOTimerItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, details: details)
+    }
+
+    public var withoutStart: CueNextItem {
+        var copy = self
+        copy.startsAtMs = nil
+        return copy
     }
 }
 

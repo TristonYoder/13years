@@ -113,6 +113,12 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         return slim
     }
 
+    public func broadcastTrimmed(fields: Set<PagerItemField>) -> PCOTimerItem {
+        var slim = self
+        slim.details = details?.broadcastTrimmed(fields: fields)
+        return slim
+    }
+
     public var isHeader: Bool {
         itemType.caseInsensitiveCompare("header") == .orderedSame
     }

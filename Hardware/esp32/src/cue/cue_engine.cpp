@@ -205,9 +205,9 @@ static JsonDocument &packetFilter() {
     filter["t1"] = true;
     filter["t2"] = true;
     filter["roleCues"] = true;
-    filter["timerItem"] = true;
+    pagersync::buildTimerItemFilter(filter["timerItem"].to<JsonObject>());
     filter["anchor"] = true;
-    filter["nextItem"] = true;
+    pagersync::buildNextItemFilter(filter["nextItem"].to<JsonObject>());
     filter["hashes"] = true;
     filter["cueDeltas"] = true;
     filter["message"] = true;
@@ -380,6 +380,7 @@ void Engine::applyRoleCues(JsonArrayConst roles) {
         v.assignedNoteCategories[v.assignedNoteCategoryCount++] = c.as<String>();
       }
     }
+    v.pagerFields = pagersync::parsePagerFields(r["pagerFields"]);
     v.state = cueStateFromString(String((const char *)(r["state"] | "OFF")));
   }
 
@@ -411,6 +412,8 @@ void Engine::applyTimerItem(JsonObjectConst t, bool timing) {
     anchored_ = false;
   }
 
+  pagersync::parseItemDetails(timerDetails_, t["details"]);
+
   noteCount_ = 0;
   if (t["notes"].is<JsonObjectConst>()) {
     for (JsonPairConst kv : t["notes"].as<JsonObjectConst>()) {
@@ -440,6 +443,9 @@ void Engine::applyNextItem(JsonVariantConst v) {
   pagersync::copyTruncated(next_.id, sizeof(next_.id), o["id"] | "");
   pagersync::copyTruncated(next_.title, sizeof(next_.title), o["title"] | "");
   next_.lengthInSeconds = o["lengthInSeconds"] | 0;
+  next_.hasStartsAt = o["startsAtMs"].is<int64_t>();
+  next_.startsAtMs = next_.hasStartsAt ? o["startsAtMs"].as<int64_t>() : 0;
+  pagersync::parseItemDetails(next_.details, o["details"]);
   next_.noteCount = 0;
   if (o["notes"].is<JsonObjectConst>()) {
     for (JsonPairConst kv : o["notes"].as<JsonObjectConst>()) {
@@ -587,6 +593,27 @@ const char *Engine::nextNoteText() const {
     if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) return next_.notes[i].text;
   }
   return "";
+}
+
+bool Engine::timerDetailsLine(char *out, size_t cap) const {
+  const RoleView *role = activeRoleRef();
+  if (cap > 0) out[0] = '\0';
+  if (!role || role->pagerFields == 0 || !timer_.found || timer_.isHeader()) return false;
+  int64_t now = 0;
+  int64_t start = 0;
+  bool haveStart = wallClockMs(now) && pagersync::currentStartMs(timer_.isRunning, timer_.lengthInSeconds - timerRemainingSeconds(), now, start);
+  return pagersync::formatDetailsLine(timerDetails_, role->pagerFields, haveStart, start, utcOffsetSeconds(), use24HourClock(), out, cap);
+}
+
+bool Engine::nextDetailsLine(char *out, size_t cap) const {
+  const RoleView *role = activeRoleRef();
+  if (cap > 0) out[0] = '\0';
+  if (!role || role->pagerFields == 0 || !next_.found) return false;
+  int64_t now = 0;
+  int64_t start = 0;
+  bool haveStart = wallClockMs(now) &&
+                   pagersync::nextStartMs(next_.hasStartsAt, next_.startsAtMs, timer_.found && timer_.isRunning && !timer_.isHeader(), timerRemainingSeconds(), now, start);
+  return pagersync::formatDetailsLine(next_.details, role->pagerFields, haveStart, start, utcOffsetSeconds(), use24HourClock(), out, cap);
 }
 
 bool Engine::nextFirstNote(const char *&category, const char *&text) const {

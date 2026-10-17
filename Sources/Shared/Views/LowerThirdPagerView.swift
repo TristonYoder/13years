@@ -133,19 +133,33 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             if let message = standingMessage {
                 messageCard(message, m)
             } else {
-                Text((item?.title ?? presentation.connectedMasterName ?? "—").uppercased())
-                    .font(.inter(size: m.fontSize * 0.6, weight: .black))
-                    .foregroundColor(primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.3)
-                    .padding(.horizontal, m.fontSize * 0.22)
-                    .padding(.vertical, m.fontSize * 0.12)
-                    .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-                    .frame(maxWidth: .infinity)
+                titleBlock(m, item: item, primary: primary)
             }
 
             countdownBlock(m, item: item, primary: primary)
         }
+    }
+
+    private func titleBlock(_ m: LowerThirdMetrics, item: PCOTimerItem?, primary: Color) -> some View {
+        VStack(spacing: m.tagFontSize * 0.3) {
+            Text((item?.title ?? presentation.connectedMasterName ?? "—").uppercased())
+                .font(.inter(size: m.fontSize * 0.6, weight: .black))
+                .foregroundColor(primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.3)
+                .padding(.horizontal, m.fontSize * 0.22)
+                .padding(.vertical, m.fontSize * 0.12)
+                .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+            if let details = presentation.currentDetailsLine() {
+                Text(details)
+                    .font(.inter(size: m.fontSize * 0.28, weight: .semibold))
+                    .foregroundColor(style.secondaryText(for: state, opacity: 0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .truncationMode(.tail)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func clockBlock(_ m: LowerThirdMetrics, primary: Color) -> some View {

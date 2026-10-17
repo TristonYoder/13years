@@ -60,6 +60,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var isDurationActualForDisplay: Bool
         public var anchor: TimerAnchor?
         public var nextItem: PCOTimerItem? = nil
+        public var nextStartsAtMs: Int? = nil
     }
 
     public struct PlanStatus: Codable, Sendable {
@@ -298,6 +299,7 @@ public enum ControlAPIRequests {
         public var plotipharRoleId: String?
         public var pcoTeamPosition: String?
         public var assignedNoteCategories: [String]?
+        public var pagerFields: [String]?
         public var state: String?
     }
 

@@ -228,34 +228,47 @@ public struct LandscapePagerView<RoleMenu: View>: View {
 
     @ViewBuilder
     private func cardsRow(_ m: LandscapeMetrics) -> some View {
-        let hasCurrent = !presentation.currentNotes.isEmpty
+        let currentDetails = presentation.currentDetailsLine()
+        let nextDetails = presentation.nextDetailsLine()
+        let hasCurrent = !presentation.currentNotes.isEmpty || currentDetails != nil
         let hasNext = presentation.nextItem != nil
         let width = LandscapeMetrics.cardWidth(for: (hasCurrent ? 1 : 0) + (hasNext ? 1 : 0), in: m)
         if hasCurrent || hasNext {
             HStack(alignment: .top, spacing: m.margin) {
                 if hasCurrent {
-                    card(m, width: width) { scale in currentContent(m, scale: scale) }
+                    card(m, width: width) { scale in currentContent(m, details: currentDetails, scale: scale) }
                 }
                 if hasNext {
-                    card(m, width: width) { scale in nextContent(m, scale: scale) }
+                    card(m, width: width) { scale in nextContent(m, details: nextDetails, scale: scale) }
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func currentContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+    private func detailsText(_ m: LandscapeMetrics, _ line: String, opacity: Double, scale: CGFloat) -> some View {
+        Text(line)
+            .font(.inter(size: m.noteFontSize * scale, weight: .semibold))
+            .foregroundColor(.white.opacity(opacity))
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private func currentContent(_ m: LandscapeMetrics, details: String?, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
             Text("CURRENT")
                 .font(.inter(size: m.captionFontSize * scale, weight: .heavy))
                 .tracking(2)
                 .foregroundColor(.white.opacity(0.5))
+            if let details {
+                detailsText(m, details, opacity: 0.9, scale: scale)
+            }
             noteLines(m, presentation.currentNotes, weight: .bold, opacity: 1, scale: scale)
         }
     }
 
     @ViewBuilder
-    private func nextContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+    private func nextContent(_ m: LandscapeMetrics, details: String?, scale: CGFloat) -> some View {
         if let next = presentation.nextItem {
             VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
                 HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
@@ -270,6 +283,9 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                         .monospacedDigit()
                         .foregroundColor(.white.opacity(0.7))
                         .lineLimit(1)
+                }
+                if let details {
+                    detailsText(m, details, opacity: 0.8, scale: scale)
                 }
                 noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85, scale: scale)
             }

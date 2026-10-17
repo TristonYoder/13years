@@ -59,6 +59,7 @@ extension CueEngine {
         if let timer {
             var item = timer.item
             if nextItem != timer.nextItem { nextItem = timer.nextItem }
+            if nextItemStartsAtMs != timer.nextStartsAtMs { nextItemStartsAtMs = timer.nextStartsAtMs }
             item.isRunning = timer.isRunning
             assign(\.isActiveTimerActualOverride, timer.isDurationActualForDisplay)
             if actualOverrideItemId != item.id { actualOverrideItemId = item.id }
@@ -80,6 +81,7 @@ extension CueEngine {
             cancelDisplayTick()
             assign(\.activeTimerItem, nil)
             if nextItem != nil { nextItem = nil }
+            if nextItemStartsAtMs != nil { nextItemStartsAtMs = nil }
             actualOverrideItemId = nil
         }
     }

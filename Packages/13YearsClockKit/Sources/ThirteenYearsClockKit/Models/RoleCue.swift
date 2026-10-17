@@ -14,6 +14,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var lastUpdated: Date
 
     public var assignedNoteCategories: [String]
+    public var pagerFields: [PagerItemField]?
 
     public init(
         id: String = UUID().uuidString,
@@ -24,7 +25,8 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         plotipharRoleId: String? = nil,
         pcoTeamPosition: String? = nil,
         lastUpdated: Date = Date(),
-        assignedNoteCategories: [String] = []
+        assignedNoteCategories: [String] = [],
+        pagerFields: [PagerItemField]? = nil
     ) {
         self.id = id
         self.name = name
@@ -35,6 +37,26 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.pcoTeamPosition = pcoTeamPosition
         self.lastUpdated = lastUpdated
         self.assignedNoteCategories = assignedNoteCategories
+        self.pagerFields = pagerFields
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, personName, clockFormat, state, plotipharRoleId, pcoTeamPosition, lastUpdated
+        case assignedNoteCategories, pagerFields
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        personName = try container.decodeIfPresent(String.self, forKey: .personName)
+        clockFormat = try? container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
+        state = try container.decode(CueState.self, forKey: .state)
+        plotipharRoleId = try container.decodeIfPresent(String.self, forKey: .plotipharRoleId)
+        pcoTeamPosition = try container.decodeIfPresent(String.self, forKey: .pcoTeamPosition)
+        lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+        assignedNoteCategories = try container.decode([String].self, forKey: .assignedNoteCategories)
+        pagerFields = (try? container.decodeIfPresent([String].self, forKey: .pagerFields)).map(PagerItemField.decodeTolerant)
     }
 
     public static let defaultRoles: [RoleCue] = [
