@@ -39,23 +39,88 @@ struct RunSheetFlowLayout: Layout {
     }
 }
 
+enum RunSheetCardPosition {
+    case only
+    case first
+    case middle
+    case last
+
+    static let cornerRadius: CGFloat = 10
+    static let gap: CGFloat = 10
+    static let horizontalInset: CGFloat = 6
+
+    var roundsTop: Bool { self == .only || self == .first }
+    var roundsBottom: Bool { self == .only || self == .last }
+
+    static func positions(for items: [PCOTimerItem]) -> [RunSheetCardPosition] {
+        items.indices.map { index in
+            let starts = index == 0 || items[index].isHeader
+            let ends = index == items.count - 1 || items[index + 1].isHeader
+            switch (starts, ends) {
+            case (true, true): return .only
+            case (true, false): return .first
+            case (false, true): return .last
+            case (false, false): return .middle
+            }
+        }
+    }
+}
+
+private struct RunSheetCardEdge: Shape {
+    let roundsTop: Bool
+    let roundsBottom: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let r = RunSheetCardPosition.cornerRadius
+        let frame = rect.insetBy(dx: 0.5, dy: 0.5)
+        var path = Path()
+        path.move(to: CGPoint(x: frame.minX, y: roundsBottom ? frame.maxY - r : rect.maxY))
+        path.addLine(to: CGPoint(x: frame.minX, y: roundsTop ? frame.minY + r : rect.minY))
+        if roundsTop {
+            path.addArc(tangent1End: CGPoint(x: frame.minX, y: frame.minY), tangent2End: CGPoint(x: frame.minX + r, y: frame.minY), radius: r)
+            path.addLine(to: CGPoint(x: frame.maxX - r, y: frame.minY))
+            path.addArc(tangent1End: CGPoint(x: frame.maxX, y: frame.minY), tangent2End: CGPoint(x: frame.maxX, y: frame.minY + r), radius: r)
+        } else {
+            path.move(to: CGPoint(x: frame.maxX, y: rect.minY))
+        }
+        path.addLine(to: CGPoint(x: frame.maxX, y: roundsBottom ? frame.maxY - r : rect.maxY))
+        if roundsBottom {
+            path.addArc(tangent1End: CGPoint(x: frame.maxX, y: frame.maxY), tangent2End: CGPoint(x: frame.maxX - r, y: frame.maxY), radius: r)
+            path.addLine(to: CGPoint(x: frame.minX + r, y: frame.maxY))
+            path.addArc(tangent1End: CGPoint(x: frame.minX, y: frame.maxY), tangent2End: CGPoint(x: frame.minX, y: frame.maxY - r), radius: r)
+        }
+        return path
+    }
+}
+
 struct RunSheetRowBackground: View {
     let item: PCOTimerItem
     let activeItem: PCOTimerItem?
     let isActive: Bool
     let isSelected: Bool
+    var position: RunSheetCardPosition = .only
 
     var body: some View {
+        let radius = RunSheetCardPosition.cornerRadius
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: position.roundsTop ? radius : 0,
+            bottomLeadingRadius: position.roundsBottom ? radius : 0,
+            bottomTrailingRadius: position.roundsBottom ? radius : 0,
+            topTrailingRadius: position.roundsTop ? radius : 0,
+            style: .continuous
+        )
         ZStack {
+            AppPalette.sectionCard
+
             if item.isHeader {
-                AppPalette.rowHeader
+                AppPalette.sectionHeaderTint
             } else {
                 let liveItem = isActive ? (activeItem ?? item) : item
                 if isActive && liveItem.isRunning {
                     let style = overrunStyle(for: liveItem)
                     PulsingRowBackground(color: style.color, minOpacity: style.min, maxOpacity: style.max)
-                } else {
-                    Color.clear
+                } else if isActive {
+                    AppPalette.rowActive
                 }
             }
 
@@ -63,6 +128,15 @@ struct RunSheetRowBackground: View {
                 AppPalette.rowSelected
             }
         }
+        .overlay(alignment: .top) {
+            if !position.roundsTop {
+                Rectangle().fill(AppPalette.sectionCardBorder).frame(height: 0.5)
+            }
+        }
+        .clipShape(shape)
+        .overlay(RunSheetCardEdge(roundsTop: position.roundsTop, roundsBottom: position.roundsBottom).stroke(AppPalette.sectionCardBorder, lineWidth: 1))
+        .padding(.top, position.roundsTop ? RunSheetCardPosition.gap : 0)
+        .padding(.horizontal, RunSheetCardPosition.horizontalInset)
     }
 
     private func overrunStyle(for item: PCOTimerItem) -> (color: Color, min: Double, max: Double) {
@@ -315,7 +389,7 @@ struct RunSheetRow: View {
                 if let subtotal, subtotal > 0 {
                     Text(formattedDuration(subtotal))
                         .font(.clock(.caption))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(AppPalette.sectionHeaderText)
                         .help("Total length of the items in this section")
                 } else {
                     Color.clear
@@ -388,7 +462,7 @@ struct RunSheetRow: View {
                 Text(item.title.uppercased())
                     .font(.caption.weight(.heavy))
                     .tracking(1.0)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppPalette.sectionHeaderText)
             } else {
                 Text(item.title)
                     .font(.body.weight(isActive ? .bold : .regular))

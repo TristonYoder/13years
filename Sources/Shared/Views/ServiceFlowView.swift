@@ -28,7 +28,6 @@ public struct ServiceFlowView: View {
     @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
     #if os(macOS)
-    @SceneStorage("runSheetTableColumns") private var tableColumns = TableColumnCustomization<PCOTimerItem>()
     @AppStorage("runSheetNowNextPane") private var nowNextPane = false
     #endif
 
@@ -62,7 +61,7 @@ public struct ServiceFlowView: View {
                 .help("Switch the run sheet between a list and a table with customizable columns")
 
                 if layout == .table {
-                    RunSheetColumnsMenu(customization: $tableColumns, categories: knownNoteCategories)
+                    RunSheetColumnsMenu(categories: knownNoteCategories)
 
                     Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { nowNextPane.toggle() }
@@ -237,7 +236,6 @@ public struct ServiceFlowView: View {
                 RunSheetTableView(
                     schedule: schedule,
                     selection: $selectedItemId,
-                    customization: $tableColumns,
                     knownCategories: knownNoteCategories,
                     excludedLabel: engine.liveEventTimeLabel,
                     compact: nowNextPane,
@@ -419,8 +417,9 @@ public struct ServiceFlowView: View {
             let visible = visibleItems(in: section)
             let isLast = section.id == sections.last?.id
             Section {
-                ForEach(visible) { item in
-                    listRow(item, schedule: schedule)
+                let positions = RunSheetCardPosition.positions(for: visible)
+                ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
+                    listRow(item, schedule: schedule, position: positions[index])
                 }
                 .onMove { offsets, destination in
                     moveItems(in: section, visible: visible, from: offsets, to: destination)
@@ -441,7 +440,7 @@ public struct ServiceFlowView: View {
         }
     }
 
-    private func listRow(_ item: PCOTimerItem, schedule: RunSheetSchedule) -> some View {
+    private func listRow(_ item: PCOTimerItem, schedule: RunSheetSchedule, position: RunSheetCardPosition) -> some View {
         let isActive = engine.activeTimerItem?.id == item.id
         let isSelected = selectedItemId == item.id
 
@@ -464,7 +463,11 @@ public struct ServiceFlowView: View {
                 newWaypointTargetItemId = item.id
             }
         )
-        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected))
+        .padding(.top, position.roundsTop ? RunSheetCardPosition.gap : 0)
+        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position))
+        #if !os(tvOS)
+        .listRowSeparator(.hidden)
+        #endif
         .rowActions {
             RunSheetItemActions(
                 item: item,

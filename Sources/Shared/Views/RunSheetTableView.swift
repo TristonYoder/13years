@@ -8,7 +8,6 @@ struct RunSheetTableView: View {
     @EnvironmentObject var engine: CueEngine
     let schedule: RunSheetSchedule
     @Binding var selection: String?
-    @Binding var customization: TableColumnCustomization<PCOTimerItem>
     let knownCategories: [String]
     let excludedLabel: String?
     var compact = false
@@ -16,172 +15,293 @@ struct RunSheetTableView: View {
     let onDelete: (PCOTimerItem) -> Void
     let onNewWaypoint: (PCOTimerItem) -> Void
 
+    @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
+    @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
+    @FocusState private var isFocused: Bool
+
     private static let rowHeight: CGFloat = 38
+    private static let headerHeight: CGFloat = 34
+    private static let cardRadius: CGFloat = 10
+    private static let cardGap: CGFloat = 10
+    private static let outerPadding: CGFloat = 12
+    private static let rowPadding: CGFloat = 10
+    private static let columnSpacing: CGFloat = 8
+
+    private struct CardGroup: Identifiable {
+        let id: String
+        let header: PCOTimerItem?
+        let items: [PCOTimerItem]
+    }
+
+    private var collapsedIds: Set<String> {
+        Set(collapsedRaw.split(separator: ",").map(String.init))
+    }
+
+    private var hiddenIds: Set<String> {
+        Set(hiddenRaw.split(separator: ",").map(String.init))
+    }
+
+    private var columns: [RunSheetTableColumn] {
+        if compact {
+            return RunSheetTableColumn.compact
+        }
+        let hidden = hiddenIds
+        return RunSheetTableColumn.all(knownCategories).filter { !hidden.contains($0.id) }
+    }
+
+    private var groups: [CardGroup] {
+        var result: [CardGroup] = []
+        var header: PCOTimerItem?
+        var items: [PCOTimerItem] = []
+        func flush() {
+            if header != nil || !items.isEmpty {
+                result.append(CardGroup(id: header?.id ?? "untitled", header: header, items: items))
+            }
+        }
+        for item in engine.planItems {
+            if item.isHeader {
+                flush()
+                header = item
+                items = []
+            } else {
+                items.append(item)
+            }
+        }
+        flush()
+        return result
+    }
+
+    private var navigableIds: [String] {
+        let collapsed = collapsedIds
+        var ids: [String] = []
+        for group in groups {
+            if let header = group.header { ids.append(header.id) }
+            if group.header.map({ collapsed.contains($0.id) }) != true {
+                ids.append(contentsOf: group.items.map(\.id))
+            }
+        }
+        return ids
+    }
+
+    private var minContentWidth: CGFloat {
+        let cols = columns
+        let widths = cols.reduce(CGFloat(0)) { $0 + $1.minWidth }
+        let spacing = Self.columnSpacing * CGFloat(max(cols.count - 1, 0))
+        return widths + spacing + 2 * Self.rowPadding + 2 * Self.outerPadding
+    }
 
     var body: some View {
-        if compact {
-            compactTable
-        } else if #available(macOS 14.4, *) {
-            table(withNoteColumns: true)
-        } else {
-            table(withNoteColumns: false)
+        GeometryReader { geometry in
+            ScrollView(.horizontal) {
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        LazyVStack(spacing: Self.cardGap, pinnedViews: [.sectionHeaders]) {
+                            Section {
+                                ForEach(groups) { group in
+                                    card(group)
+                                }
+                            } header: {
+                                columnHeader
+                            }
+                        }
+                        .padding(.horizontal, Self.outerPadding)
+                        .padding(.bottom, Self.outerPadding)
+                    }
+                    .focusable()
+                    .focused($isFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress(.upArrow) { moveSelection(-1, proxy: proxy) }
+                    .onKeyPress(.downArrow) { moveSelection(1, proxy: proxy) }
+                    .onKeyPress(.return) { performPrimaryAction() }
+                }
+                .frame(width: max(geometry.size.width, minContentWidth), height: geometry.size.height)
+            }
         }
     }
 
-    private var compactTable: some View {
-        Table(engine.planItems, selection: $selection) {
-            statusColumn
-            startColumn
-            TableColumn("Item") { item in
-                itemCell(item, detailed: false)
+    private var columnHeader: some View {
+        HStack(spacing: Self.columnSpacing) {
+            ForEach(columns) { column in
+                Text(column.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .modifier(RunSheetColumnFrame(column: column))
             }
-            .width(min: 120, ideal: 220)
-            timeColumn
-            driftColumn
         }
-        .contextMenu(forSelectionType: String.self, menu: contextMenu, primaryAction: primaryAction)
+        .padding(.horizontal, Self.rowPadding)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+        .background(.background)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(AppPalette.sectionCardBorder).frame(height: 0.5)
+        }
+    }
+
+    private func card(_ group: CardGroup) -> some View {
+        let isCollapsed = group.header.map { collapsedIds.contains($0.id) } ?? false
+        let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
+        return VStack(spacing: 0) {
+            if let header = group.header {
+                headerRow(header, group: group, isCollapsed: isCollapsed)
+            }
+            if !isCollapsed {
+                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    if group.header != nil || index > 0 {
+                        separator
+                    }
+                    itemRow(item)
+                }
+            }
+        }
+        .background(AppPalette.sectionCard)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(AppPalette.sectionCardBorder, lineWidth: 0.75))
+    }
+
+    private var separator: some View {
+        Rectangle().fill(AppPalette.sectionCardBorder).frame(height: 0.5)
+    }
+
+    private func headerRow(_ header: PCOTimerItem, group: CardGroup, isCollapsed: Bool) -> some View {
+        let entry = schedule.entry(forItemId: header.id)
+        let subtotal = schedule.headerSubtotals[header.id] ?? 0
+        let count = group.items.count
+        return HStack(spacing: 10) {
+            Button {
+                toggleCollapsed(header.id)
+            } label: {
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppPalette.sectionHeaderText)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isCollapsed ? "Expand section" : "Collapse section")
+            .help(isCollapsed ? "Show the items in this section" : "Hide the items in this section")
+
+            Text(header.title.uppercased())
+                .font(.caption.weight(.heavy))
+                .tracking(1.0)
+                .foregroundStyle(AppPalette.sectionHeaderText)
+                .lineLimit(1)
+
+            (Text("\(count)").font(.clock(.caption)) + Text(count == 1 ? " item" : " items").font(.caption))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if let entry, !entry.isOmitted, let start = entry.plannedStart, subtotal > 0 {
+                let end = start.addingTimeInterval(TimeInterval(subtotal))
+                Text("\(engine.clockFormat.string(from: start)) \u{2013} \(engine.clockFormat.string(from: end))")
+                    .font(.clock(.caption))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help("Planned start and end of this section")
+            }
+
+            Spacer(minLength: 8)
+
+            if subtotal > 0 {
+                Text(format(subtotal))
+                    .font(.clock(.body))
+                    .foregroundStyle(AppPalette.sectionHeaderText)
+                    .help("Total length of the items in this section")
+            }
+        }
+        .padding(.horizontal, Self.rowPadding)
+        .frame(maxWidth: .infinity, minHeight: Self.headerHeight, alignment: .leading)
+        .opacity(isDimmed(header) ? 0.5 : 1)
+        .background(rowBackground(header, tint: AppPalette.sectionHeaderTint))
+        .modifier(RunSheetRowInteraction(
+            item: header,
+            selection: $selection,
+            focus: $isFocused,
+            onPrimary: { primaryAction(header) },
+            menu: { contextMenu(header) }
+        ))
+    }
+
+    private func itemRow(_ item: PCOTimerItem) -> some View {
+        HStack(spacing: Self.columnSpacing) {
+            ForEach(columns) { column in
+                cellContent(column, item)
+                    .modifier(RunSheetColumnFrame(column: column))
+            }
+        }
+        .padding(.horizontal, Self.rowPadding)
+        .frame(maxWidth: .infinity, minHeight: Self.rowHeight, alignment: .leading)
+        .opacity(isDimmed(item) ? 0.5 : 1)
+        .background(rowBackground(item, tint: nil))
+        .modifier(RunSheetRowInteraction(
+            item: item,
+            selection: $selection,
+            focus: $isFocused,
+            onPrimary: { primaryAction(item) },
+            menu: { contextMenu(item) }
+        ))
     }
 
     @ViewBuilder
-    private func table(withNoteColumns: Bool) -> some View {
-        if withNoteColumns, #available(macOS 14.4, *) {
-            Table(engine.planItems, selection: $selection, columnCustomization: $customization) {
-                primaryColumns
-                TableColumnForEach(knownCategories, id: \.self) { category in
-                    TableColumn(category) { item in
-                        noteCell(item, text: item.notes[category])
-                    }
-                    .width(min: 80, ideal: 180)
-                    .customizationID(RunSheetTableColumn.noteID(category))
-                }
-                optionalColumns
-            }
-            .contextMenu(forSelectionType: String.self, menu: contextMenu, primaryAction: primaryAction)
+    private func rowBackground(_ item: PCOTimerItem, tint: Color?) -> some View {
+        ZStack {
+            if let tint { tint }
+            if isActive(item) { AppPalette.rowActive }
+            if selection == item.id { AppPalette.rowSelected }
+        }
+    }
+
+    @ViewBuilder
+    private func cellContent(_ column: RunSheetTableColumn, _ item: PCOTimerItem) -> some View {
+        switch column.id {
+        case "status": statusCell(item)
+        case "start": startCell(item)
+        case "title": itemCell(item, detailed: !compact)
+        case "time": timeCell(item)
+        case "drift": driftCell(item)
+        case "key": keyCell(item)
+        case "sequence": sequenceCell(item)
+        case "number": cell(item, text: String(item.sequence), monospaced: true)
+        case "type": cell(item, text: item.runSheetTypeLabel)
+        case "bpm": cell(item, text: item.runSheetBPMText, monospaced: true)
+        case "meter": cell(item, text: item.runSheetMeter)
+        case "arrangement": cell(item, text: item.runSheetArrangementName)
+        case "description": cell(item, text: item.runSheetDescription)
+        case "pco-actual": cell(item, text: pcoActualText(item), monospaced: true)
+        default: noteCell(item, text: item.notes[RunSheetTableColumn.category(fromNoteID: column.id)])
+        }
+    }
+
+    private func toggleCollapsed(_ headerId: String) {
+        var ids = collapsedIds
+        if ids.contains(headerId) {
+            ids.remove(headerId)
         } else {
-            Table(engine.planItems, selection: $selection, columnCustomization: $customization) {
-                primaryColumns
-                TableColumn("Notes") { item in
-                    noteCell(item, text: item.notes.keys.sorted().compactMap { key in
-                        item.notes[key].flatMap { $0.isEmpty ? nil : "\(key): \($0)" }
-                    }.joined(separator: " \u{2022} "))
-                }
-                .width(min: 100, ideal: 240)
-                .customizationID(RunSheetTableColumn.combinedNotesID)
-                optionalColumns
-            }
-            .contextMenu(forSelectionType: String.self, menu: contextMenu, primaryAction: primaryAction)
+            ids.insert(headerId)
         }
+        let valid = Set(engine.planItems.map(\.id))
+        collapsedRaw = ids.intersection(valid).sorted().joined(separator: ",")
     }
 
-    private var statusColumn: some TableColumnContent<PCOTimerItem, Never> {
-        TableColumn("") { item in
-            statusCell(item)
+    private func moveSelection(_ delta: Int, proxy: ScrollViewProxy) -> KeyPress.Result {
+        let ids = navigableIds
+        guard !ids.isEmpty else { return .ignored }
+        let next: String
+        if let current = selection, let index = ids.firstIndex(of: current) {
+            next = ids[min(max(index + delta, 0), ids.count - 1)]
+        } else {
+            next = delta > 0 ? ids[0] : ids[ids.count - 1]
         }
-        .width(22)
-        .customizationID("status")
+        selection = next
+        proxy.scrollTo(next)
+        return .handled
     }
 
-    private var startColumn: some TableColumnContent<PCOTimerItem, Never> {
-        TableColumn("Start") { item in
-            startCell(item)
-        }
-        .width(min: 64, ideal: 84, max: 130)
-        .customizationID("start")
-    }
-
-    private var timeColumn: some TableColumnContent<PCOTimerItem, Never> {
-        TableColumn("Time") { item in
-            timeCell(item)
-        }
-        .width(min: 76, ideal: 96, max: 140)
-        .customizationID("time")
-    }
-
-    private var driftColumn: some TableColumnContent<PCOTimerItem, Never> {
-        TableColumn("Drift") { item in
-            driftCell(item)
-        }
-        .width(min: 52, ideal: 64, max: 100)
-        .customizationID("drift")
-    }
-
-    @TableColumnBuilder<PCOTimerItem, Never>
-    private var primaryColumns: some TableColumnContent<PCOTimerItem, Never> {
-        statusColumn
-        startColumn
-
-        TableColumn("Item") { item in
-            itemCell(item, detailed: true)
-        }
-        .width(min: 160, ideal: 280)
-        .customizationID("title")
-
-        timeColumn
-        driftColumn
-
-        TableColumn("Key") { item in
-            keyCell(item)
-        }
-        .width(min: 40, ideal: 52, max: 80)
-        .customizationID("key")
-
-        TableColumn("Sequence") { item in
-            sequenceCell(item)
-        }
-        .width(min: 100, ideal: 220)
-        .customizationID("sequence")
-    }
-
-    @TableColumnBuilder<PCOTimerItem, Never>
-    private var optionalColumns: some TableColumnContent<PCOTimerItem, Never> {
-        TableColumn("#") { item in
-            cell(item, text: item.isHeader ? nil : String(item.sequence), monospaced: true)
-        }
-        .width(min: 28, ideal: 36, max: 60)
-        .customizationID("number")
-        .defaultVisibility(.hidden)
-
-        TableColumn("Type") { item in
-            cell(item, text: item.isHeader ? nil : item.runSheetTypeLabel)
-        }
-        .width(min: 50, ideal: 70, max: 140)
-        .customizationID("type")
-        .defaultVisibility(.hidden)
-
-        TableColumn("BPM") { item in
-            cell(item, text: item.runSheetBPMText, monospaced: true)
-        }
-        .width(min: 36, ideal: 48, max: 80)
-        .customizationID("bpm")
-        .defaultVisibility(.hidden)
-
-        TableColumn("Meter") { item in
-            cell(item, text: item.runSheetMeter)
-        }
-        .width(min: 36, ideal: 48, max: 80)
-        .customizationID("meter")
-        .defaultVisibility(.hidden)
-
-        TableColumn("Arrangement") { item in
-            cell(item, text: item.runSheetArrangementName)
-        }
-        .width(min: 70, ideal: 110)
-        .customizationID("arrangement")
-        .defaultVisibility(.hidden)
-
-        TableColumn("Description") { item in
-            cell(item, text: item.runSheetDescription)
-        }
-        .width(min: 100, ideal: 220)
-        .customizationID("description")
-        .defaultVisibility(.hidden)
-
-        TableColumn("PCO Actual") { item in
-            cell(item, text: pcoActualText(item), monospaced: true)
-        }
-        .width(min: 56, ideal: 72, max: 110)
-        .customizationID("pco-actual")
-        .defaultVisibility(.hidden)
+    private func performPrimaryAction() -> KeyPress.Result {
+        guard let id = selection, let item = engine.planItems.first(where: { $0.id == id }) else { return .ignored }
+        primaryAction(item)
+        return .handled
     }
 
     private func isActive(_ item: PCOTimerItem) -> Bool {
@@ -216,8 +336,6 @@ struct RunSheetTableView: View {
 
     private func styled<Content: View>(_ item: PCOTimerItem, @ViewBuilder _ content: () -> Content) -> some View {
         content()
-            .frame(maxWidth: .infinity, minHeight: Self.rowHeight, maxHeight: Self.rowHeight, alignment: .leading)
-            .modifier(RunSheetCellStyle(isActive: isActive(item), isExcluded: isDimmed(item)))
     }
 
     private func statusCell(_ item: PCOTimerItem) -> some View {
@@ -418,20 +536,18 @@ struct RunSheetTableView: View {
         }
     }
 
+
     @ViewBuilder
-    private func contextMenu(_ ids: Set<String>) -> some View {
-        if let id = ids.first, let item = engine.planItems.first(where: { $0.id == id }) {
-            RunSheetItemActions(
-                item: item,
-                onEdit: { onEdit(item) },
-                onDelete: { onDelete(item) },
-                onNewWaypoint: { onNewWaypoint(item) }
-            )
-        }
+    private func contextMenu(_ item: PCOTimerItem) -> some View {
+        RunSheetItemActions(
+            item: item,
+            onEdit: { onEdit(item) },
+            onDelete: { onDelete(item) },
+            onNewWaypoint: { onNewWaypoint(item) }
+        )
     }
 
-    private func primaryAction(_ ids: Set<String>) {
-        guard let id = ids.first, let item = engine.planItems.first(where: { $0.id == id }) else { return }
+    private func primaryAction(_ item: PCOTimerItem) {
         if item.isHeader {
             onEdit(item)
         } else {
@@ -440,43 +556,99 @@ struct RunSheetTableView: View {
     }
 }
 
+private struct RunSheetRowInteraction<Menu: View>: ViewModifier {
+    let item: PCOTimerItem
+    @Binding var selection: String?
+    var focus: FocusState<Bool>.Binding
+    let onPrimary: () -> Void
+    @ViewBuilder let menu: () -> Menu
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                selection = item.id
+                onPrimary()
+            }
+            .simultaneousGesture(TapGesture().onEnded {
+                selection = item.id
+                focus.wrappedValue = true
+            })
+            .contextMenu { menu() }
+            .id(item.id)
+    }
+}
+
+private struct RunSheetColumnFrame: ViewModifier {
+    let column: RunSheetTableColumn
+
+    func body(content: Content) -> some View {
+        if let width = column.fixedWidth {
+            content.frame(width: width, alignment: .leading)
+        } else {
+            content.frame(minWidth: column.minWidth, maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 struct RunSheetTableColumn: Identifiable {
     let id: String
     let title: String
     let isHiddenByDefault: Bool
+    var fixedWidth: CGFloat?
+    var flexMinWidth: CGFloat = 0
 
-    static let combinedNotesID = "notes"
+    var minWidth: CGFloat { fixedWidth ?? flexMinWidth }
+
+    static let storageKey = "runSheetHiddenColumns"
+
+    static var defaultHiddenRaw: String {
+        fixed.filter(\.isHiddenByDefault).map(\.id).joined(separator: ",")
+    }
 
     static func noteID(_ category: String) -> String { "note-\(category)" }
 
+    static func category(fromNoteID id: String) -> String { String(id.dropFirst("note-".count)) }
+
     static let fixed: [RunSheetTableColumn] = [
-        .init(id: "status", title: "Status", isHiddenByDefault: false),
-        .init(id: "start", title: "Start", isHiddenByDefault: false),
-        .init(id: "title", title: "Item", isHiddenByDefault: false),
-        .init(id: "time", title: "Time", isHiddenByDefault: false),
-        .init(id: "drift", title: "Drift", isHiddenByDefault: false),
-        .init(id: "key", title: "Key", isHiddenByDefault: false),
-        .init(id: "sequence", title: "Sequence", isHiddenByDefault: false),
-        .init(id: "number", title: "#", isHiddenByDefault: true),
-        .init(id: "type", title: "Type", isHiddenByDefault: true),
-        .init(id: "bpm", title: "BPM", isHiddenByDefault: true),
-        .init(id: "meter", title: "Meter", isHiddenByDefault: true),
-        .init(id: "arrangement", title: "Arrangement", isHiddenByDefault: true),
-        .init(id: "description", title: "Description", isHiddenByDefault: true),
-        .init(id: "pco-actual", title: "PCO Actual", isHiddenByDefault: true),
+        .init(id: "status", title: "Status", isHiddenByDefault: false, fixedWidth: 22),
+        .init(id: "start", title: "Start", isHiddenByDefault: false, fixedWidth: 84),
+        .init(id: "title", title: "Item", isHiddenByDefault: false, flexMinWidth: 160),
+        .init(id: "time", title: "Time", isHiddenByDefault: false, fixedWidth: 112),
+        .init(id: "drift", title: "Drift", isHiddenByDefault: false, fixedWidth: 64),
+        .init(id: "key", title: "Key", isHiddenByDefault: false, fixedWidth: 52),
+        .init(id: "sequence", title: "Sequence", isHiddenByDefault: false, fixedWidth: 200),
+        .init(id: "number", title: "#", isHiddenByDefault: true, fixedWidth: 36),
+        .init(id: "type", title: "Type", isHiddenByDefault: true, fixedWidth: 70),
+        .init(id: "bpm", title: "BPM", isHiddenByDefault: true, fixedWidth: 48),
+        .init(id: "meter", title: "Meter", isHiddenByDefault: true, fixedWidth: 48),
+        .init(id: "arrangement", title: "Arrangement", isHiddenByDefault: true, fixedWidth: 110),
+        .init(id: "description", title: "Description", isHiddenByDefault: true, fixedWidth: 220),
+        .init(id: "pco-actual", title: "PCO Actual", isHiddenByDefault: true, fixedWidth: 76),
     ]
 
+    static let compact: [RunSheetTableColumn] = {
+        var columns = fixed.filter { ["status", "start", "title", "time", "drift"].contains($0.id) }
+        if let index = columns.firstIndex(where: { $0.id == "title" }) { columns[index].flexMinWidth = 120 }
+        return columns
+    }()
+
     static func noteColumns(_ categories: [String]) -> [RunSheetTableColumn] {
-        if #available(macOS 14.4, *) {
-            return categories.map { .init(id: noteID($0), title: $0, isHiddenByDefault: false) }
-        }
-        return [.init(id: combinedNotesID, title: "Notes", isHiddenByDefault: false)]
+        categories.map { .init(id: noteID($0), title: $0, isHiddenByDefault: false, flexMinWidth: 140) }
+    }
+
+    static func all(_ categories: [String]) -> [RunSheetTableColumn] {
+        Array(fixed.prefix(7)) + noteColumns(categories) + Array(fixed.dropFirst(7))
     }
 }
 
 struct RunSheetColumnsMenu: View {
-    @Binding var customization: TableColumnCustomization<PCOTimerItem>
+    @AppStorage(RunSheetTableColumn.storageKey) private var hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
     let categories: [String]
+
+    private var hiddenIds: Set<String> {
+        Set(hiddenRaw.split(separator: ",").map(String.init))
+    }
 
     var body: some View {
         Menu {
@@ -495,10 +667,10 @@ struct RunSheetColumnsMenu: View {
             }
             Divider()
             Button("Show All Columns") {
-                for column in RunSheetTableColumn.fixed + notes { customization[visibility: column.id] = .visible }
+                hiddenRaw = ""
             }
             Button("Reset Columns") {
-                customization = TableColumnCustomization<PCOTimerItem>()
+                hiddenRaw = RunSheetTableColumn.defaultHiddenRaw
             }
         } label: {
             Label("Columns", systemImage: "tablecells.badge.ellipsis")
@@ -508,34 +680,13 @@ struct RunSheetColumnsMenu: View {
 
     private func toggle(_ column: RunSheetTableColumn) -> some View {
         Toggle(column.title, isOn: Binding(
-            get: { isVisible(column) },
-            set: { customization[visibility: column.id] = $0 ? .visible : .hidden }
-        ))
-    }
-
-    private func isVisible(_ column: RunSheetTableColumn) -> Bool {
-        switch customization[visibility: column.id] {
-        case .visible: return true
-        case .hidden: return false
-        default: return !column.isHiddenByDefault
-        }
-    }
-}
-
-private struct RunSheetCellStyle: ViewModifier {
-    let isActive: Bool
-    let isExcluded: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(isExcluded ? 0.5 : 1)
-            .background {
-                if isActive {
-                    AppPalette.rowActive
-                        .padding(.horizontal, -12)
-                        .padding(.vertical, -8)
-                }
+            get: { !hiddenIds.contains(column.id) },
+            set: { visible in
+                var ids = hiddenIds
+                if visible { ids.remove(column.id) } else { ids.insert(column.id) }
+                hiddenRaw = ids.sorted().joined(separator: ",")
             }
+        ))
     }
 }
 
