@@ -282,9 +282,11 @@ public struct ServiceFlowView: View {
     }
 
     private var sheetSections: [SheetSection] {
-        [PCOServicePosition.pre, .during, .post].compactMap { position in
-            let items = engine.planItems.filter { RunSheetSchedule.position(of: $0) == position }
-            return items.isEmpty ? nil : SheetSection(position: position, items: items)
+        let items = engine.planItems
+        let positions = RunSheetSchedule.positions(of: items)
+        return [PCOServicePosition.pre, .during, .post].compactMap { position in
+            let matching = items.indices.filter { positions[$0] == position }.map { items[$0] }
+            return matching.isEmpty ? nil : SheetSection(position: position, items: matching)
         }
     }
 

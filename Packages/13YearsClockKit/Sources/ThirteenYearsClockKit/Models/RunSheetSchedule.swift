@@ -71,6 +71,27 @@ public struct RunSheetSchedule: Equatable, Sendable {
         item.details?.servicePosition ?? .during
     }
 
+    public static func positions(of items: [PCOTimerItem]) -> [PCOServicePosition] {
+        var result = items.map(position(of:))
+        var following: PCOServicePosition?
+        for index in items.indices.reversed() {
+            if items[index].isHeader {
+                if let following { result[index] = following }
+            } else {
+                following = result[index]
+            }
+        }
+        var preceding: PCOServicePosition?
+        for index in items.indices {
+            if items[index].isHeader {
+                if !items[(index + 1)...].contains(where: { !$0.isHeader }), let preceding { result[index] = preceding }
+            } else {
+                preceding = result[index]
+            }
+        }
+        return result
+    }
+
     public static func effectiveLength(of item: PCOTimerItem, planTimeId: String?) -> Int {
         if item.isHeader { return 0 }
         return item.details?.itemTime(forPlanTimeId: planTimeId)?.length ?? item.lengthInSeconds
@@ -88,7 +109,7 @@ public struct RunSheetSchedule: Equatable, Sendable {
         now: Date = Date()
     ) {
         let count = items.count
-        let positions = items.map(Self.position(of:))
+        let positions = Self.positions(of: items)
         let lengths = items.map { Self.effectiveLength(of: $0, planTimeId: planTimeId) }
         let excluded = items.map { !$0.isHeader && ($0.details?.isExcluded(fromPlanTimeId: planTimeId) ?? false) }
         let skipped = items.map { !$0.isHeader && skippedItemIds.contains($0.id) }

@@ -23,6 +23,40 @@ final class RunSheetScheduleTests: XCTestCase {
         date.map { Int($0.timeIntervalSince(start)) }
     }
 
+    func testHeadersTakeThePositionOfTheItemThatFollowsThem() {
+        let items = [
+            item("preHeader", length: 0, type: "Header"),
+            item("doors", length: 600, position: .pre),
+            item("worshipHeader", length: 0, type: "Header"),
+            item("song", length: 300),
+            item("postHeader", length: 0, type: "Header"),
+            item("playout", length: 90, position: .post),
+        ]
+        XCTAssertEqual(RunSheetSchedule.positions(of: items), [.pre, .pre, .during, .during, .post, .post])
+    }
+
+    func testTrailingHeadersTakeThePositionOfThePrecedingItem() {
+        let items = [
+            item("song", length: 300),
+            item("playout", length: 90, position: .post),
+            item("endHeader", length: 0, type: "Header"),
+        ]
+        XCTAssertEqual(RunSheetSchedule.positions(of: items), [.during, .post, .post])
+        XCTAssertEqual(RunSheetSchedule.positions(of: [item("onlyHeader", length: 0, type: "Header")]), [.during])
+    }
+
+    func testAHeaderBeforePreItemsIsScheduledWithThem() {
+        let items = [
+            item("preHeader", length: 0, type: "Header"),
+            item("doors", length: 600, position: .pre),
+            item("song", length: 300),
+        ]
+        let schedule = RunSheetSchedule(items: items, startDate: start, planTimeId: nil)
+        XCTAssertEqual(offset(schedule.entry(forItemId: "doors")?.plannedStart), -600)
+        XCTAssertEqual(offset(schedule.entry(forItemId: "song")?.plannedStart), 0)
+        XCTAssertEqual(schedule.preLength, 600)
+    }
+
     func testPlannedStartsChainFromEventStart() {
         let items = [item("a", length: 300), item("b", length: 120), item("c", length: 60)]
         let schedule = RunSheetSchedule(items: items, startDate: start, planTimeId: nil)
