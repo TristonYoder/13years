@@ -464,7 +464,6 @@ struct RunSheetTableView: View {
         let leaders = detailed && !item.isHeader ? item.runSheetLeaders : []
         let showsPhoto = !hidden.contains("leaderPhoto") && !leaders.isEmpty
         let showsLeader = !hidden.contains("leader") && !leaders.isEmpty
-        let highlighted = engine.runSheetLayout.highlightedSet
         return styled(item) {
             HStack(spacing: 8) {
                 if showsPhoto, let first = leaders.first {
@@ -500,7 +499,6 @@ struct RunSheetTableView: View {
                         (Text("Leader: ").foregroundStyle(.secondary) + Text(leaders.map(\.name).joined(separator: ", ")))
                             .font(.caption)
                             .lineLimit(1)
-                            .markerHighlight(highlighted.contains("leader"))
                     }
                 }
             }
@@ -759,8 +757,10 @@ struct RunSheetColumnsMenu: View {
     @State private var isPresented = false
 
     private var ordered: [RunSheetTableColumn] {
-        RunSheetTableColumn.ordered(categories, layout: engine.runSheetLayout)
+        RunSheetTableColumn.ordered(categories, layout: engine.runSheetLayout).filter { !$0.isItemPart }
     }
+
+    private static let itemParts: [(id: String, title: String)] = [("leaderPhoto", "Photo"), ("leader", "Leader")]
 
     var body: some View {
         Button(action: { isPresented.toggle() }) {
@@ -802,7 +802,7 @@ struct RunSheetColumnsMenu: View {
             }
         }
         .padding(14)
-        .frame(width: 280)
+        .frame(width: 340)
     }
 
     private func row(_ column: RunSheetTableColumn) -> some View {
@@ -810,15 +810,14 @@ struct RunSheetColumnsMenu: View {
             Image(systemName: "line.3.horizontal")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
-            Toggle(column.pickerTitle, isOn: Binding(
-                get: { !engine.runSheetLayout.hiddenSet.contains(column.id) },
-                set: { visible in
-                    var ids = engine.runSheetLayout.hiddenSet
-                    if visible { ids.remove(column.id) } else { ids.insert(column.id) }
-                    engine.runSheetLayout.hiddenColumns = ids.sorted()
+            visibilityToggle(column.pickerTitle, id: column.id)
+            if column.id == "title" {
+                ForEach(Self.itemParts, id: \.id) { part in
+                    visibilityToggle(part.title, id: part.id)
+                        .font(.caption)
+                        .help("Show the leader's \(part.title.lowercased()) in the Item column and the Now and Next cards")
                 }
-            ))
-            .toggleStyle(.checkbox)
+            }
             Spacer(minLength: 0)
             if column.id != "status" {
                 highlightButton(column)
@@ -830,6 +829,18 @@ struct RunSheetColumnsMenu: View {
             }
         }
         .frame(height: 24)
+    }
+
+    private func visibilityToggle(_ title: String, id: String) -> some View {
+        Toggle(title, isOn: Binding(
+            get: { !engine.runSheetLayout.hiddenSet.contains(id) },
+            set: { visible in
+                var ids = engine.runSheetLayout.hiddenSet
+                if visible { ids.remove(id) } else { ids.insert(id) }
+                engine.runSheetLayout.hiddenColumns = ids.sorted()
+            }
+        ))
+        .toggleStyle(.checkbox)
     }
 
     private func highlightButton(_ column: RunSheetTableColumn) -> some View {
@@ -854,7 +865,7 @@ struct RunSheetColumnsMenu: View {
     private func move(from source: IndexSet, to destination: Int) {
         var ids = ordered.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
-        engine.runSheetLayout.columnOrder = ids
+        engine.runSheetLayout.columnOrder = ids + Self.itemParts.map(\.id)
     }
 }
 
