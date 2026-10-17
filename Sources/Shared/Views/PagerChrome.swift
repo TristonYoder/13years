@@ -74,6 +74,7 @@ struct PagerTopRow<RoleMenu: View>: View {
     let state: CueState
     let style: CueDisplayStyle
     let producerClock: ProducerClockInfo
+    let clockFormat: ClockFormat
     let roleName: String
     let roleColumnMaxWidth: CGFloat
     let hidesLeading: Bool
@@ -104,6 +105,7 @@ struct PagerTopRow<RoleMenu: View>: View {
         VStack(alignment: .leading, spacing: sizes.timeCaptionFont * 0.2) {
             ProducerClockText(
                 info: producerClock,
+                format: clockFormat,
                 font: .inter(size: sizes.timeFont, weight: .black),
                 color: Color(white: 0.96)
             )
@@ -243,12 +245,13 @@ extension PagerPresentationState {
 
 struct ProducerClockText: View {
     let info: ProducerClockInfo
+    let format: ClockFormat
     let font: Font
     let color: Color
 
     var body: some View {
         TimelineView(ProducerSecondsSchedule(offsetMs: info.offsetMs)) { context in
-            Text(ProducerClock.producerDate(localNow: context.date.addingTimeInterval(0.002), offsetMs: info.offsetMs), format: ProducerClock.displayStyle(info))
+            Text(ProducerClock.formatted(localNow: context.date.addingTimeInterval(0.002), info: info, format: format))
                 .font(font)
                 .monospacedDigit()
                 .foregroundColor(color)

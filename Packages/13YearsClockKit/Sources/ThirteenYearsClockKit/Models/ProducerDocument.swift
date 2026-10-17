@@ -12,15 +12,18 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var hourFormatThreshold: HourFormatThreshold
         public var pcoDefaultServiceTypeId: String?
         public var plotipharRelayHost: String
+        public var clockFormat: ClockFormat?
 
         public init(
             hourFormatThreshold: HourFormatThreshold,
             pcoDefaultServiceTypeId: String?,
-            plotipharRelayHost: String
+            plotipharRelayHost: String,
+            clockFormat: ClockFormat? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
+            self.clockFormat = clockFormat
         }
     }
 
@@ -116,7 +119,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
         settings = try container.decodeIfPresent(Settings.self, forKey: .settings)
-            ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
+            ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "", clockFormat: nil)
     }
 
     public enum LoadError: LocalizedError {

@@ -486,6 +486,9 @@ extension CueEngine {
         switch packet.type {
         case .cueUpdate, .timerUpdate, .pong, .timerAnchor, .cueDelta, .digest, .syncReply:
             if producerUTCOffsetSeconds != utc { producerUTCOffsetSeconds = utc }
+            if let format = packet.clockFormat.flatMap(ClockFormat.init(rawValue:)), producerClockFormat != format {
+                producerClockFormat = format
+            }
         default:
             break
         }

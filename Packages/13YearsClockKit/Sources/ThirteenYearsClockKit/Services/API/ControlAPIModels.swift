@@ -105,8 +105,24 @@ public struct ControlAPIState: Codable, Sendable {
 
     public struct SettingsStatus: Codable, Sendable {
         public var hourFormatThreshold: String
+        public var clockFormat: String
         public var controlAPIPort: Int
         public var connectedAPIClients: Int
+
+        public init(hourFormatThreshold: String, clockFormat: String, controlAPIPort: Int, connectedAPIClients: Int) {
+            self.hourFormatThreshold = hourFormatThreshold
+            self.clockFormat = clockFormat
+            self.controlAPIPort = controlAPIPort
+            self.connectedAPIClients = connectedAPIClients
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            hourFormatThreshold = try container.decode(String.self, forKey: .hourFormatThreshold)
+            clockFormat = try container.decodeIfPresent(String.self, forKey: .clockFormat) ?? ""
+            controlAPIPort = try container.decode(Int.self, forKey: .controlAPIPort)
+            connectedAPIClients = try container.decode(Int.self, forKey: .connectedAPIClients)
+        }
     }
 
     public struct IdentifiedName: Codable, Sendable {
@@ -268,6 +284,7 @@ public enum ControlAPIRequests {
     public struct RoleUpdateBody: Decodable, Sendable {
         public var name: String?
         public var personName: String?
+        public var clockFormat: String?
         public var plotipharRoleId: String?
         public var assignedNoteCategories: [String]?
         public var state: String?
@@ -323,9 +340,11 @@ public enum ControlAPIRequests {
     public struct DocumentLoadBody: Codable, Equatable, Sendable {
         public struct Settings: Codable, Equatable, Sendable {
             public var hourFormatThreshold: String?
+            public var clockFormat: String?
 
-            public init(hourFormatThreshold: String? = nil) {
+            public init(hourFormatThreshold: String? = nil, clockFormat: String? = nil) {
                 self.hourFormatThreshold = hourFormatThreshold
+                self.clockFormat = clockFormat
             }
         }
 
@@ -379,7 +398,7 @@ public enum ControlAPIRequests {
                 schedules: document.serviceSchedules,
                 eventTimes: document.eventTimes,
                 liveEventTimeId: document.liveEventTimeId,
-                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue)
+                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue, clockFormat: document.settings.clockFormat?.rawValue)
             )
         }
     }
@@ -460,6 +479,7 @@ public enum ControlAPIRequests {
 
     public struct SettingsBody: Decodable, Sendable {
         public var hourFormatThreshold: String?
+        public var clockFormat: String?
     }
 
     public struct ModeBody: Decodable, Sendable {

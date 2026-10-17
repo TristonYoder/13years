@@ -100,6 +100,17 @@ public struct RoleNoteAssignmentView: View {
                 HStack {
                     Text(role.name)
                     Spacer()
+                    Picker("Clock", selection: Binding(
+                        get: { role.clockFormat },
+                        set: { engine.setClockFormat(forRoleId: role.id, $0) }
+                    )) {
+                        Text("Producer default (\(engine.clockFormat.label))").tag(ClockFormat?.none)
+                        ForEach(ClockFormat.allCases) { format in
+                            Text(format.label).tag(ClockFormat?.some(format))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
                     #if os(macOS)
                     RowActionButton(systemImage: "pencil", label: "Rename role\u{2026}") {
                         renameText = role.name

@@ -114,7 +114,7 @@ public struct LiveTimerHeaderView: View {
 
                             if engine.isAtEndOfPlan && engine.canAdvanceToNextEventTime {
                                 Button(action: { engine.advanceToNextEventTime() }) {
-                                    Label(engine.nextEventTime?.displayName ?? "Next Time", systemImage: "arrow.uturn.forward")
+                                    Label(engine.nextEventTime?.displayName(engine.clockFormat) ?? "Next Time", systemImage: "arrow.uturn.forward")
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .producerButtonShape()
@@ -226,7 +226,8 @@ public struct LiveTimerHeaderView: View {
                 isPresented: $isEditingTimer,
                 previewBaseSeconds: item.remainingSeconds,
                 previewElapsedSeconds: item.elapsedSeconds,
-                hourFormatThreshold: engine.hourFormatThreshold
+                hourFormatThreshold: engine.hourFormatThreshold,
+                clockFormat: engine.clockFormat
             ) { action in
                 switch action {
                 case .setAbsolute(let seconds):

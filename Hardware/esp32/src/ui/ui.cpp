@@ -595,7 +595,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   int64_t wallMs = 0;
   char clockBuf[24];
   if (engine.wallClockMs(wallMs)) {
-    pagersync::formatTimeOfDay(wallMs, engine.utcOffsetSeconds(), clockBuf, sizeof(clockBuf));
+    pagersync::formatTimeOfDay(wallMs, engine.utcOffsetSeconds(), clockBuf, sizeof(clockBuf), engine.use24HourClock());
   } else {
     snprintf(clockBuf, sizeof(clockBuf), "--:--:--");
   }

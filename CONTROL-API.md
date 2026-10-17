@@ -69,6 +69,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
       "id": "role-abc123",
       "name": "Operator",
       "personName": null,
+      "clockFormat": null,
       "cue": { "state": "GO", "isActive": false },
       "plotipharRoleId": null,
       "assignedNoteCategories": []
@@ -159,6 +160,7 @@ There is no bearer token, no API key, no credential of any kind. Anyone who can 
   },
   "settings": {
     "hourFormatThreshold": "over90Minutes",
+    "clockFormat": "twelveHour",
     "controlAPIPort": 13390,
     "connectedAPIClients": 1
   },
@@ -242,7 +244,7 @@ Grouped by function. Dates in requests and responses are ISO-8601. Every request
 | `GET /v1/roles` | GET | List all roles. |
 | `POST /v1/roles` | POST | Create a role. Body: `{"name": "string"}`. Returns the new role (201). Name is required and cannot be empty. |
 | `GET /v1/roles/{id}` | GET | Read one role. |
-| `PATCH /v1/roles/{id}` | PATCH | Update a role. Body: `{"name": "string?", "personName": "string?", "plotipharRoleId": "string?", "assignedNoteCategories": ["string"]?, "state": "string?"}`. All fields optional (absent means leave alone). Returns the updated role. Name cannot be empty if present. |
+| `PATCH /v1/roles/{id}` | PATCH | Update a role. Body: `{"name": "string?", "personName": "string?", "clockFormat": "string?", "plotipharRoleId": "string?", "assignedNoteCategories": ["string"]?, "state": "string?"}`. All fields optional (absent means leave alone). `clockFormat` is `twelveHour` or `twentyFourHour` to override the producer clock format on that role's pagers; `""` or `"default"` clears the override (the role follows `settings.clockFormat`); anything else is a 400. Roles in state carry `clockFormat` as a string or `null`. Returns the updated role. Name cannot be empty if present. |
 | `DELETE /v1/roles/{id}` | DELETE | Remove a role. Returns the new role list. |
 | `POST /v1/roles/{id}/cue` | POST | Fire a cue for one role. Body: `{"state": "string"}`. State must be one of the `CueState` enum values — `OFF`, `STANDBY`, `GO`, uppercase. (`RESET` is *not* one of them; clearing a cue is `OFF`.) Returns the full state snapshot. |
 | `GET /v1/selection` | GET | Roles currently selected on the producer's screen (list of role ids). |
@@ -267,7 +269,7 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/timer/reset` | POST | Jump the timer to the item's original duration (reset `remainingSeconds` to `lengthInSeconds`). Returns the full state snapshot. |
 | `POST /v1/timer/adjust` | POST | Add or subtract seconds. Body: `{"seconds": number}` (integer, can be negative). Returns the full state snapshot. |
 | `POST /v1/timer/remaining` | POST | Set or adjust remaining time. Body: either `{"seconds": number}` (absolute) or `{"input": "string"}` (relative/absolute command text). Input uses the same GrandMA-style grammar the producer types: `"4350"` (absolute seconds), `"+30s"`, `"-5m"`, `"1h30m"`. Parsed by the same parser the app's UI uses so a macro pad and a keyboard agree on meaning. Returns the full state snapshot. |
-| `POST /v1/timer/end-at` | POST | Make the active timer end at a clock time. Body: `{"time": "HH:mm"}` (24-hour, producer's local time zone). The target is today at that time; if that is more than 12 hours in the past it means tomorrow, and if it is less than 12 hours in the past the remaining time is zero. Malformed times answer `400`. Returns the full state snapshot. |
+| `POST /v1/timer/end-at` | POST | Make the active timer end at a clock time. Body: `{"time": "HH:mm"}` (24-hour, producer's local time zone). The target is the next occurrence of that time: if it has already passed today it means the same time tomorrow (at 9 PM, `07:00` ends at 7 AM tomorrow), so the remaining time is never negative. Malformed times answer `400`. Returns the full state snapshot. |
 | `POST /v1/timer/actual-override` | POST | Set whether the active timer displays as Projected or Actual. Body: `{"isActual": boolean}`. This is a transient visual override; the plan item's own `isDurationActual` flag is unchanged. Returns the full state snapshot. |
 
 `GET /v1/timer` returns just the timer: `{"rev": number, "serverNowMs": number, "timer": ActiveTimer | null}`, with `timer` shaped exactly as in the snapshot.
@@ -289,7 +291,7 @@ Timer commands only work when a plan is loaded and an item is active (`timer.ite
 | `POST /v1/plan/items/{id}/duration-actual` | POST | Toggle whether the item displays as Projected or Actual. Body: `{"isActual": boolean}`. Returns the plan section of state. |
 | `POST /v1/plan/items/reorder` | POST | Reorder the items in the plan. Body: `{"itemIds": ["string"]}`. List must contain every current item id exactly once. Returns the plan section of state. |
 | `POST /v1/plan/import` | POST | Parse and import a service flow. Body: `{"text": "string", "title": "string?"}`. Text is `Title | Type | Duration` (one per line, duration in seconds). If parsing succeeds, a new plan titled `title` (or auto-generated) is created and imported. Returns the plan section (201). |
-| `PUT /v1/document` | PUT, POST | Load a whole plan or document with full fidelity (also socket op `document`). Body: `{"title": "string?", "items": [PlanItem], "activeItemIndex": 0, "roles": [Role], "replaceRoles": true, "selectedRoleIds": ["id"], "waypoints": [{"id","name"}], "schedules": [Schedule], "eventTimes": [EventTime], "liveEventTimeId": "string?", "settings": {"hourFormatThreshold": "never"}, "pco": {"serviceTypeId","planId","noteCategories": [{"id","name"}]}}`. Only `items` is required. Items carry `notes`, `noteIds`, `waypointIds`, `pcoServiceTypeId`, `pcoPlanId`, `isDurationActual`, `lengthInSeconds` and the rest of the plan item shape; ids must be unique. With `activeItemIndex` it behaves like opening a document (that item becomes active, paused). Without it, it behaves like importing a plan: items are renumbered, elapsed time resets, `title` becomes the plan title and the first non-header item becomes active. `roles` replace the existing roles (cues reset to off) when `replaceRoles` is true; otherwise they are merged by id (name, person and note categories updated, unknown roles appended) and current cue states are kept. `waypoints`, `schedules` and `eventTimes` replace the existing ones when present. `pco` sets the note categories shown in PCO status and fills in missing item PCO ids. An empty `items` clears the plan. Same limits as the other routes (400 for a bad body or an over-long field, 409 for too many items, roles, waypoints or schedules); the body can be at most 1 MiB. Returns the full state snapshot (200). |
+| `PUT /v1/document` | PUT, POST | Load a whole plan or document with full fidelity (also socket op `document`). Body: `{"title": "string?", "items": [PlanItem], "activeItemIndex": 0, "roles": [Role], "replaceRoles": true, "selectedRoleIds": ["id"], "waypoints": [{"id","name"}], "schedules": [Schedule], "eventTimes": [EventTime], "liveEventTimeId": "string?", "settings": {"hourFormatThreshold": "never", "clockFormat": "twentyFourHour"}, "pco": {"serviceTypeId","planId","noteCategories": [{"id","name"}]}}`. Only `items` is required. Items carry `notes`, `noteIds`, `waypointIds`, `pcoServiceTypeId`, `pcoPlanId`, `isDurationActual`, `lengthInSeconds` and the rest of the plan item shape; ids must be unique. With `activeItemIndex` it behaves like opening a document (that item becomes active, paused). Without it, it behaves like importing a plan: items are renumbered, elapsed time resets, `title` becomes the plan title and the first non-header item becomes active. `roles` replace the existing roles (cues reset to off) when `replaceRoles` is true; otherwise they are merged by id (name, person and note categories updated, unknown roles appended) and current cue states are kept. `waypoints`, `schedules` and `eventTimes` replace the existing ones when present. `pco` sets the note categories shown in PCO status and fills in missing item PCO ids. An empty `items` clears the plan. Same limits as the other routes (400 for a bad body or an over-long field, 409 for too many items, roles, waypoints or schedules); the body can be at most 1 MiB. Returns the full state snapshot (200). |
 
 ### Waypoints
 
@@ -434,7 +436,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/settings` | GET | App settings. |
-| `PATCH /v1/settings` | PATCH | Update settings. Body: `{"hourFormatThreshold": "string?"}`. Valid values are the `HourFormatThreshold` raw values — `over60Minutes`, `over90Minutes`, `never` — and anything else is a 400 listing them. (`never` means always `MM:SS`, however long the duration runs.) Returns the settings section of state. |
+| `PATCH /v1/settings` | PATCH | Update settings. Body: `{"hourFormatThreshold": "string?", "clockFormat": "string?"}`. Valid `hourFormatThreshold` values are the `HourFormatThreshold` raw values — `over60Minutes`, `over90Minutes`, `never` — and anything else is a 400 listing them. (`never` means always `MM:SS`, however long the duration runs.) `clockFormat` is `twelveHour` or `twentyFourHour` (anything else is a 400 listing them); it sets how pagers display the producer clock unless a role overrides it. Returns the settings section of state. |
 
 ### Messages
 

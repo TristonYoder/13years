@@ -125,6 +125,22 @@ public struct SettingsView: View {
                 Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
             }
 
+            Section {
+                Picker("Clock", selection: Binding(
+                    get: { engine.clockFormat },
+                    set: { engine.setClockFormat($0) }
+                )) {
+                    ForEach(ClockFormat.allCases) { format in
+                        Text(format.label).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Clock")
+            } footer: {
+                Text("How time-of-day appears on pagers and in End @ entry. Each role can override this in Roles.")
+            }
+
             #if os(macOS) || os(iOS)
             RemoteProducerSettingsSection()
             #endif

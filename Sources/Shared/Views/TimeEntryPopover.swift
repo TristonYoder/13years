@@ -10,6 +10,7 @@ public extension View {
         previewElapsedSeconds: Int = 0,
         arrowEdge: Edge = TimeEntryPopoverDefaults.arrowEdge,
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
+        clockFormat: ClockFormat,
         allowsEndAt: Bool = true,
         onCommit: @escaping (TimerInputParser.Action) -> Void
     ) -> some View {
@@ -19,6 +20,7 @@ public extension View {
             previewElapsedSeconds: previewElapsedSeconds,
             arrowEdge: arrowEdge,
             hourFormatThreshold: hourFormatThreshold,
+            clockFormat: clockFormat,
             allowsEndAt: allowsEndAt,
             onCommit: onCommit
         ))
@@ -58,12 +60,13 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     let previewElapsedSeconds: Int
     let arrowEdge: Edge
     let hourFormatThreshold: HourFormatThreshold
+    let clockFormat: ClockFormat
     let allowsEndAt: Bool
     let onCommit: (TimerInputParser.Action) -> Void
 
     @State private var editBuffer: String = ""
     @State private var isEndAt = false
-    @State private var meridiemOverride: Bool?
+    @State private var meridiem: Meridiem?
     @FocusState private var isKeypadFocused: Bool
 
     func body(content: Content) -> some View {
@@ -72,7 +75,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
                 if presented {
                     editBuffer = ""
                     isEndAt = false
-                    meridiemOverride = nil
+                    meridiem = nil
                 }
             }
             #if os(iOS) || os(macOS)
@@ -94,10 +97,10 @@ private struct TimeEntryPopoverModifier: ViewModifier {
             }
             TimeEntryKeypad(
                 isEndAt: isEndAt,
-                isPM: effectiveIsPM,
+                meridiem: meridiem,
                 onDigit: { editBuffer.append($0) },
                 onSign: { setSign($0) },
-                onMeridiem: { meridiemOverride = $0 },
+                onMeridiem: { toggleMeridiem($0) },
                 onClear: { editBuffer = "" },
                 onCommit: { commit() }
             )
@@ -117,7 +120,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
 
     private var screen: some View {
         VStack(spacing: 2) {
-            Text(editBuffer.isEmpty ? "Type a time…" : editBuffer)
+            Text(editBuffer.isEmpty ? (isEndAt ? "Type a time (24h, or pick AM/PM)…" : "Type a time…") : editBuffer)
                 .font(.inter(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -154,26 +157,26 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         .foregroundStyle(isEndAt ? Color.accentColor : Color.primary)
     }
 
-    private var effectiveIsPM: Bool {
-        meridiemOverride ?? TimerInputParser.nearestUpcomingIsPM(editBuffer)
+    private func toggleMeridiem(_ selected: Meridiem) {
+        meridiem = meridiem == selected ? nil : selected
     }
 
     private func toggleEndAt() {
         isEndAt.toggle()
         editBuffer = ""
-        meridiemOverride = nil
+        meridiem = nil
     }
 
     private var parsedAction: TimerInputParser.Action? {
         guard !editBuffer.isEmpty else { return nil }
-        return isEndAt ? TimerInputParser.parseEndAt(editBuffer, isPM: effectiveIsPM) : TimerInputParser.parse(editBuffer)
+        return isEndAt ? TimerInputParser.parseEndAt(editBuffer, meridiem: meridiem) : TimerInputParser.parse(editBuffer)
     }
 
     private var previewText: String {
         guard let action = parsedAction else { return "" }
         let remaining = TimeFormatting.string(forSeconds: resolvedSeconds(for: action), threshold: hourFormatThreshold)
         if case .endAt(let time) = action {
-            return "End @ \(time.formattedMeridiem) → \(remaining) remaining"
+            return "End @ \(time.formatted(clockFormat)) → \(remaining) remaining"
         }
         return remaining
     }
@@ -222,7 +225,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         }
         if isEndAt {
             if lower == "a" || lower == "p" {
-                meridiemOverride = lower == "p"
+                toggleMeridiem(lower == "p" ? .pm : .am)
                 return .handled
             }
             return raw == ":" ? appendColon() : .ignored
@@ -256,10 +259,10 @@ private struct TimeEntryPopoverModifier: ViewModifier {
 
 private struct TimeEntryKeypad: View {
     let isEndAt: Bool
-    let isPM: Bool
+    let meridiem: Meridiem?
     let onDigit: (Character) -> Void
     let onSign: (Character) -> Void
-    let onMeridiem: (Bool) -> Void
+    let onMeridiem: (Meridiem) -> Void
     let onClear: () -> Void
     let onCommit: () -> Void
 
@@ -288,7 +291,7 @@ private struct TimeEntryKeypad: View {
                     key("8") { onDigit("8") }
                     key("9") { onDigit("9") }
                     if isEndAt {
-                        key("AM", tint: isPM ? .primary : .accentColor, selected: !isPM) { onMeridiem(false) }
+                        key("AM", tint: meridiem == .am ? .accentColor : .primary, selected: meridiem == .am) { onMeridiem(.am) }
                     } else {
                         key("−") { onSign("-") }
                     }
@@ -298,7 +301,7 @@ private struct TimeEntryKeypad: View {
                     key("5") { onDigit("5") }
                     key("6") { onDigit("6") }
                     if isEndAt {
-                        key("PM", tint: isPM ? .accentColor : .primary, selected: isPM) { onMeridiem(true) }
+                        key("PM", tint: meridiem == .pm ? .accentColor : .primary, selected: meridiem == .pm) { onMeridiem(.pm) }
                             .background(sizeReader)
                     } else {
                         key("+") { onSign("+") }

@@ -34,6 +34,7 @@ extension CueEngine {
         assign(\.recentMessages, state.messages)
         assign(\.notificationsClearedAt, state.notificationsClearedAt)
         assign(\.hourFormatThreshold, HourFormatThreshold(rawValue: state.settings.hourFormatThreshold) ?? hourFormatThreshold)
+        assign(\.clockFormat, ClockFormat(rawValue: state.settings.clockFormat) ?? clockFormat)
         assign(\.isPCOConnected, state.pco.isConnected)
         assign(\.pcoUserName, state.pco.userName)
         assign(\.pcoLastError, state.pco.lastError)
@@ -96,5 +97,14 @@ extension CueEngine {
     public func setHourFormatThreshold(_ threshold: HourFormatThreshold) {
         hourFormatThreshold = threshold
         if isRemoteMirror { remoteCommands?.send(.hourFormat(threshold.rawValue)) }
+    }
+
+    public func setClockFormat(_ format: ClockFormat) {
+        clockFormat = format
+        if isRemoteMirror {
+            remoteCommands?.send(.clockFormat(format.rawValue))
+        } else {
+            broadcastTimerUpdate()
+        }
     }
 }

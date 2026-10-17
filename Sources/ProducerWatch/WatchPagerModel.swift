@@ -226,6 +226,9 @@ extension PagerPresentationState {
             isLANConnected: apiState.network.isLANConnected,
             connectedMasterName: apiState.network.connectedMasterName,
             hourFormatThreshold: HourFormatThreshold(rawValue: apiState.settings.hourFormatThreshold) ?? .over90Minutes,
+            clockFormat: apiState.roles.first(where: { $0.id == selectedRoleId })?.clockFormat
+                ?? ClockFormat(rawValue: apiState.settings.clockFormat)
+                ?? .systemDefault,
             receivedNextItem: apiState.timer?.nextItem
         )
     }

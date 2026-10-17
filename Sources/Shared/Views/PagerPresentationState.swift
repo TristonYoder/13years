@@ -14,6 +14,7 @@ public struct PagerPresentationState: Equatable, Sendable {
     public var isLANConnected: Bool
     public var connectedMasterName: String?
     public var hourFormatThreshold: HourFormatThreshold
+    public var clockFormat: ClockFormat
     public var receivedNextItem: PCOTimerItem?
     public var producerClockOffsetMs: Double?
     public var producerUTCOffsetSeconds: Int?
@@ -29,6 +30,7 @@ public struct PagerPresentationState: Equatable, Sendable {
         isLANConnected: Bool,
         connectedMasterName: String?,
         hourFormatThreshold: HourFormatThreshold,
+        clockFormat: ClockFormat,
         receivedNextItem: PCOTimerItem? = nil,
         producerClockOffsetMs: Double? = nil,
         producerUTCOffsetSeconds: Int? = nil
@@ -43,6 +45,7 @@ public struct PagerPresentationState: Equatable, Sendable {
         self.isLANConnected = isLANConnected
         self.connectedMasterName = connectedMasterName
         self.hourFormatThreshold = hourFormatThreshold
+        self.clockFormat = clockFormat
         self.receivedNextItem = receivedNextItem
         self.producerClockOffsetMs = producerClockOffsetMs
         self.producerUTCOffsetSeconds = producerUTCOffsetSeconds

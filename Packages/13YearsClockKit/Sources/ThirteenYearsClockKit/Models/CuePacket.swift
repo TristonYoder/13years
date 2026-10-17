@@ -83,11 +83,12 @@ public struct CuePacket: Codable, Sendable {
     public var to: String?
     public var receivedAtMs: Double?
     public var utcOffsetSeconds: Int?
+    public var clockFormat: String?
     public private(set) var anchorRejected = false
 
     private enum CodingKeys: String, CodingKey {
         case type, timestamp, senderId, roleCues, timerItem, nextItem, message, messages
-        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to, utcOffsetSeconds
+        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to, utcOffsetSeconds, clockFormat
     }
 
     public init(
@@ -136,6 +137,7 @@ public struct CuePacket: Codable, Sendable {
         epoch = try container.decodeIfPresent(Int.self, forKey: .epoch)
         to = try container.decodeIfPresent(String.self, forKey: .to)
         utcOffsetSeconds = try? container.decodeIfPresent(Int.self, forKey: .utcOffsetSeconds)
+        clockFormat = try? container.decodeIfPresent(String.self, forKey: .clockFormat)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -164,6 +166,7 @@ public struct CuePacket: Codable, Sendable {
         try container.encodeIfPresent(epoch, forKey: .epoch)
         try container.encodeIfPresent(to, forKey: .to)
         try container.encodeIfPresent(utcOffsetSeconds, forKey: .utcOffsetSeconds)
+        try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
     }
 
     public func encode() -> Data? {

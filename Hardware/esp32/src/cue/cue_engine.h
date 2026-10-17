@@ -17,6 +17,7 @@ struct RoleView {
   String id;
   String name;
   String personName;
+  pagersync::ClockFormat clockFormat = pagersync::ClockFormat::Unset;
   String assignedNoteCategories[kMaxNoteCategoriesPerRole];
   int assignedNoteCategoryCount = 0;
   CueState state = CueState::Off;
@@ -109,6 +110,7 @@ public:
   bool hasClockOffset() const { return clock_.hasOffset(); }
   bool hasUtcOffset() const { return hasUtcOffset_; }
   int32_t utcOffsetSeconds() const { return hasUtcOffset_ ? utcOffsetSeconds_ : 0; }
+  bool use24HourClock() const { return pagersync::resolveUse24h(activeRole().clockFormat, producerClockFormat_); }
   bool wallClockMs(int64_t &ms) const;
   double clockOffsetMs() const { return clock_.offsetMs(); }
   bool producerIsV2() const { return producerV2_; }
@@ -189,6 +191,7 @@ private:
   bool producerV2_ = false;
   int32_t utcOffsetSeconds_ = 0;
   bool hasUtcOffset_ = false;
+  pagersync::ClockFormat producerClockFormat_ = pagersync::ClockFormat::Unset;
   bool catchUpWanted_ = false;
   bool syncBurstWanted_ = false;
   bool noOffsetBurstDone_ = false;

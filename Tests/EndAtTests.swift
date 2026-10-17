@@ -20,28 +20,43 @@ final class EndAtTests: XCTestCase {
         TimeOfDay(hour: hour, minute: minute)!
     }
 
-    func testParsesEndAtInput() {
-        XCTAssertEqual(TimerInputParser.parseEndAt("1015", isPM: false), .endAt(time(10, 15)))
-        XCTAssertEqual(TimerInputParser.parseEndAt("10:15", isPM: true), .endAt(time(22, 15)))
-        XCTAssertEqual(TimerInputParser.parseEndAt("9", isPM: false), .endAt(time(9, 0)))
-        XCTAssertEqual(TimerInputParser.parseEndAt("930", isPM: true), .endAt(time(21, 30)))
-        XCTAssertEqual(TimerInputParser.parseEndAt("12", isPM: false), .endAt(time(0, 0)))
-        XCTAssertEqual(TimerInputParser.parseEndAt("1200", isPM: true), .endAt(time(12, 0)))
-        XCTAssertNil(TimerInputParser.parseEndAt("13", isPM: false))
-        XCTAssertNil(TimerInputParser.parseEndAt("0", isPM: false))
-        XCTAssertNil(TimerInputParser.parseEndAt("1060", isPM: false))
-        XCTAssertNil(TimerInputParser.parseEndAt("12345", isPM: false))
-        XCTAssertNil(TimerInputParser.parseEndAt("1h", isPM: false))
-        XCTAssertNil(TimerInputParser.parseEndAt("", isPM: false))
+    func testParseClockAccepts24HourShapes() {
+        XCTAssertEqual(TimerInputParser.parseClock("7")?.hour, 7)
+        XCTAssertEqual(TimerInputParser.parseClock("07")?.hour, 7)
+        XCTAssertEqual(TimerInputParser.parseClock("730")?.minute, 30)
+        XCTAssertEqual(TimerInputParser.parseClock("0730")?.hour, 7)
+        XCTAssertEqual(TimerInputParser.parseClock("19:30")?.hour, 19)
+        XCTAssertEqual(TimerInputParser.parseClock("19:30")?.minute, 30)
+        XCTAssertEqual(TimerInputParser.parseClock("0")?.hour, 0)
+        XCTAssertEqual(TimerInputParser.parseClock("2359")?.hour, 23)
+        XCTAssertNil(TimerInputParser.parseClock("24"))
+        XCTAssertNil(TimerInputParser.parseClock("2400"))
+        XCTAssertNil(TimerInputParser.parseClock("1960"))
+        XCTAssertNil(TimerInputParser.parseClock("12345"))
+        XCTAssertNil(TimerInputParser.parseClock("1h"))
+        XCTAssertNil(TimerInputParser.parseClock(""))
     }
 
-    func testMeridiemDefaultsToNearestUpcoming() {
-        let morning = date(8, 0)
-        XCTAssertFalse(TimerInputParser.nearestUpcomingIsPM("1015", now: morning, calendar: calendar))
-        XCTAssertTrue(TimerInputParser.nearestUpcomingIsPM("3", now: morning, calendar: calendar))
-        let afternoon = date(14, 0)
-        XCTAssertTrue(TimerInputParser.nearestUpcomingIsPM("3", now: afternoon, calendar: calendar))
-        XCTAssertFalse(TimerInputParser.nearestUpcomingIsPM("1", now: afternoon, calendar: calendar))
+    func testParsesEndAtWithoutMeridiemAs24Hour() {
+        XCTAssertEqual(TimerInputParser.parseEndAt("1015", meridiem: nil), .endAt(time(10, 15)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("19:30", meridiem: nil), .endAt(time(19, 30)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("0", meridiem: nil), .endAt(time(0, 0)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("07", meridiem: nil), .endAt(time(7, 0)))
+        XCTAssertNil(TimerInputParser.parseEndAt("24", meridiem: nil))
+        XCTAssertNil(TimerInputParser.parseEndAt("1060", meridiem: nil))
+        XCTAssertNil(TimerInputParser.parseEndAt("", meridiem: nil))
+    }
+
+    func testParsesEndAtWithMeridiem() {
+        XCTAssertEqual(TimerInputParser.parseEndAt("1015", meridiem: .am), .endAt(time(10, 15)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("10:15", meridiem: .pm), .endAt(time(22, 15)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("930", meridiem: .pm), .endAt(time(21, 30)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("12", meridiem: .am), .endAt(time(0, 0)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("1200", meridiem: .pm), .endAt(time(12, 0)))
+        XCTAssertEqual(TimerInputParser.parseEndAt("1230", meridiem: .am), .endAt(time(0, 30)))
+        XCTAssertNil(TimerInputParser.parseEndAt("13", meridiem: .am))
+        XCTAssertNil(TimerInputParser.parseEndAt("0", meridiem: .pm))
+        XCTAssertNil(TimerInputParser.parseEndAt("1060", meridiem: .pm))
     }
 
     func testSecondsUntilFuture() {
@@ -49,14 +64,19 @@ final class EndAtTests: XCTestCase {
         XCTAssertEqual(time(10, 15).secondsUntil(now: date(10, 14, 30), calendar: calendar), 30)
     }
 
-    func testSecondsUntilPastUnderTwelveHours() {
-        XCTAssertEqual(time(10, 0).secondsUntil(now: date(10, 5), calendar: calendar), -300)
-        XCTAssertEqual(time(10, 0).secondsUntil(now: date(22, 0), calendar: calendar), -12 * 3600)
+    func testSecondsUntilPassedTimeMeansTomorrow() {
+        XCTAssertEqual(time(7, 0).secondsUntil(now: date(21, 0), calendar: calendar), 10 * 3600)
+        XCTAssertEqual(time(10, 0).secondsUntil(now: date(10, 5), calendar: calendar), 24 * 3600 - 300)
+        XCTAssertEqual(time(10, 0).secondsUntil(now: date(22, 0), calendar: calendar), 12 * 3600)
+        XCTAssertEqual(time(9, 0).secondsUntil(now: date(22, 0), calendar: calendar), 11 * 3600)
     }
 
-    func testSecondsUntilPastOverTwelveHoursRollsToTomorrow() {
-        XCTAssertEqual(time(9, 0).secondsUntil(now: date(22, 0), calendar: calendar), 11 * 3600)
-        XCTAssertEqual(time(10, 0).secondsUntil(now: date(22, 1), calendar: calendar), 12 * 3600 - 60)
+    func testSecondsUntilIsNeverNegative() {
+        for hour in 0..<24 {
+            for target in [time(0, 0), time(6, 30), time(12, 0), time(23, 59)] {
+                XCTAssertGreaterThanOrEqual(target.secondsUntil(now: date(hour, 17), calendar: calendar), 0)
+            }
+        }
     }
 
     func testSecondsUntilMidnightEdge() {
@@ -65,9 +85,9 @@ final class EndAtTests: XCTestCase {
         XCTAssertEqual(time(0, 0).secondsUntil(now: date(0, 0), calendar: calendar), 0)
     }
 
-    func testPreviewResolvesEndAtAndClampsAtZero() {
+    func testPreviewResolvesEndAtToNextOccurrence() {
         XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .endAt(time(10, 15)), base: 0, elapsed: 0, now: date(10, 0), calendar: calendar), 900)
-        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .endAt(time(10, 0)), base: 0, elapsed: 0, now: date(10, 5), calendar: calendar), 0)
+        XCTAssertEqual(TimeEntryPreview.resolvedSeconds(for: .endAt(time(10, 0)), base: 0, elapsed: 0, now: date(10, 5), calendar: calendar), 24 * 3600 - 300)
     }
 
     func testEndAtRoute() {

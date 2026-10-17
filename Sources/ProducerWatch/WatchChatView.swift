@@ -42,7 +42,7 @@ struct WatchChatView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(isMine ? Color.white : Color.black)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(Self.shortTime(message.timestamp))
+                Text((model.presentation?.clockFormat ?? .systemDefault).string(from: message.timestamp))
                     .font(.system(size: 8, weight: .regular))
                     .foregroundStyle(.secondary)
             }
@@ -53,12 +53,6 @@ struct WatchChatView: View {
             if !isMine { Spacer(minLength: 30) }
         }
         .listRowInsets(EdgeInsets(top: 3, leading: 6, bottom: 3, trailing: 6))
-    }
-
-    private static func shortTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm"
-        return formatter.string(from: date)
     }
 
     private var composer: some View {

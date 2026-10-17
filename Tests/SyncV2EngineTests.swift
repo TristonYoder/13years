@@ -214,6 +214,7 @@ final class SyncV2ProducerTests: SyncV2TestCase {
         engine.toggleTimerRunning()
         XCTAssertEqual(outbox.packets(.timerAnchor).first?.utcOffsetSeconds, -14400)
         XCTAssertEqual(outbox.packets(.timerUpdate).first?.utcOffsetSeconds, -14400)
+        XCTAssertNotNil(outbox.packets(.timerAnchor).first?.clockFormat)
         offset = 19800
         outbox.clear()
         engine.handlePacket(ping(version: 2), origin: .lanServer(connection))

@@ -198,6 +198,12 @@ public final class ControlAPIRouter {
                 }
                 engine.hourFormatThreshold = threshold
             }
+            if let raw = request.clockFormat {
+                guard let format = ClockFormat(rawValue: raw) else {
+                    return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+                }
+                engine.setClockFormat(format)
+            }
             return json(settingsStatus())
 
         case "waypoints":
@@ -980,6 +986,9 @@ public final class ControlAPIRouter {
         if let raw = request.settings?.hourFormatThreshold, HourFormatThreshold(rawValue: raw) == nil {
             return Self.error(400, "Unknown hourFormatThreshold", detail: HourFormatThreshold.allCases.map(\.rawValue).joined(separator: ", "))
         }
+        if let raw = request.settings?.clockFormat, ClockFormat(rawValue: raw) == nil {
+            return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+        }
         return nil
     }
 
@@ -987,6 +996,16 @@ public final class ControlAPIRouter {
         if let name = request.name, let tooLong = tooLong(name.trimmingCharacters(in: .whitespaces), ContentLimits.name, "Role name") { return tooLong }
         if let tooLong = tooLong(request.personName ?? "", ContentLimits.name, "personName") { return tooLong }
         if let tooLong = tooLong(request.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+        var clockFormat: ClockFormat??
+        if let raw = request.clockFormat {
+            if raw.isEmpty || raw == "default" {
+                clockFormat = .some(nil)
+            } else if let format = ClockFormat(rawValue: raw) {
+                clockFormat = .some(format)
+            } else {
+                return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+            }
+        }
         if let categories = request.assignedNoteCategories {
             guard categories.count <= ContentLimits.maxNoteCategories else {
                 return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
@@ -1001,6 +1020,9 @@ public final class ControlAPIRouter {
         }
         if let personName = request.personName {
             engine.setPersonName(forRoleId: id, personName: personName.isEmpty ? nil : personName)
+        }
+        if let clockFormat {
+            engine.setClockFormat(forRoleId: id, clockFormat)
         }
         if FeatureFlags.plotiphar, let plotipharRoleId = request.plotipharRoleId {
             engine.setPlotipharRoleId(forRoleId: id, plotipharRoleId: plotipharRoleId.isEmpty ? nil : plotipharRoleId)
@@ -1278,7 +1300,7 @@ public final class ControlAPIRouter {
             name: time.name,
             day: time.day,
             startTime: time.startTime,
-            displayName: time.displayName,
+            displayName: time.displayName(engine.clockFormat),
             pcoPlanTimeId: time.pcoPlanTimeId
         )
     }
@@ -1319,6 +1341,7 @@ public final class ControlAPIRouter {
     private func settingsStatus() -> ControlAPIState.SettingsStatus {
         ControlAPIState.SettingsStatus(
             hourFormatThreshold: engine.hourFormatThreshold.rawValue,
+            clockFormat: engine.clockFormat.rawValue,
             controlAPIPort: engine.controlAPIPort,
             connectedAPIClients: connectedClientCount()
         )

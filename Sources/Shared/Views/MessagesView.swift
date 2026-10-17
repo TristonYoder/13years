@@ -143,7 +143,7 @@ public struct MessagesView: View {
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
 
-                Text(message.timestamp, style: .time)
+                Text(engine.displayClockFormat.string(from: message.timestamp))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

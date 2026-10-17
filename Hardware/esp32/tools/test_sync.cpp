@@ -538,6 +538,48 @@ static std::string tod(int64_t ms, int64_t off) {
   return b;
 }
 
+static std::string tod24(int64_t ms, int64_t off) {
+  char b[24];
+  pagersync::formatTimeOfDay(ms, off, b, sizeof(b), true);
+  return b;
+}
+
+static void testClockFormat() {
+  using pagersync::ClockFormat;
+  CHECK_STR(tod(1760000000000LL, 0), "8:53:20 AM");
+  CHECK_STR(tod24(1760000000000LL, 0), "08:53:20");
+  CHECK_STR(tod24(1760000000000LL, -4 * 3600), "04:53:20");
+  CHECK_STR(tod24(1760000000000LL, 9 * 3600), "17:53:20");
+  CHECK_STR(tod24(0, 0), "00:00:00");
+  CHECK_STR(tod(0, 0), "12:00:00 AM");
+  CHECK_STR(tod24(-1000, 0), "23:59:59");
+  CHECK(pagersync::parseClockFormat("twelveHour") == ClockFormat::TwelveHour);
+  CHECK(pagersync::parseClockFormat("twentyFourHour") == ClockFormat::TwentyFourHour);
+  CHECK(pagersync::parseClockFormat("bogus") == ClockFormat::Unset);
+  CHECK(pagersync::parseClockFormat("") == ClockFormat::Unset);
+  CHECK(pagersync::parseClockFormat(nullptr) == ClockFormat::Unset);
+  CHECK(!pagersync::resolveUse24h(ClockFormat::Unset, ClockFormat::Unset));
+  CHECK(pagersync::resolveUse24h(ClockFormat::Unset, ClockFormat::TwentyFourHour));
+  CHECK(!pagersync::resolveUse24h(ClockFormat::Unset, ClockFormat::TwelveHour));
+  CHECK(pagersync::resolveUse24h(ClockFormat::TwentyFourHour, ClockFormat::TwelveHour));
+  CHECK(!pagersync::resolveUse24h(ClockFormat::TwelveHour, ClockFormat::TwentyFourHour));
+#ifdef HAVE_ARDUINOJSON
+  JsonDocument filter;
+  filter["type"] = true;
+  filter["clockFormat"] = true;
+  filter["roleCues"] = true;
+  JsonDocument a;
+  deserializeJson(a, "{\"type\":\"PONG\",\"junk\":1,\"clockFormat\":\"twentyFourHour\",\"roleCues\":[{\"id\":\"r\",\"clockFormat\":\"twelveHour\"},{\"id\":\"s\"}]}", DeserializationOption::Filter(filter));
+  CHECK(a["clockFormat"].is<const char *>());
+  CHECK(pagersync::parseClockFormat(a["clockFormat"].as<const char *>()) == ClockFormat::TwentyFourHour);
+  CHECK(a["roleCues"][0]["clockFormat"].is<const char *>());
+  CHECK(!a["roleCues"][1]["clockFormat"].is<const char *>());
+  JsonDocument b;
+  deserializeJson(b, "{\"type\":\"PONG\",\"clockFormat\":null}", DeserializationOption::Filter(filter));
+  CHECK(!b["clockFormat"].is<const char *>());
+#endif
+}
+
 static std::string len(int64_t s) {
   char b[24];
   pagersync::formatLength(s, b, sizeof(b));
@@ -712,6 +754,7 @@ int main() {
   testCueDisplay();
   testLinkPhase();
   testUtcOffsetFilter();
+  testClockFormat();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

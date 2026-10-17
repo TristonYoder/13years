@@ -148,6 +148,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                     state: state,
                     style: style,
                     producerClock: presentation.producerClock,
+                    clockFormat: presentation.clockFormat,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
                     roleColumnMaxWidth: 0.2 * m.size.width,
                     hidesLeading: disconnectPhase == .extended,

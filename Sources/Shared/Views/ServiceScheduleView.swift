@@ -109,7 +109,7 @@ public struct ServiceScheduleView: View {
                                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         }
                     }
-                    Text("\(schedule.startsAt.formatted(date: .abbreviated, time: .shortened)) \u{2014} live at \(schedule.goLiveAt.formatted(date: .omitted, time: .shortened))")
+                    Text("\(engine.clockFormat.dateTime(schedule.startsAt)) \u{2014} live at \(engine.clockFormat.string(from: schedule.goLiveAt))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -165,7 +165,7 @@ public struct ServiceScheduleView: View {
     }
 
     private func nextScheduledLine(_ schedule: ServiceSchedule) -> String {
-        "Next: \(schedule.title) \u{2014} \(schedule.startsAt.formatted(date: .abbreviated, time: .shortened)), live at \(schedule.goLiveAt.formatted(date: .omitted, time: .shortened))"
+        "Next: \(schedule.title) \u{2014} \(engine.clockFormat.dateTime(schedule.startsAt)), live at \(engine.clockFormat.string(from: schedule.goLiveAt))"
     }
 }
 
@@ -217,10 +217,11 @@ private struct ServiceScheduleEditorView: View {
                     TextField("Title", text: $title)
                     #if os(tvOS)
                     LabeledContent("Starts At") {
-                        Text(startsAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(engine.clockFormat.dateTime(startsAt))
                     }
                     #else
                     DatePicker("Starts At", selection: $startsAt)
+                        .environment(\.locale, engine.clockFormat.pickerLocale)
                     #endif
                 }
 
@@ -298,7 +299,7 @@ private struct ServiceScheduleEditorView: View {
         } header: {
             Text("Go-Live Timing")
         } footer: {
-            Text("Live at \(resolvedGoLiveAt.formatted(date: .omitted, time: .shortened)).")
+            Text("Live at \(engine.clockFormat.string(from: resolvedGoLiveAt)).")
         }
     }
 
@@ -410,5 +411,11 @@ private struct ServiceScheduleEditorView: View {
             )
         }
         dismiss()
+    }
+}
+
+private extension ClockFormat {
+    func dateTime(_ date: Date) -> String {
+        "\(date.formatted(date: .abbreviated, time: .omitted)), \(string(from: date))"
     }
 }

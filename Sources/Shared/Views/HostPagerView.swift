@@ -26,6 +26,7 @@ public struct HostPagerView: View {
             isLANConnected: engine.isLANConnected,
             connectedMasterName: engine.connectedMasterName,
             hourFormatThreshold: engine.hourFormatThreshold,
+            clockFormat: engine.displayClockFormat,
             receivedNextItem: engine.nextItem,
             producerClockOffsetMs: engine.producerClockOffsetMs,
             producerUTCOffsetSeconds: engine.producerUTCOffsetSeconds

@@ -24,7 +24,8 @@ final class PagerPresentationStateTests: XCTestCase {
             isProducerLive: true,
             isLANConnected: true,
             connectedMasterName: "Studio",
-            hourFormatThreshold: .over90Minutes
+            hourFormatThreshold: .over90Minutes,
+            clockFormat: .twelveHour
         )
     }
 

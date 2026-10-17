@@ -68,6 +68,20 @@ public final class CueEngine: ObservableObject {
     }
     private static let hourFormatThresholdDefaultsKey = "hourFormatThreshold"
 
+    @Published public var clockFormat: ClockFormat = ClockFormat.systemDefault {
+        didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
+    }
+    private static let clockFormatDefaultsKey = "clockFormat"
+    @Published public internal(set) var producerClockFormat: ClockFormat?
+
+    public var displayClockFormat: ClockFormat {
+        if let override = roles.first(where: { selectedRoleIds.contains($0.id) && $0.clockFormat != nil })?.clockFormat {
+            return override
+        }
+        if isMasterServer || isRemoteMirror { return clockFormat }
+        return producerClockFormat ?? clockFormat
+    }
+
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
     @Published public var pcoPlans: [PCOClient.PCOPlanInfo] = []
     @Published public var eventTimes: [EventTime] = [] {
@@ -165,6 +179,7 @@ public final class CueEngine: ObservableObject {
 
     func stampUtcOffset(_ packet: inout CuePacket) {
         packet.utcOffsetSeconds = timeZoneProvider().secondsFromGMT()
+        packet.clockFormat = clockFormat.rawValue
     }
 
     nonisolated public static func persistentDeviceId() -> String {
@@ -225,6 +240,8 @@ public final class CueEngine: ObservableObject {
         self.pcoDefaultServiceTypeId = UserDefaults.standard.string(forKey: Self.defaultServiceTypeDefaultsKey)
         self.hourFormatThreshold = UserDefaults.standard.string(forKey: Self.hourFormatThresholdDefaultsKey)
             .flatMap(HourFormatThreshold.init(rawValue:)) ?? .over90Minutes
+        self.clockFormat = UserDefaults.standard.string(forKey: Self.clockFormatDefaultsKey)
+            .flatMap(ClockFormat.init(rawValue:)) ?? ClockFormat.systemDefault
 
         self.pcoOAuthTokens = KeychainStore.codable(OAuthTokens.self, forKey: Self.pcoTokensKeychainKey)
         self.pcoUserName = UserDefaults.standard.string(forKey: Self.pcoUserNameDefaultsKey)
@@ -698,7 +715,8 @@ public final class CueEngine: ObservableObject {
             settings: .init(
                 hourFormatThreshold: hourFormatThreshold,
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
-                plotipharRelayHost: plotipharRelayHost
+                plotipharRelayHost: plotipharRelayHost,
+                clockFormat: clockFormat
             )
         )
     }
@@ -741,6 +759,7 @@ public final class CueEngine: ObservableObject {
         waypoints = document.waypoints
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
+        if let format = document.settings.clockFormat { clockFormat = format }
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
     }
 
@@ -1751,6 +1770,16 @@ public final class CueEngine: ObservableObject {
         }
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         roles[index].personName = personName
+        broadcastState()
+    }
+
+    public func setClockFormat(forRoleId roleId: String, _ format: ClockFormat?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["clockFormat": format?.rawValue ?? ""])))
+            return
+        }
+        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        roles[index].clockFormat = format
         broadcastState()
     }
 

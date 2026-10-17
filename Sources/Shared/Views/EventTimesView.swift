@@ -78,7 +78,7 @@ public struct EventTimesView: View {
         return HStack {
             Image(systemName: isLive ? "dot.radiowaves.left.and.right" : "clock")
                 .foregroundStyle(isLive ? Color.green : Color.secondary)
-            Text(time.displayName)
+            Text(time.displayName(engine.clockFormat))
             Spacer()
             if time.pcoPlanTimeId != nil {
                 Text("PCO")
@@ -158,10 +158,11 @@ struct EventTimeEditorView: View {
                     if hasStartTime {
                         #if os(tvOS)
                         LabeledContent("Starts") {
-                            Text(TimeOfDay(date: startTime).formatted)
+                            Text(TimeOfDay(date: startTime).formatted(engine.clockFormat))
                         }
                         #else
                         DatePicker("Starts", selection: $startTime, displayedComponents: .hourAndMinute)
+                            .environment(\.locale, engine.clockFormat.pickerLocale)
                         #endif
                     }
                 }

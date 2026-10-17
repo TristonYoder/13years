@@ -157,6 +157,7 @@ public struct PlanItemEditorView: View {
                     isPresented: $isEditingDuration,
                     previewBaseSeconds: lengthInSeconds,
                     hourFormatThreshold: engine.hourFormatThreshold,
+                    clockFormat: engine.clockFormat,
                     allowsEndAt: false
                 ) { action in
                     switch action {

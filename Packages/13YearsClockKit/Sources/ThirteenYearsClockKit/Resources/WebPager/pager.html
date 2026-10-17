@@ -1395,19 +1395,29 @@ function syncQualityText(ready, offsetMs, rttMs) {
 
 const localTimeFormats = new Map();
 
-function formatLocalTime(date, locale, timeZone) {
-  const key = String(locale) + "|" + String(timeZone);
+function applyClockFormat(options, clockFormat) {
+  if (clockFormat === "twentyFourHour") {
+    options.hour = "2-digit";
+    options.hourCycle = "h23";
+  } else if (clockFormat === "twelveHour") {
+    options.hour12 = true;
+  }
+  return options;
+}
+
+function formatLocalTime(date, locale, timeZone, clockFormat) {
+  const key = String(locale) + "|" + String(timeZone) + "|" + String(clockFormat);
   try {
     let format = localTimeFormats.get(key);
     if (!format) {
-      const options = { hour: "numeric", minute: "2-digit" };
+      const options = applyClockFormat({ hour: "numeric", minute: "2-digit" }, clockFormat);
       if (timeZone) options.timeZone = timeZone;
       format = new Intl.DateTimeFormat(locale, options);
       localTimeFormats.set(key, format);
     }
     return format.format(date);
   } catch (_) {
-    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return date.toLocaleTimeString([], applyClockFormat({ hour: "numeric", minute: "2-digit" }, clockFormat));
   }
 }
 
@@ -1423,14 +1433,14 @@ function msUntilNextProducerSecond(nowMs, offsetMs) {
 
 const producerClockFormats = new Map();
 
-function formatProducerClock(nowMs, offsetMs, utcOffsetSeconds, locale) {
+function formatProducerClock(nowMs, offsetMs, utcOffsetSeconds, locale, clockFormat) {
   const hasOffset = typeof offsetMs === "number" && isFinite(offsetMs);
   const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);
   const producerMs = nowMs + (hasOffset ? offsetMs : 0);
-  const options = { hour: "numeric", minute: "2-digit", second: "2-digit" };
+  const options = applyClockFormat({ hour: "numeric", minute: "2-digit", second: "2-digit" }, clockFormat);
   const shifted = hasUtc ? producerMs + utcOffsetSeconds * 1000 : producerMs;
   if (hasUtc) options.timeZone = "UTC";
-  const key = String(locale) + "|" + (hasUtc ? "utc" : "local");
+  const key = String(locale) + "|" + (hasUtc ? "utc" : "local") + "|" + String(clockFormat);
   try {
     let format = producerClockFormats.get(key);
     if (!format) {
@@ -2102,8 +2112,14 @@ function clockOffsetMs() {
   }
 }
 
+function effectiveClockFormat() {
+  const valid = (v) => (v === "twelveHour" || v === "twentyFourHour" ? v : null);
+  const role = activeRole();
+  return valid(role && role.clockFormat) || valid(snapshot && snapshot.settings && snapshot.settings.clockFormat);
+}
+
 function formatClock() {
-  return formatProducerClock(Date.now(), clockOffsetMs(), producerUtcOffsetSeconds);
+  return formatProducerClock(Date.now(), clockOffsetMs(), producerUtcOffsetSeconds, undefined, effectiveClockFormat());
 }
 
 function roles() { return (snapshot && snapshot.roles) || []; }
@@ -2404,7 +2420,7 @@ function renderLowerThird() {
 
   const key = [
     title, isMessage ? 1 : 0, window.innerWidth, window.innerHeight,
-    clockText.length, countdownText.length, durationText,
+    clockText.length, effectiveClockFormat(), countdownText.length, durationText,
   ].join("|");
   if (key === lastLtKey) return;
   lastLtKey = key;
@@ -2555,7 +2571,7 @@ function renderChat() {
 
 function formatTime(timestamp) {
   const date = new Date(timestamp);
-  return isNaN(date) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return isNaN(date) ? "" : date.toLocaleTimeString([], applyClockFormat({ hour: "numeric", minute: "2-digit" }, effectiveClockFormat()));
 }
 
 function offlineText() {

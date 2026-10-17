@@ -73,6 +73,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case eventTimeNext
     case loadDocument(body: Data)
     case hourFormat(String)
+    case clockFormat(String)
 
     public var isIdempotent: Bool {
         switch self {
@@ -211,6 +212,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PUT", path: "/v1/document", body: body)
         case .hourFormat(let raw):
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["hourFormatThreshold": raw]))
+        case .clockFormat(let raw):
+            return Request(method: "PUT", path: "/v1/settings", body: Self.json(["clockFormat": raw]))
         }
     }
 

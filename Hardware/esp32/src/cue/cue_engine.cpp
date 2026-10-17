@@ -200,6 +200,7 @@ static JsonDocument &packetFilter() {
     filter["rev"] = true;
     filter["epoch"] = true;
     filter["utcOffsetSeconds"] = true;
+    filter["clockFormat"] = true;
     filter["t0"] = true;
     filter["t1"] = true;
     filter["t2"] = true;
@@ -303,6 +304,10 @@ void Engine::handlePacketJson(const char *json, size_t len) {
     }
   }
 
+  if (doc["clockFormat"].is<const char *>()) {
+    producerClockFormat_ = pagersync::parseClockFormat(doc["clockFormat"].as<const char *>());
+  }
+
   if (isSyncReply) {
     handleSyncReply(doc.as<JsonObjectConst>());
     return;
@@ -367,6 +372,7 @@ void Engine::applyRoleCues(JsonArrayConst roles) {
     v.id = r["id"] | "";
     v.name = r["name"] | "";
     v.personName = r["personName"] | "";
+    v.clockFormat = pagersync::parseClockFormat(r["clockFormat"].is<const char *>() ? r["clockFormat"].as<const char *>() : nullptr);
     v.assignedNoteCategoryCount = 0;
     if (r["assignedNoteCategories"].is<JsonArrayConst>()) {
       for (JsonVariantConst c : r["assignedNoteCategories"].as<JsonArrayConst>()) {

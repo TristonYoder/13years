@@ -153,6 +153,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             ZStack(alignment: .leading) {
                 ProducerClockText(
                     info: presentation.producerClock,
+                    format: presentation.clockFormat,
                     font: .inter(size: m.fontSize, weight: .black),
                     color: primary
                 )

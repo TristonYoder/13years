@@ -7,6 +7,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
     public let id: String
     public var name: String
     public var personName: String?
+    public var clockFormat: ClockFormat?
     public var state: CueState
     public var plotipharRoleId: String?
     public var lastUpdated: Date
@@ -17,6 +18,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         id: String = UUID().uuidString,
         name: String,
         personName: String? = nil,
+        clockFormat: ClockFormat? = nil,
         state: CueState = .off,
         plotipharRoleId: String? = nil,
         lastUpdated: Date = Date(),
@@ -25,6 +27,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.id = id
         self.name = name
         self.personName = personName
+        self.clockFormat = clockFormat
         self.state = state
         self.plotipharRoleId = plotipharRoleId
         self.lastUpdated = lastUpdated

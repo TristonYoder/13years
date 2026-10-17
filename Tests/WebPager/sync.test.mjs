@@ -11,7 +11,7 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
-  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
+  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
@@ -1161,6 +1161,23 @@ test("formatProducerClock shifts by offset and renders in the producer UTC offse
   assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-GB"), "0:07:08");
   assert.equal(core.formatProducerClock(base, 0, 19800, "en-GB"), "20:37:08");
   assert.match(core.formatProducerClock(base, 0, 0, "en-US"), /^3:07:08\s?PM$/);
+});
+
+test("formatProducerClock honours the clock format", () => {
+  const base = Date.UTC(2026, 4, 3, 15, 7, 8);
+  assert.equal(core.formatProducerClock(base, 0, 0, "en-US", "twentyFourHour"), "15:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-US", "twentyFourHour"), "00:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-GB", "twentyFourHour"), "00:07:08");
+  assert.match(core.formatProducerClock(base, 0, 0, "en-GB", "twelveHour"), /^3:07:08\s?pm$/i);
+  assert.match(core.formatProducerClock(base, 0, 9 * 3600, "en-US", "twelveHour"), /^12:07:08\s?AM$/);
+  assert.match(core.formatProducerClock(base, 0, 0, "en-US", null), /^3:07:08\s?PM$/);
+  assert.equal(core.formatProducerClock(base, 0, 0, "en-GB", undefined), "15:07:08");
+});
+
+test("formatLocalTime honours the clock format", () => {
+  const date = new Date(Date.UTC(2026, 4, 3, 15, 7));
+  assert.equal(core.formatLocalTime(date, "en-US", "UTC", "twentyFourHour"), "15:07");
+  assert.match(core.formatLocalTime(date, "en-GB", "UTC", "twelveHour"), /^3:07\s?pm$/i);
 });
 
 test("formatProducerClock tolerates a missing offset", () => {

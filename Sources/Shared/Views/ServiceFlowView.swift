@@ -197,7 +197,7 @@ public struct ServiceFlowView: View {
                     }
                 )) {
                     ForEach(engine.eventTimes) { time in
-                        Text(time.displayName).tag(time.id)
+                        Text(time.displayName(engine.clockFormat)).tag(time.id)
                     }
                 } label: {
                     Label("Live Event Time", systemImage: "clock")
