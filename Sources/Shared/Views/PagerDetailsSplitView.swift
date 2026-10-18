@@ -73,7 +73,7 @@ struct PagerItemDetailsPanel: View {
     #endif
 
     static let scaleKey = "pagerDetailsTextScale"
-    static let scaleRange: ClosedRange<Double> = 0.6...2.5
+    static let scaleRange: ClosedRange<Double> = 0.25...2.5
     static let scaleStep = 0.15
 
     static func clampedScale(_ value: Double) -> Double {
