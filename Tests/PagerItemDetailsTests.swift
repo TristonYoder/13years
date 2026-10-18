@@ -27,6 +27,9 @@ final class PagerItemDetailsFetchTests: XCTestCase {
     func testURLEscapesItemIdsAndBracketsIPv6() {
         XCTAssertEqual(PagerItemDetailsFetch.url(host: "producer.local", port: 80, itemId: "a/b c?d")?.absoluteString, "http://producer.local:80/v1/plan/items/a%2Fb%20c%3Fd")
         XCTAssertEqual(PagerItemDetailsFetch.url(host: "fe80::1", port: 13380, itemId: "x")?.absoluteString, "http://[fe80::1]:13380/v1/plan/items/x")
+        XCTAssertEqual(PagerItemDetailsFetch.url(host: "10.150.11.171%en0", port: 13390, itemId: "x")?.absoluteString, "http://10.150.11.171:13390/v1/plan/items/x")
+        XCTAssertEqual(PagerItemDetailsFetch.url(host: "fe80::1%en0", port: 13390, itemId: "x")?.absoluteString, "http://[fe80::1%25en0]:13390/v1/plan/items/x")
+        XCTAssertEqual(PagerItemDetailsFetch.url(host: "[fe80::1]", port: 13390, itemId: "x")?.absoluteString, "http://[fe80::1]:13390/v1/plan/items/x")
     }
 
     func testURLRejectsBadInputs() {

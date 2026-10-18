@@ -9,11 +9,22 @@ public enum PagerItemDetailsFetch {
     public static let retryInterval: TimeInterval = 5
 
     public static func url(host: String, port: Int, itemId: String) -> URL? {
-        let trimmed = host.trimmingCharacters(in: .whitespaces)
+        var trimmed = host.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("["), trimmed.hasSuffix("]") { trimmed = String(trimmed.dropFirst().dropLast()) }
+        var zone: String?
+        if let percent = trimmed.firstIndex(of: "%") {
+            zone = String(trimmed[trimmed.index(after: percent)...])
+            trimmed = String(trimmed[..<percent])
+        }
         guard !trimmed.isEmpty, (1...65535).contains(port), !itemId.isEmpty else { return nil }
         var components = URLComponents()
         components.scheme = "http"
-        components.host = trimmed.contains(":") && !trimmed.hasPrefix("[") ? "[" + trimmed + "]" : trimmed
+        if trimmed.contains(":") {
+            let scoped = zone.map { trimmed + "%25" + $0 } ?? trimmed
+            components.percentEncodedHost = "[" + scoped + "]"
+        } else {
+            components.host = trimmed
+        }
         components.port = port
         components.percentEncodedPath = "/v1/plan/items/" + encodePathSegment(itemId)
         return components.url
