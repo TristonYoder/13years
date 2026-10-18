@@ -89,6 +89,12 @@ struct RunSheetTableView: View {
 
     private static let minimumColumnWidth: CGFloat = 24
 
+    private static var verticalScrollerWidth: CGFloat {
+        NSScroller.preferredScrollerStyle == .legacy
+            ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+            : 0
+    }
+
     private func userWidth(_ column: RunSheetTableColumn) -> CGFloat? {
         if let drag = columnDrag, drag.id == column.id { return drag.width }
         return engine.runSheetColumnWidths[column.id].map { max(Self.minimumColumnWidth, CGFloat($0)) }
@@ -119,7 +125,8 @@ struct RunSheetTableView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let widths = resolvedWidths(for: geometry.size.width)
+            let viewportWidth = max(0, geometry.size.width - Self.verticalScrollerWidth)
+            let widths = resolvedWidths(for: viewportWidth)
             let rowWidth = self.rowWidth(widths)
             ScrollViewReader { proxy in
                 ScrollView([.horizontal, .vertical]) {
@@ -136,9 +143,9 @@ struct RunSheetTableView: View {
                         }
                     }
                     .padding(.bottom, Self.outerPadding)
-                    .frame(minWidth: geometry.size.width, alignment: .leading)
+                    .frame(minWidth: viewportWidth, alignment: .leading)
                 }
-                .scrollIndicators(rowWidth + 2 * Self.outerPadding > geometry.size.width + 0.5 ? .visible : .hidden, axes: .horizontal)
+                .scrollIndicators(rowWidth + 2 * Self.outerPadding > viewportWidth + 0.5 ? .visible : .hidden, axes: .horizontal)
                 .scrollIndicators(.automatic, axes: .vertical)
                 .focusable()
                 .focused($isFocused)
