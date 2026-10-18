@@ -138,7 +138,8 @@ struct RunSheetTableView: View {
                     .padding(.bottom, Self.outerPadding)
                     .frame(minWidth: geometry.size.width, alignment: .leading)
                 }
-                .scrollIndicators(.visible)
+                .scrollIndicators(rowWidth + 2 * Self.outerPadding > geometry.size.width + 0.5 ? .visible : .hidden, axes: .horizontal)
+                .scrollIndicators(.automatic, axes: .vertical)
                 .focusable()
                 .focused($isFocused)
                 .focusEffectDisabled()
