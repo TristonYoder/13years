@@ -136,10 +136,18 @@ public struct HostPagerView: View {
                 detailsVisible: disconnectPhase != .extended,
                 fraction: $detailsSplit
             ) { pagerSize in
-                landscapePager(size: pagerSize)
+                splitPager(size: pagerSize)
             }
         } else {
             landscapePager(size: size)
+        }
+    }
+
+    @ViewBuilder
+    private func splitPager(size: CGSize) -> some View {
+        switch PagerLayoutChoice.resolve(layoutRaw).splitPagerLayout(for: size) {
+        case .portrait: portraitView(size: size)
+        case .landscape, .lowerThird: landscapePager(size: size)
         }
     }
 

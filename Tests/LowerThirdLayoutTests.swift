@@ -23,6 +23,15 @@ final class LowerThirdLayoutTests: XCTestCase {
         XCTAssertEqual(PagerLayoutChoice.resolve("portrait"), .portrait)
     }
 
+    func testSplitPagerFollowsItsOwnShape() {
+        let tallPagerSide = CGSize(width: 600, height: 900)
+        let widePagerSide = CGSize(width: 1200, height: 700)
+        XCTAssertEqual(PagerLayoutChoice.automatic.splitPagerLayout(for: tallPagerSide), .portrait)
+        XCTAssertEqual(PagerLayoutChoice.automatic.splitPagerLayout(for: widePagerSide), .landscape)
+        XCTAssertEqual(PagerLayoutChoice.landscape.splitPagerLayout(for: tallPagerSide), .landscape)
+        XCTAssertEqual(PagerLayoutChoice.portrait.splitPagerLayout(for: widePagerSide), .portrait)
+    }
+
     func testExplicitLayoutsIgnoreWindowShape() {
         let tall = CGSize(width: 390, height: 844)
         let wide = CGSize(width: 1920, height: 260)

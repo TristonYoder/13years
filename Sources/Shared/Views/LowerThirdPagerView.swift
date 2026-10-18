@@ -38,6 +38,14 @@ public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
         layout(for: size) == .lowerThird
     }
 
+    public func splitPagerLayout(for size: CGSize) -> PagerResolvedLayout {
+        switch self {
+        case .landscape, .lowerThird: return .landscape
+        case .portrait: return .portrait
+        case .automatic: return PortraitMetrics.isPortrait(size) ? .portrait : .landscape
+        }
+    }
+
     public func layout(for size: CGSize) -> PagerResolvedLayout {
         switch self {
         case .lowerThird: return .lowerThird
