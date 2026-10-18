@@ -11,7 +11,7 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "decodeDetailsEntities", "safeDetailsLink", "parseDetailsColor", "detailsContrast", "resolveDetailsColors",
   "parseDetailsHTML", "renderDetailsInto", "detailsSourceFor", "clampSplit", "splitFractionForX", "splitAllowedFor",
-  "splitPagerWidth", "pagerFieldsForRole", "itemDetailSegments", "itemDetailsLine",
+  "splitPagerWidth", "clampDetailsScale", "DETAILS_SCALE_MIN", "DETAILS_SCALE_MAX", "pagerFieldsForRole", "itemDetailSegments", "itemDetailsLine",
   "SPLIT_DEFAULT", "SPLIT_MIN", "SPLIT_MAX", "DETAILS_MAX_CHARS", "DETAILS_MAX_NODES", "DETAILS_MAX_DEPTH",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl, Date, RegExp, parseInt, isFinite });
@@ -226,4 +226,12 @@ test("the split only applies to genuinely wide viewports", () => {
   assert.equal(core.splitAllowedFor(900, 800), false);
   assert.equal(core.splitAllowedFor(800, 1200), false);
   assert.equal(core.splitAllowedFor(100, 0), false);
+});
+
+test("details text scale clamps and rounds", () => {
+  assert.equal(core.clampDetailsScale(1), 1);
+  assert.equal(core.clampDetailsScale(9), core.DETAILS_SCALE_MAX);
+  assert.equal(core.clampDetailsScale(0.1), core.DETAILS_SCALE_MIN);
+  assert.equal(core.clampDetailsScale("nope"), 1);
+  assert.equal(core.clampDetailsScale(1 + 0.15 + 0.15), 1.3);
 });

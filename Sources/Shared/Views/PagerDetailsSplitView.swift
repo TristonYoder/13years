@@ -67,29 +67,75 @@ struct PagerItemDetailsPanel: View {
     let itemId: String
     let metrics: PagerDetailsMetrics
 
+    @AppStorage(Self.scaleKey) private var textScale: Double = 1
+    #if !os(tvOS)
+    @State private var pinchStart: Double?
+    #endif
+
+    static let scaleKey = "pagerDetailsTextScale"
+    static let scaleRange: ClosedRange<Double> = 0.6...2.5
+    static let scaleStep = 0.15
+
+    static func clampedScale(_ value: Double) -> Double {
+        min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
+    }
+
     private var ground: HTMLColor {
         HTMLColor(AppPalette.pagerPanel) ?? HTMLColor(red: 0, green: 0, blue: 0)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.margin * 0.4) {
-            Text("ITEM DETAILS")
-                .font(.system(size: metrics.captionFontSize, weight: .heavy))
-                .tracking(2)
-                .foregroundColor(AppPalette.pagerClock.opacity(0.5))
+            HStack(spacing: metrics.margin * 0.4) {
+                Text("ITEM DETAILS")
+                    .font(.system(size: metrics.captionFontSize, weight: .heavy))
+                    .tracking(2)
+                    .foregroundColor(AppPalette.pagerClock.opacity(0.5))
+                Spacer(minLength: 0)
+                scaleButton("textformat.size.smaller", label: "Smaller text", delta: -Self.scaleStep)
+                scaleButton("textformat.size.larger", label: "Larger text", delta: Self.scaleStep)
+            }
             ScrollView {
-                HTMLRichText(html: html, baseSize: metrics.bodyFontSize, ground: ground, isSelectable: false)
+                HTMLRichText(html: html, baseSize: metrics.bodyFontSize * CGFloat(Self.clampedScale(textScale)), ground: ground, isSelectable: false)
                     .foregroundColor(AppPalette.pagerClock)
             }
             .id(itemId)
             #if os(tvOS)
             .focusable()
+            #else
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        let start = pinchStart ?? textScale
+                        pinchStart = start
+                        textScale = Self.clampedScale(start * Double(value.magnification))
+                    }
+                    .onEnded { _ in pinchStart = nil }
+            )
             #endif
         }
         .padding(metrics.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppPalette.pagerPanel)
         .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
+    }
+}
+
+extension PagerItemDetailsPanel {
+    private func scaleButton(_ symbol: String, label: String, delta: Double) -> some View {
+        let next = Self.clampedScale(textScale + delta)
+        return Button {
+            textScale = next
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: metrics.captionFontSize * 1.3, weight: .semibold))
+                .foregroundColor(AppPalette.pagerClock.opacity(next == textScale ? 0.25 : 0.7))
+                .frame(minWidth: metrics.captionFontSize * 2.2, minHeight: metrics.captionFontSize * 2.2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(next == textScale)
+        .accessibilityLabel(label)
     }
 }
 

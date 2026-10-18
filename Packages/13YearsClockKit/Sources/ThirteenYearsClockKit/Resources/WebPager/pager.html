@@ -869,8 +869,28 @@
     color: var(--pal-pager-clock);
     overflow: hidden;
   }
-  #lsDetailsTitle {
+  #lsDetailsHeader {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .ls-details-size {
+    appearance: none;
+    border: 0;
+    background: var(--pal-glass-faint);
+    color: inherit;
+    font: inherit;
+    font-size: max(11px, calc(var(--du) * 0.022));
+    font-weight: 700;
+    padding: 0.2em 0.55em;
+    border-radius: 0.4em;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  .ls-details-size:disabled { opacity: 0.25; cursor: default; }
+  #lsDetailsTitle {
+    flex: 1 1 auto;
     font-size: max(11px, calc(var(--du) * 0.02));
     font-weight: 800;
     letter-spacing: 0.15em;
@@ -881,7 +901,7 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    font-size: max(14px, calc(var(--du) * 0.03));
+    font-size: calc(max(14px, calc(var(--du) * 0.03)) * var(--details-scale, 1));
     line-height: 1.35;
     overflow-wrap: anywhere;
     outline: none;
@@ -1089,7 +1109,11 @@
     </div>
     <div id="lsDivider" class="hidden" role="separator" aria-orientation="vertical" aria-label="Item details divider" aria-valuemin="40" aria-valuemax="80" aria-valuenow="67" tabindex="0" title="Drag to resize. Double-click or press and hold to reset."></div>
     <aside id="lsDetails" class="hidden" aria-label="Item details">
-      <div id="lsDetailsTitle">ITEM DETAILS</div>
+      <div id="lsDetailsHeader">
+        <div id="lsDetailsTitle">ITEM DETAILS</div>
+        <button type="button" id="lsDetailsSmaller" class="ls-details-size" aria-label="Smaller text" title="Smaller text">A&#8722;</button>
+        <button type="button" id="lsDetailsLarger" class="ls-details-size" aria-label="Larger text" title="Larger text">A+</button>
+      </div>
       <div id="lsDetailsBody" tabindex="0"></div>
     </aside>
     </div>
@@ -2165,6 +2189,9 @@ const DETAILS_MAX_NODES = 6000;
 const DETAILS_MAX_DEPTH = 24;
 const DETAILS_MIN_CONTRAST = 2.5;
 const SPLIT_DEFAULT = 2 / 3;
+const DETAILS_SCALE_MIN = 0.6;
+const DETAILS_SCALE_MAX = 2.5;
+const DETAILS_SCALE_STEP = 0.15;
 const SPLIT_MIN = 0.4;
 const SPLIT_MAX = 0.8;
 const SPLIT_NUDGE = 0.05;
@@ -2436,6 +2463,12 @@ function detailsSourceFor(item, fields) {
   return typeof details.description === "string" ? details.description : "";
 }
 
+function clampDetailsScale(value) {
+  const number = Number(value);
+  if (!isFinite(number) || number <= 0) return 1;
+  return Math.round(Math.min(DETAILS_SCALE_MAX, Math.max(DETAILS_SCALE_MIN, number)) * 100) / 100;
+}
+
 function clampSplit(value) {
   const number = Number(value);
   if (!isFinite(number)) return SPLIT_DEFAULT;
@@ -2516,6 +2549,8 @@ const el = {
   lsDivider: document.getElementById("lsDivider"),
   lsDetails: document.getElementById("lsDetails"),
   lsDetailsBody: document.getElementById("lsDetailsBody"),
+  lsDetailsSmaller: document.getElementById("lsDetailsSmaller"),
+  lsDetailsLarger: document.getElementById("lsDetailsLarger"),
   lsMessage: document.getElementById("lsMessage"),
   lsMessageText: document.getElementById("lsMessageText"),
   lsMessageFrom: document.getElementById("lsMessageFrom"),
@@ -2609,6 +2644,28 @@ function storeSplit(value) {
 }
 
 splitFraction = clampSplit(readStoredSplit());
+
+const DETAILS_SCALE_KEY = "pagerDetailsTextScale";
+let detailsScale = 1;
+
+function applyDetailsScale(value, persist) {
+  detailsScale = clampDetailsScale(value);
+  const style = el.lsDetailsBody.style;
+  if (style && typeof style.setProperty === "function") style.setProperty("--details-scale", String(detailsScale));
+  el.lsDetailsSmaller.disabled = detailsScale <= DETAILS_SCALE_MIN;
+  el.lsDetailsLarger.disabled = detailsScale >= DETAILS_SCALE_MAX;
+  if (persist) {
+    try { localStorage.setItem(DETAILS_SCALE_KEY, String(detailsScale)); } catch (_) {  }
+  }
+}
+
+(function setupDetailsScale() {
+  let stored = 1;
+  try { stored = Number(localStorage.getItem(DETAILS_SCALE_KEY) || 1); } catch (_) {  }
+  applyDetailsScale(stored, false);
+  el.lsDetailsSmaller.addEventListener("click", () => applyDetailsScale(detailsScale - DETAILS_SCALE_STEP, true));
+  el.lsDetailsLarger.addEventListener("click", () => applyDetailsScale(detailsScale + DETAILS_SCALE_STEP, true));
+})();
 
 function landscapeUnit() {
   return Math.min(splitActive ? splitPagerPx : window.innerWidth, window.innerHeight);
