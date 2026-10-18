@@ -829,6 +829,12 @@
     grid-template-columns: 2fr var(--lsdiv) 1fr;
     background: var(--pal-pager-ground);
   }
+  #lsSplit.split #standard {
+    --pw: 66vw;
+    --u: min(var(--pw), 100vh);
+    min-width: 0;
+    grid-column: 1;
+  }
   #lsSplit.split #landscape {
     --pw: 66vw;
     --u: min(var(--pw), 100vh);
@@ -2488,6 +2494,14 @@ function splitAllowedFor(width, height) {
 function splitPagerWidth(containerWidth, dividerWidth, fraction) {
   return Math.max(0, (containerWidth - dividerWidth) * clampSplit(fraction));
 }
+
+function splitPagerLayout(pagerWidth, height, param) {
+  const value = String(param || "auto").toLowerCase().replace(/[^a-z]/g, "");
+  if (value === "lowerthird" || value === "third") return "lowerthird";
+  if (value === "landscape") return "landscape";
+  if (value === "standard" || value === "full" || value === "portrait") return "standard";
+  return height > 0 && pagerWidth > height ? "landscape" : "standard";
+}
 </script>
 
 <script>
@@ -2667,8 +2681,35 @@ function applyDetailsScale(value, persist) {
   el.lsDetailsLarger.addEventListener("click", () => applyDetailsScale(detailsScale + DETAILS_SCALE_STEP, true));
 })();
 
+function pagerWidthPx() {
+  return splitActive && splitPagerPx > 0 ? splitPagerPx : window.innerWidth;
+}
+
 function landscapeUnit() {
-  return Math.min(splitActive ? splitPagerPx : window.innerWidth, window.innerHeight);
+  return Math.min(pagerWidthPx(), window.innerHeight);
+}
+
+function windowLayout() {
+  return layoutFor(window.innerWidth, window.innerHeight, LAYOUT_PARAM);
+}
+
+function effectiveLayout() {
+  const base = windowLayout();
+  if (base === "landscape" && splitActive && splitPagerPx > 0) {
+    const inner = splitPagerLayout(splitPagerPx, window.innerHeight, LAYOUT_PARAM);
+    if (inner !== "lowerthird") return inner;
+  }
+  return base;
+}
+
+function refitPager() {
+  if (root.dataset.layout === "standard") {
+    lastPortraitKey = "";
+    fitPortrait(!el.ptMessage.classList.contains("hidden"));
+  } else {
+    lastFitKey = "";
+    fitLandscapeBottom(el.lsBottom.dataset.mode);
+  }
 }
 
 function applySplitGeometry() {
@@ -2676,6 +2717,7 @@ function applySplitGeometry() {
   splitPagerPx = splitPagerWidth(el.lsSplit.clientWidth, SPLIT_DIVIDER_PX, splitFraction);
   el.lsSplit.style.gridTemplateColumns = splitPagerPx + "px " + SPLIT_DIVIDER_PX + "px minmax(0, 1fr)";
   el.landscape.style.setProperty("--pw", splitPagerPx + "px");
+  el.standard.style.setProperty("--pw", splitPagerPx + "px");
   el.lsDivider.setAttribute("aria-valuenow", String(Math.round(splitFraction * 100)));
 }
 
@@ -2688,10 +2730,12 @@ function setSplitActive(on) {
     if (!on) {
       el.lsSplit.style.gridTemplateColumns = "";
       el.landscape.style.removeProperty("--pw");
+      el.standard.style.removeProperty("--pw");
       splitPagerPx = 0;
       lastDetailsSignature = "";
     }
     lastFitKey = "";
+    lastPortraitKey = "";
   }
   applySplitGeometry();
 }
@@ -2699,8 +2743,8 @@ function setSplitActive(on) {
 function setSplitFraction(value, persist) {
   splitFraction = clampSplit(value);
   applySplitGeometry();
-  lastFitKey = "";
-  fitLandscapeBottom(el.lsBottom.dataset.mode);
+  if (effectiveLayout() !== root.dataset.layout) applyLayout();
+  else refitPager();
   if (persist) storeSplit(splitFraction);
 }
 
@@ -2710,19 +2754,24 @@ function detailsGround() {
 
 function renderDetailsPane() {
   const item = activeItem();
-  const eligible = root.dataset.layout === "landscape" && splitAllowedFor(window.innerWidth, window.innerHeight);
+  const eligible = windowLayout() === "landscape" && splitAllowedFor(window.innerWidth, window.innerHeight);
   const source = eligible ? detailsSourceFor(item, pagerFieldsForRole(activeRole())) : "";
   setSplitActive(source !== "");
-  if (source === "") return;
+  if (effectiveLayout() !== root.dataset.layout) {
+    applyLayout();
+    return true;
+  }
+  if (source === "") return false;
   const itemId = item ? String(item.id) : "";
   const signature = itemId + "\u0001" + source;
-  if (signature === lastDetailsSignature) return;
+  if (signature === lastDetailsSignature) return false;
   lastDetailsSignature = signature;
   renderDetailsInto(el.lsDetailsBody, source, document, detailsGround());
   if (itemId !== lastDetailsItemId) {
     lastDetailsItemId = itemId;
     el.lsDetailsBody.scrollTop = 0;
   }
+  return false;
 }
 
 (function wireDivider() {
@@ -2808,15 +2857,27 @@ function placeShared(layout) {
   if (root.dataset.icons !== "none" && el.iconRow.parentNode !== home) home.append(el.iconRow);
 }
 
+const standardHome = el.standard.parentNode;
+const standardAnchor = el.standard.nextSibling;
+
 function applyLayout() {
-  const layout = layoutFor(window.innerWidth, window.innerHeight, LAYOUT_PARAM);
-  if (root.dataset.layout !== layout) lastLtKey = "";
+  if (windowLayout() !== "landscape") setSplitActive(false);
+  else if (splitActive) applySplitGeometry();
+  const layout = effectiveLayout();
+  const standardParent = layout === "standard" && splitActive ? el.lsSplit : standardHome;
+  if (el.standard.parentNode !== standardParent) {
+    standardParent.insertBefore(el.standard, standardParent === el.lsSplit ? el.landscape : standardAnchor);
+  }
+  if (root.dataset.layout !== layout) {
+    lastLtKey = "";
+    lastFitKey = "";
+    lastPortraitKey = "";
+  }
   root.dataset.layout = layout;
   placeShared(layout);
   el.standard.classList.toggle("hidden", layout !== "standard");
   el.lowerthird.classList.toggle("hidden", layout !== "lowerthird");
   el.landscape.classList.toggle("hidden", layout !== "landscape");
-  if (layout !== "landscape") setSplitActive(false);
   tickLocalTime();
   if (snapshot) render();
 }
@@ -3058,7 +3119,6 @@ function renderSlot(badge, slot) {
 }
 
 function renderLandscape() {
-  renderDetailsPane();
   const item = activeItem();
 
   renderSlot(el.lsBadge, el.lsSlot);
@@ -3138,9 +3198,10 @@ function renderPortrait() {
 }
 
 function fitPortrait(hasMessage) {
-  const u = Math.min(window.innerWidth, window.innerHeight);
+  const pagerWidth = pagerWidthPx();
+  const u = Math.min(pagerWidth, window.innerHeight);
   const key = [
-    u, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
+    u, pagerWidth, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
     el.ptNotes.dataset.signature, el.ptDetails.textContent, el.ptNextDetails.textContent, el.ptNext.classList.contains("hidden") ? 0 : 1,
     el.ptNextNotes.dataset.signature, el.ptNextTitle.textContent, el.ptNextLength.textContent,
     el.ptMessageText.textContent, el.ptMessageFrom.textContent,
@@ -3188,7 +3249,7 @@ function fitPortrait(hasMessage) {
 
 function fitLandscapeBottom(mode) {
   const u = landscapeUnit();
-  const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextDetails.textContent, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
+  const key = [mode, u, pagerWidthPx(), el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextDetails.textContent, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
   if (key === lastFitKey) return;
   lastFitKey = key;
   if (mode === "message") {
@@ -3347,6 +3408,7 @@ function render() {
   renderRoles();
   updateSendEnabled();
   renderChat();
+  if (root.dataset.layout !== "lowerthird" && renderDetailsPane()) return;
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
   } else if (root.dataset.layout === "landscape") {
