@@ -298,10 +298,10 @@ public final class CueEngine: ObservableObject {
         self.clockFormat = UserDefaults.standard.string(forKey: Self.clockFormatDefaultsKey)
             .flatMap(ClockFormat.init(rawValue:)) ?? ClockFormat.systemDefault
 
-        self.pcoOAuthTokens = KeychainStore.codable(OAuthTokens.self, forKey: Self.pcoTokensKeychainKey)
+        self.pcoOAuthTokens = isMasterServer ? KeychainStore.codable(OAuthTokens.self, forKey: Self.pcoTokensKeychainKey) : nil
         self.pcoUserName = UserDefaults.standard.string(forKey: Self.pcoUserNameDefaultsKey)
         self.isPCOConnected = pcoOAuthTokens != nil
-        KeychainStore.setString(nil, forKey: "pcoSecret")
+        if isMasterServer { KeychainStore.setString(nil, forKey: "pcoSecret") }
         self.plotipharRelayHost = UserDefaults.standard.string(forKey: Self.relayHostDefaultsKey).flatMap(RelayHostPolicy.normalized) ?? RelayHostPolicy.defaultHost
         self.proxyToken = KeychainStore.string(forKey: Self.proxyTokenKeychainKey) ?? ""
         self.isProxyEnabled = UserDefaults.standard.object(forKey: Self.proxyEnabledDefaultsKey) != nil

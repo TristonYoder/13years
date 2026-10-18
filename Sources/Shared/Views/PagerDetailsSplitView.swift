@@ -118,6 +118,9 @@ struct PagerItemDetailsPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppPalette.pagerPanel)
         .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
+        #if os(macOS)
+        .modifier(WindowDragExclusion())
+        #endif
     }
 }
 
@@ -208,6 +211,9 @@ struct PagerDetailsSplitView<Pager: View>: View {
                     .onEnded { _ in fraction = PagerDetailsSplit.defaultFraction }
             )
             .onHover { isHoveringDivider = $0 }
+            #if os(macOS)
+            .modifier(WindowDragExclusion())
+            #endif
             .accessibilityElement()
             .accessibilityLabel("Item details divider")
             .accessibilityValue("\(Int((effectiveFraction * 100).rounded())) percent pager")
@@ -221,4 +227,23 @@ struct PagerDetailsSplitView<Pager: View>: View {
         #endif
     }
 }
+#if os(macOS)
+struct WindowDragExclusion: ViewModifier {
+    @State private var heldWindow: NSWindow?
+
+    func body(content: Content) -> some View {
+        content.onHover { inside in
+            if inside {
+                let number = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+                guard let window = NSApp.window(withWindowNumber: number), window.isMovableByWindowBackground else { return }
+                window.isMovableByWindowBackground = false
+                heldWindow = window
+            } else if let window = heldWindow {
+                window.isMovableByWindowBackground = true
+                heldWindow = nil
+            }
+        }
+    }
+}
+#endif
 #endif
