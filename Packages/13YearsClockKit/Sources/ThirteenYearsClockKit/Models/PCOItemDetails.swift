@@ -267,6 +267,15 @@ public struct PCOItemLeader: Codable, Equatable, Hashable, Sendable, Identifiabl
         case personId, teamPositionId, name, firstName, photoThumbnailURL
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(personId, forKey: .personId)
+        try container.encodeIfPresent(teamPositionId, forKey: .teamPositionId)
+        if !name.isEmpty { try container.encode(name, forKey: .name) }
+        try container.encode(firstName, forKey: .firstName)
+        try container.encodeIfPresent(photoThumbnailURL, forKey: .photoThumbnailURL)
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         personId = try container.decodeIfPresent(String.self, forKey: .personId)
@@ -411,6 +420,10 @@ public struct PCOItemDetails: Codable, Equatable, Hashable, Sendable {
         }
         if fields.contains(.mediaType), let media {
             slim.media = PCOMediaInfo(id: media.id, mediaType: media.mediaType)
+            hasContent = true
+        }
+        if fields.contains(.leader), !leaders.isEmpty {
+            slim.leaders = leaders.map { PCOItemLeader(name: "", firstName: $0.firstName) }
             hasContent = true
         }
         return hasContent ? slim : nil

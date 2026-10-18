@@ -124,7 +124,7 @@ public final class CueEngine: ObservableObject {
 
     public var displayPagerFields: [PagerItemField] {
         let fields = roles.first(where: { selectedRoleIds.contains($0.id) && $0.pagerFields != nil })?.pagerFields
-        return PagerItemField.normalized(fields ?? [])
+        return PagerItemField.ordered(fields ?? [])
     }
 
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
@@ -1890,26 +1890,9 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setNoteCategory(forRoleId roleId: String, category: String, isOn: Bool) {
-        if isRemoteMirror {
-            guard let role = roles.first(where: { $0.id == roleId }) else { return }
-            var categories = role.assignedNoteCategories
-            if isOn {
-                if !categories.contains(category) { categories.append(category) }
-            } else {
-                categories.removeAll { $0 == category }
-            }
-            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["assignedNoteCategories": categories])))
-            return
-        }
-        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
-        if isOn {
-            if !roles[index].assignedNoteCategories.contains(category) {
-                roles[index].assignedNoteCategories.append(category)
-            }
-        } else {
-            roles[index].assignedNoteCategories.removeAll { $0 == category }
-        }
-        broadcastState()
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        let items = role.pagerItems ?? []
+        setPagerItems(forRoleId: roleId, isOn ? RolePagerItem.inserting(.note(category), into: items) : RolePagerItem.removing(.note(category), from: items))
     }
 
     public func setPersonName(forRoleId roleId: String, personName: String?) {
@@ -1933,22 +1916,30 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setPagerFields(forRoleId roleId: String, _ fields: [PagerItemField]?) {
-        let normalized = fields.map(PagerItemField.normalized)
-        if isRemoteMirror {
-            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["pagerFields": (normalized ?? []).map(\.rawValue)])))
-            return
-        }
-        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
-        roles[index].pagerFields = normalized
-        broadcastState()
-        if activeTimerItem != nil { broadcastTimerUpdate() }
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        var updated = role
+        updated.pagerFields = fields
+        if fields != nil, updated.pagerItems == nil { updated.pagerItems = [] }
+        setPagerItems(forRoleId: roleId, updated.pagerItems)
     }
 
     public func setPagerField(forRoleId roleId: String, field: PagerItemField, isOn: Bool) {
         guard let role = roles.first(where: { $0.id == roleId }) else { return }
-        var fields = Set(role.pagerFields ?? [])
-        if isOn { fields.insert(field) } else { fields.remove(field) }
-        setPagerFields(forRoleId: roleId, PagerItemField.normalized(Array(fields)))
+        let items = role.pagerItems ?? []
+        setPagerItems(forRoleId: roleId, isOn ? RolePagerItem.inserting(.field(field), into: items) : RolePagerItem.removing(.field(field), from: items))
+    }
+
+    public func setPagerItems(forRoleId roleId: String, _ items: [RolePagerItem]?) {
+        let normalized = items.map(RolePagerItem.ordered)
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["pagerItems": (normalized ?? []).map(\.token)])))
+            return
+        }
+        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        guard roles[index].pagerItems != normalized else { return }
+        roles[index].pagerItems = normalized
+        broadcastState()
+        if activeTimerItem != nil { broadcastTimerUpdate() }
     }
 
     @discardableResult

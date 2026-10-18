@@ -71,12 +71,12 @@ public struct SettingsView: View {
 
             Section {
                 Button(action: { showingRoleNotes = true }) {
-                    Label("Roles & Notes", systemImage: "person.text.rectangle")
+                    Label("Roles & Pager Fields", systemImage: "person.text.rectangle")
                 }
             } header: {
                 Text("Roles")
             } footer: {
-                Text("Add, rename, or remove roles, and choose which note categories each one sees on its pager.")
+                Text("Add, rename, or remove roles, and drag the item fields and note categories each one sees onto its pager, in the order you want them.")
             }
 
             Section {

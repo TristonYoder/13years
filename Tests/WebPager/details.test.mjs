@@ -58,7 +58,7 @@ function text(root) {
 }
 
 test("itemDetails is a selectable field but never part of the line", () => {
-  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["itemDetails", "key"] })), ["key", "itemDetails"]);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["itemDetails", "key"] })), ["itemDetails", "key"]);
   const item = { itemType: "Song", details: { keyName: "G", htmlDetails: "<p>x</p>" } };
   assert.equal(core.itemDetailsLine(item, ["key", "itemDetails"], null, null, "twentyFourHour"), "G");
   assert.equal(core.itemDetailsLine(item, ["itemDetails"], null, null, "twentyFourHour"), "");

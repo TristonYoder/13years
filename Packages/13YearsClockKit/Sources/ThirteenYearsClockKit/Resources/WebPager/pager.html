@@ -1437,20 +1437,45 @@ function nextItemFor(snap) {
   return null;
 }
 
+function roleItemTokens(role, prefix) {
+  if (!role || !Array.isArray(role.pagerItems)) return null;
+  const seen = {};
+  const out = [];
+  for (const token of role.pagerItems) {
+    if (typeof token !== "string" || token.indexOf(prefix) !== 0) continue;
+    const name = token.slice(prefix.length);
+    if (!name || seen[name]) continue;
+    seen[name] = true;
+    out.push(name);
+  }
+  return out;
+}
+
+function noteCategoriesForRole(role) {
+  const ordered = roleItemTokens(role, "note:");
+  if (ordered) return ordered;
+  return (role && Array.isArray(role.assignedNoteCategories)) ? role.assignedNoteCategories : [];
+}
+
 function notesForRole(item, role) {
-  const categories = (role && role.assignedNoteCategories) || [];
+  const categories = noteCategoriesForRole(role);
   if (!item || !item.notes) return [];
   return categories
     .map((category) => ({ category, text: item.notes[category] }))
     .filter((note) => note.text);
 }
 
-const PAGER_FIELD_ORDER = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "itemDetails"];
+const PAGER_FIELD_NAMES = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "leader", "type", "length", "itemDetails"];
 const PAGER_DETAILS_SEPARATOR = " \u00b7 ";
 
 function pagerFieldsForRole(role) {
-  const chosen = role && Array.isArray(role.pagerFields) ? role.pagerFields : [];
-  return PAGER_FIELD_ORDER.filter((field) => chosen.indexOf(field) !== -1);
+  const chosen = roleItemTokens(role, "field:") || (role && Array.isArray(role.pagerFields) ? role.pagerFields : []);
+  const seen = {};
+  return chosen.filter((field) => {
+    if (PAGER_FIELD_NAMES.indexOf(field) === -1 || seen[field]) return false;
+    seen[field] = true;
+    return true;
+  });
 }
 
 function detailText(value) {
@@ -1464,6 +1489,27 @@ function detailBpmText(bpm) {
 
 function titleCaseWords(text) {
   return String(text).replace(/_/g, " ").toLowerCase().replace(/(^|\s)(\S)/g, (match, lead, letter) => lead + letter.toUpperCase());
+}
+
+function leaderBylineText(leaders) {
+  if (!Array.isArray(leaders)) return null;
+  const names = leaders
+    .map((leader) => (leader && (detailText(leader.firstName) || detailText(leader.name))) || "")
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names[0] + " & " + names[1];
+  return names[0] + " + " + (names.length - 1);
+}
+
+function lengthText(seconds) {
+  if (typeof seconds !== "number" || !isFinite(seconds) || seconds <= 0) return null;
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const pad = (n) => (n < 10 ? "0" + n : String(n));
+  return h > 0 ? h + ":" + pad(m) + ":" + pad(sec) : m + ":" + pad(sec);
 }
 
 function itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat) {
@@ -1499,6 +1545,15 @@ function itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat
     } else if (field === "servicePosition") {
       if (details.servicePosition === "pre") segments.push("Pre-service");
       else if (details.servicePosition === "post") segments.push("Post-service");
+    } else if (field === "leader") {
+      const leader = leaderBylineText(details.leaders);
+      if (leader) segments.push(leader);
+    } else if (field === "type") {
+      const type = detailText(item.itemType);
+      if (type) segments.push(titleCaseWords(type));
+    } else if (field === "length") {
+      const length = lengthText(item.lengthInSeconds);
+      if (length) segments.push(length);
     } else if (field === "startTime") {
       if (typeof startMs === "number" && isFinite(startMs)) {
         const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);

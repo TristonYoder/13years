@@ -91,7 +91,7 @@ public struct PagerPresentationState: Equatable, Sendable {
     }
 
     public var pagerFields: [PagerItemField] {
-        PagerItemField.normalized(activeRole?.pagerFields ?? [])
+        PagerItemField.ordered(activeRole?.pagerFields ?? [])
     }
 
     public var wantsItemDetails: Bool {

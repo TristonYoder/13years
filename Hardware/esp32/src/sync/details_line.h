@@ -23,7 +23,12 @@ enum PagerFieldBit : uint16_t {
   kFieldMediaType = 1 << 6,
   kFieldServicePosition = 1 << 7,
   kFieldStartTime = 1 << 8,
+  kFieldLeader = 1 << 9,
+  kFieldType = 1 << 10,
+  kFieldLength = 1 << 11,
 };
+
+static const int kFieldBitCount = 12;
 
 inline uint16_t parsePagerField(const char *name) {
   if (!name) return 0;
@@ -36,7 +41,59 @@ inline uint16_t parsePagerField(const char *name) {
   if (strcmp(name, "mediaType") == 0) return kFieldMediaType;
   if (strcmp(name, "servicePosition") == 0) return kFieldServicePosition;
   if (strcmp(name, "startTime") == 0) return kFieldStartTime;
+  if (strcmp(name, "leader") == 0) return kFieldLeader;
+  if (strcmp(name, "type") == 0) return kFieldType;
+  if (strcmp(name, "length") == 0) return kFieldLength;
   return 0;
+}
+
+struct FieldOrder {
+  static const int kMax = 16;
+  uint16_t bits[kMax] = {0};
+  int count = 0;
+
+  bool add(uint16_t bit) {
+    if (bit == 0 || count >= kMax) return false;
+    for (int i = 0; i < count; i++) {
+      if (bits[i] == bit) return false;
+    }
+    bits[count++] = bit;
+    return true;
+  }
+
+  uint16_t mask() const {
+    uint16_t m = 0;
+    for (int i = 0; i < count; i++) m |= bits[i];
+    return m;
+  }
+
+  static FieldOrder fromMask(uint16_t mask) {
+    FieldOrder order;
+    for (int b = 0; b < kFieldBitCount; b++) {
+      if (mask & (1u << b)) order.add((uint16_t)(1u << b));
+    }
+    return order;
+  }
+};
+
+struct NoteRef {
+  const char *category;
+  const char *text;
+};
+
+inline int orderedNoteIndex(const char *const *roleCategories, int roleCategoryCount, const NoteRef *notes, int noteCount, int nth) {
+  int seen = 0;
+  for (int c = 0; c < roleCategoryCount; c++) {
+    if (!roleCategories[c]) continue;
+    for (int n = 0; n < noteCount; n++) {
+      if (!notes[n].category || !notes[n].text || !notes[n].text[0]) continue;
+      if (strcmp(notes[n].category, roleCategories[c]) != 0) continue;
+      if (seen == nth) return n;
+      seen++;
+      break;
+    }
+  }
+  return -1;
 }
 
 enum class ServicePosition : uint8_t { During, Pre, Post };
@@ -49,6 +106,9 @@ struct ItemDetails {
   static const size_t kSequenceCap = 64;
   static const size_t kDescriptionCap = 96;
   static const size_t kMediaCap = 24;
+  static const size_t kLeaderCap = 40;
+  static const size_t kTypeCap = 24;
+  static const size_t kLengthCap = 12;
 
   char key[kKeyCap] = {0};
   char bpm[kBpmCap] = {0};
@@ -57,6 +117,9 @@ struct ItemDetails {
   char sequence[kSequenceCap] = {0};
   char description[kDescriptionCap] = {0};
   char mediaType[kMediaCap] = {0};
+  char leader[kLeaderCap] = {0};
+  char type[kTypeCap] = {0};
+  char length[kLengthCap] = {0};
   ServicePosition position = ServicePosition::During;
 
   void clear() { *this = ItemDetails(); }
@@ -163,34 +226,65 @@ inline void appendSegment(char *out, size_t cap, size_t &len, const char *separa
   out[len] = '\0';
 }
 
-inline bool formatDetailsLine(const ItemDetails &d, uint16_t fields, bool haveStart, int64_t startMs, int64_t utcOffsetSeconds, bool use24h, char *out, size_t cap) {
+inline void setItemBasics(ItemDetails &d, const char *itemType, int lengthInSeconds) {
+  titleCaseWords(d.type, sizeof(d.type), itemType);
+  d.length[0] = '\0';
+  if (lengthInSeconds > 0) formatLength(lengthInSeconds, d.length, sizeof(d.length));
+}
+
+inline void formatLeaders(char *dst, size_t cap, const char *first, const char *second, int count) {
+  if (cap == 0) return;
+  dst[0] = '\0';
+  if (count <= 0 || !first || !first[0]) return;
+  if (count == 1) snprintf(dst, cap, "%s", first);
+  else if (count == 2) snprintf(dst, cap, "%s & %s", first, second ? second : "");
+  else snprintf(dst, cap, "%s + %d", first, count - 1);
+}
+
+inline bool formatDetailsLine(const ItemDetails &d, const FieldOrder &order, bool haveStart, int64_t startMs, int64_t utcOffsetSeconds, bool use24h, char *out, size_t cap) {
   if (cap == 0) return false;
   out[0] = '\0';
   size_t len = 0;
   const char *sep = " | ";
-  if (fields & kFieldKey) appendSegment(out, cap, len, sep, d.key);
-  if ((fields & kFieldBpm) && d.bpm[0]) {
-    char b[ItemDetails::kBpmCap + 8];
-    snprintf(b, sizeof(b), "%s BPM", d.bpm);
-    appendSegment(out, cap, len, sep, b);
-  }
-  if (fields & kFieldMeter) appendSegment(out, cap, len, sep, d.meter);
-  if (fields & kFieldArrangement) appendSegment(out, cap, len, sep, d.arrangement);
-  if (fields & kFieldSequence) appendSegment(out, cap, len, sep, d.sequence);
-  if (fields & kFieldDescription) appendSegment(out, cap, len, sep, d.description);
-  if (fields & kFieldMediaType) appendSegment(out, cap, len, sep, d.mediaType);
-  if (fields & kFieldServicePosition) {
-    if (d.position == ServicePosition::Pre) appendSegment(out, cap, len, sep, "Pre-service");
-    else if (d.position == ServicePosition::Post) appendSegment(out, cap, len, sep, "Post-service");
-  }
-  if ((fields & kFieldStartTime) && haveStart) {
-    char t[16];
-    formatClockHM(startMs, utcOffsetSeconds, use24h, t, sizeof(t));
-    char s[24];
-    snprintf(s, sizeof(s), "@ %s", t);
-    appendSegment(out, cap, len, sep, s);
+  for (int i = 0; i < order.count; i++) {
+    switch (order.bits[i]) {
+      case kFieldKey: appendSegment(out, cap, len, sep, d.key); break;
+      case kFieldBpm:
+        if (d.bpm[0]) {
+          char b[ItemDetails::kBpmCap + 8];
+          snprintf(b, sizeof(b), "%s BPM", d.bpm);
+          appendSegment(out, cap, len, sep, b);
+        }
+        break;
+      case kFieldMeter: appendSegment(out, cap, len, sep, d.meter); break;
+      case kFieldArrangement: appendSegment(out, cap, len, sep, d.arrangement); break;
+      case kFieldSequence: appendSegment(out, cap, len, sep, d.sequence); break;
+      case kFieldDescription: appendSegment(out, cap, len, sep, d.description); break;
+      case kFieldMediaType: appendSegment(out, cap, len, sep, d.mediaType); break;
+      case kFieldServicePosition:
+        if (d.position == ServicePosition::Pre) appendSegment(out, cap, len, sep, "Pre-service");
+        else if (d.position == ServicePosition::Post) appendSegment(out, cap, len, sep, "Post-service");
+        break;
+      case kFieldStartTime:
+        if (haveStart) {
+          char t[16];
+          formatClockHM(startMs, utcOffsetSeconds, use24h, t, sizeof(t));
+          char s[24];
+          snprintf(s, sizeof(s), "@ %s", t);
+          appendSegment(out, cap, len, sep, s);
+        }
+        break;
+      case kFieldLeader: appendSegment(out, cap, len, sep, d.leader); break;
+      case kFieldType: appendSegment(out, cap, len, sep, d.type); break;
+      case kFieldLength: appendSegment(out, cap, len, sep, d.length); break;
+      default: break;
+    }
   }
   return len > 0;
+}
+
+inline bool formatDetailsLine(const ItemDetails &d, uint16_t fields, bool haveStart, int64_t startMs, int64_t utcOffsetSeconds, bool use24h, char *out, size_t cap) {
+  return formatDetailsLine(d, FieldOrder::fromMask(fields), haveStart, startMs, utcOffsetSeconds, use24h, out, cap);
 }
 
 #ifdef PAGERSYNC_HAVE_JSON
@@ -202,6 +296,25 @@ inline uint16_t parsePagerFields(JsonVariantConst v) {
     mask |= parsePagerField(f.is<const char *>() ? f.as<const char *>() : nullptr);
   }
   return mask;
+}
+
+inline FieldOrder parsePagerFieldOrder(JsonVariantConst v) {
+  FieldOrder order;
+  if (!v.is<JsonArrayConst>()) return order;
+  for (JsonVariantConst f : v.as<JsonArrayConst>()) {
+    order.add(parsePagerField(f.is<const char *>() ? f.as<const char *>() : nullptr));
+  }
+  return order;
+}
+
+inline void buildRoleCueFilter(JsonObject role) {
+  role["id"] = true;
+  role["name"] = true;
+  role["personName"] = true;
+  role["clockFormat"] = true;
+  role["state"] = true;
+  role["assignedNoteCategories"] = true;
+  role["pagerFields"] = true;
 }
 
 inline const char *firstNonEmpty(const char *a, const char *b, const char *c) {
@@ -245,6 +358,18 @@ inline void parseItemDetails(ItemDetails &d, JsonVariantConst v) {
   else joinSequence(d.sequence, sizeof(d.sequence), o["arrangement"]["sequenceShort"].as<JsonArrayConst>());
   collapseWhitespace(d.description, sizeof(d.description), o["description"] | "");
   titleCaseWords(d.mediaType, sizeof(d.mediaType), o["media"]["mediaType"] | "");
+  JsonArrayConst leaders = o["leaders"].as<JsonArrayConst>();
+  if (!leaders.isNull()) {
+    char names[2][16] = {{0}, {0}};
+    int count = 0;
+    for (JsonVariantConst l : leaders) {
+      const char *name = l["firstName"] | (l["name"] | "");
+      if (!name[0]) continue;
+      if (count < 2) copyTruncated(names[count], sizeof(names[count]), name);
+      count++;
+    }
+    formatLeaders(d.leader, sizeof(d.leader), names[0], names[1], count);
+  }
 }
 
 inline void buildDetailsFilter(JsonObject details) {
@@ -261,6 +386,7 @@ inline void buildDetailsFilter(JsonObject details) {
   arrangement["meter"] = true;
   arrangement["sequenceShort"] = true;
   details["media"].to<JsonObject>()["mediaType"] = true;
+  details["leaders"][0]["firstName"] = true;
 }
 
 inline void buildTimerItemFilter(JsonObject item) {
@@ -278,6 +404,7 @@ inline void buildTimerItemFilter(JsonObject item) {
 inline void buildNextItemFilter(JsonObject item) {
   item["id"] = true;
   item["title"] = true;
+  item["itemType"] = true;
   item["lengthInSeconds"] = true;
   item["notes"] = true;
   item["startsAtMs"] = true;

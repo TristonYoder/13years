@@ -41,7 +41,7 @@ final class PagerItemFieldTests: XCTestCase {
     func testRawValuesAreStable() {
         XCTAssertEqual(
             PagerItemField.allCases.map(\.rawValue),
-            ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "itemDetails"]
+            ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "leader", "type", "length", "itemDetails"]
         )
         XCTAssertEqual(PagerItemField.itemDetails.label, "Item details")
         XCTAssertEqual(PagerItemField.allCases.filter { !$0.isLineSegment }, [.itemDetails])
@@ -58,11 +58,11 @@ final class PagerItemFieldTests: XCTestCase {
     func testRoleRoundTripsAndDropsUnknownFields() throws {
         let json = #"{"id":"r","name":"Band","state":"OFF","lastUpdated":0,"assignedNoteCategories":[],"pagerFields":["sequence","future","key"]}"#
         let role = try JSONDecoder().decode(RoleCue.self, from: Data(json.utf8))
-        XCTAssertEqual(role.pagerFields, [.key, .sequence])
+        XCTAssertEqual(role.pagerFields, [.sequence, .key])
         let decoded = try JSONDecoder().decode(RoleCue.self, from: JSONEncoder().encode(role))
         XCTAssertEqual(decoded, role)
         let api = try ControlAPIJSON.decoder.decode(RoleCue.self, from: ControlAPIJSON.encoder.encode(role))
-        XCTAssertEqual(api.pagerFields, [.key, .sequence])
+        XCTAssertEqual(api.pagerFields, [.sequence, .key])
     }
 
     func testRoleWithMalformedPagerFieldsStillDecodes() throws {
@@ -76,19 +76,38 @@ final class PagerDetailsFormatTests: XCTestCase {
     private let utc = TimeZone(secondsFromGMT: 0)!
     private let start = Date(timeIntervalSince1970: 1_760_000_000)
 
-    func testLineFollowsCanonicalFieldOrder() {
+    func testLineFollowsTheGivenOrder() {
         let song = richSong()
         XCTAssertEqual(
             song.pagerDetailsLine(fields: [.sequence, .meter, .bpm, .key]),
+            "V1 C V2 C B C \u{00B7} 4/4 \u{00B7} 72 BPM \u{00B7} G"
+        )
+        XCTAssertEqual(
+            song.pagerDetailsLine(fields: [.key, .bpm, .meter, .sequence]),
             "G \u{00B7} 72 BPM \u{00B7} 4/4 \u{00B7} V1 C V2 C B C"
         )
+        XCTAssertEqual(song.pagerDetailsLine(fields: [.key, .bpm, .key]), "G \u{00B7} 72 BPM")
+    }
+
+    func testLeaderTypeAndLengthSegments() {
+        var song = richSong()
+        song.details?.leaders = [PCOItemLeader(name: "Sam Rivera"), PCOItemLeader(name: "Pat Lee")]
+        XCTAssertEqual(song.pagerDetailsLine(fields: [.leader, .type, .length]), "Sam & Pat \u{00B7} Song \u{00B7} 5:00")
+        XCTAssertEqual(song.pagerDetailsLine(fields: [.length, .leader]), "5:00 \u{00B7} Sam & Pat")
+        song.lengthInSeconds = 3725
+        XCTAssertEqual(song.pagerLengthText, "1:02:05")
+        song.lengthInSeconds = 0
+        XCTAssertNil(song.pagerDetailsLine(fields: [.length]))
+        song.itemType = "background_video"
+        XCTAssertEqual(song.pagerTypeText, "Background Video")
+        XCTAssertNil(richSong().pagerDetailsLine(fields: [.leader]))
     }
 
     func testEveryFieldTogether() {
         let line = richSong().pagerDetailsLine(fields: PagerItemField.allCases, startTime: start, clockFormat: .twentyFourHour, timeZone: utc)
         XCTAssertEqual(
             line,
-            "G \u{00B7} 72 BPM \u{00B7} 4/4 \u{00B7} Default \u{00B7} V1 C V2 C B C \u{00B7} Walk on slowly \u{00B7} Background Video \u{00B7} Pre-service \u{00B7} @ 08:53"
+            "G \u{00B7} 72 BPM \u{00B7} 4/4 \u{00B7} Default \u{00B7} V1 C V2 C B C \u{00B7} Walk on slowly \u{00B7} Background Video \u{00B7} Pre-service \u{00B7} @ 08:53 \u{00B7} Song \u{00B7} 5:00"
         )
     }
 
@@ -115,7 +134,8 @@ final class PagerDetailsFormatTests: XCTestCase {
         var header = richSong()
         header.itemType = "Header"
         XCTAssertNil(header.pagerDetailsLine(fields: PagerItemField.allCases))
-        XCTAssertNil(PCOTimerItem(title: "Manual").pagerDetailsLine(fields: PagerItemField.allCases))
+        XCTAssertNil(PCOTimerItem(title: "Manual").pagerDetailsLine(fields: PagerItemField.allCases.filter { ![.type, .length].contains($0) }))
+        XCTAssertEqual(PCOTimerItem(title: "Manual").pagerDetailsLine(fields: PagerItemField.allCases), "Item \u{00B7} 5:00")
         XCTAssertNil(richSong().pagerDetailsLine(fields: []))
     }
 
@@ -188,21 +208,21 @@ final class PagerFieldsEngineTests: XCTestCase {
             RoleCue(id: "c", name: "C", pagerFields: [.meter]),
         ]
         engine.selectedRoleIds = ["a", "b", "c"]
-        XCTAssertEqual(engine.displayPagerFields, [.key, .bpm])
+        XCTAssertEqual(engine.displayPagerFields, [.bpm, .key])
         engine.selectedRoleIds = ["c"]
         XCTAssertEqual(engine.displayPagerFields, [.meter])
         engine.selectedRoleIds = ["a"]
         XCTAssertEqual(engine.displayPagerFields, [])
     }
 
-    func testSetPagerFieldsNormalizesAndToggles() {
+    func testSetPagerFieldsKeepsOrderAndToggles() {
         let engine = makeProducer(roles: [RoleCue(id: "band", name: "Band")])
         engine.setPagerFields(forRoleId: "band", [.sequence, .key])
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .key])
         engine.setPagerField(forRoleId: "band", field: .bpm, isOn: true)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .bpm, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .key, .bpm])
         engine.setPagerField(forRoleId: "band", field: .key, isOn: false)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.bpm, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .bpm])
         engine.setPagerFields(forRoleId: "band", nil)
         XCTAssertNil(engine.roles[0].pagerFields)
     }
@@ -215,13 +235,14 @@ final class PagerFieldsEngineTests: XCTestCase {
         }
         let response = patch(#"{"pagerFields":["sequence","key"]}"#)
         XCTAssertEqual(response.status, 200)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .key])
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
-        XCTAssertEqual(object["pagerFields"] as? [String], ["key", "sequence"])
+        XCTAssertEqual(object["pagerFields"] as? [String], ["sequence", "key"])
+        XCTAssertEqual(object["pagerItems"] as? [String], ["field:sequence", "field:key"])
         XCTAssertEqual(patch(#"{"name":"Band"}"#).status, 200)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .key])
         XCTAssertEqual(patch(#"{"pagerFields":["key","nope"]}"#).status, 400)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .sequence])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.sequence, .key])
         XCTAssertEqual(patch(#"{"pagerFields":[]}"#).status, 200)
         XCTAssertEqual(engine.roles[0].pagerFields, [])
     }
@@ -273,9 +294,9 @@ final class PagerFieldsEngineTests: XCTestCase {
         let router = ControlAPIRouter(engine: engine)
         let response = router.handle(HTTPRequest(method: "PATCH", path: "/v1/roles/band", body: Data(#"{"pagerFields":["itemDetails","key"]}"#.utf8)))
         XCTAssertEqual(response.status, 200)
-        XCTAssertEqual(engine.roles[0].pagerFields, [.key, .itemDetails])
+        XCTAssertEqual(engine.roles[0].pagerFields, [.itemDetails, .key])
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
-        XCTAssertEqual(object["pagerFields"] as? [String], ["key", "itemDetails"])
+        XCTAssertEqual(object["pagerFields"] as? [String], ["itemDetails", "key"])
     }
 
     func testBroadcastUsesTheUnionOfAllRolesFields() throws {
@@ -369,7 +390,7 @@ final class PagerPresentationFieldsTests: XCTestCase {
     }
 
     func testFieldsFollowTheSelectedRole() {
-        XCTAssertEqual(presentation(fields: [.bpm, .key]).pagerFields, [.key, .bpm])
+        XCTAssertEqual(presentation(fields: [.bpm, .key]).pagerFields, [.bpm, .key])
         XCTAssertEqual(presentation(fields: [.bpm], selected: "host").pagerFields, [])
         XCTAssertEqual(presentation(fields: nil).pagerFields, [])
         XCTAssertNil(presentation(fields: nil).currentDetailsLine())

@@ -587,9 +587,14 @@ final class PCOItemLeaderTests: XCTestCase {
         let leaders = [PCOItemLeader(personId: "p1", name: "Mara Lopez", photoThumbnailURL: "https://example.com/m.png")]
         let item = PCOTimerItem(id: "i", title: "Sermon", details: PCOItemDetails(description: "Hi", keyName: "G", leaders: leaders))
         XCTAssertTrue(item.broadcastTrimmed.details?.leaders.isEmpty ?? false)
-        XCTAssertTrue(item.broadcastTrimmed(fields: Set(PagerItemField.allCases)).details?.leaders.isEmpty ?? true)
+        let withoutLeader = Set(PagerItemField.allCases).subtracting([.leader])
+        XCTAssertTrue(item.broadcastTrimmed(fields: withoutLeader).details?.leaders.isEmpty ?? true)
         let onlyLeaders = PCOTimerItem(id: "j", title: "Prayer", details: PCOItemDetails(leaders: leaders))
-        XCTAssertNil(onlyLeaders.broadcastTrimmed(fields: Set(PagerItemField.allCases)).details)
+        XCTAssertNil(onlyLeaders.broadcastTrimmed(fields: withoutLeader).details)
+        let slim = onlyLeaders.broadcastTrimmed(fields: [.leader]).details?.leaders
+        XCTAssertEqual(slim?.map(\.firstName), ["Mara"])
+        XCTAssertNil(slim?.first?.photoThumbnailURL)
+        XCTAssertNil(slim?.first?.personId)
         XCTAssertEqual(onlyLeaders.broadcastTrimmed.details, PCOItemDetails())
     }
 

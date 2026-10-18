@@ -13,7 +13,7 @@ const names = [
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
   "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
-  "pagerFieldsForRole", "itemDetailSegments", "itemDetailsLine", "currentStartMs", "nextStartMs", "detailBpmText", "titleCaseWords",
+  "pagerFieldsForRole", "noteCategoriesForRole", "leaderBylineText", "lengthText", "itemDetailSegments", "itemDetailsLine", "currentStartMs", "nextStartMs", "detailBpmText", "titleCaseWords",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -1200,9 +1200,10 @@ const richItem = {
   },
 };
 const allFields = ["startTime", "servicePosition", "mediaType", "description", "sequence", "arrangement", "meter", "bpm", "key"];
+const lineOrder = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime"];
 
-test("pagerFieldsForRole keeps canonical order and drops unknown values", () => {
-  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["bpm", "key", "bogus", "sequence"] })), ["key", "bpm", "sequence"]);
+test("pagerFieldsForRole keeps the role's order and drops unknown and repeated values", () => {
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["bpm", "key", "bogus", "sequence", "bpm"] })), ["bpm", "key", "sequence"]);
   assert.deepEqual(Array.from(core.pagerFieldsForRole({})), []);
   assert.deepEqual(Array.from(core.pagerFieldsForRole(null)), []);
   assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: "key" })), []);
@@ -1211,7 +1212,7 @@ test("pagerFieldsForRole keeps canonical order and drops unknown values", () => 
 test("details line matches the native formatter", () => {
   assert.equal(core.itemDetailsLine(richItem, ["key", "bpm", "meter", "sequence"]), "G \u00b7 72 BPM \u00b7 4/4 \u00b7 V1 C V2 C");
   assert.equal(
-    core.itemDetailsLine(richItem, core.pagerFieldsForRole({ pagerFields: allFields }), 1760000000000, 0, "twentyFourHour"),
+    core.itemDetailsLine(richItem, core.pagerFieldsForRole({ pagerFields: lineOrder }), 1760000000000, 0, "twentyFourHour"),
     "G \u00b7 72 BPM \u00b7 4/4 \u00b7 Default \u00b7 V1 C V2 C \u00b7 Walk on slowly \u00b7 Background Video \u00b7 Pre-service \u00b7 @ 08:53"
   );
 });
@@ -1248,4 +1249,50 @@ test("current and next start times", () => {
   assert.equal(core.nextStartMs(500, -30, true, 1000), 1000);
   assert.equal(core.nextStartMs(500, 60, false, 1000), 500);
   assert.equal(core.nextStartMs(null, 60, false, 1000), null);
+});
+
+test("pagerItems drive the field order and win over the legacy keys", () => {
+  const role = {
+    pagerFields: ["key"],
+    assignedNoteCategories: ["Old"],
+    pagerItems: ["note:Zeta", "field:sequence", "field:bogus", "note:Alpha", "field:key", "field:sequence", "bogus", "note:"],
+  };
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(role)), ["sequence", "key"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(role)), ["Zeta", "Alpha"]);
+  assert.equal(core.itemDetailsLine(richItem, core.pagerFieldsForRole(role)), "V1 C V2 C \u00b7 G");
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerItems: [] })), []);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole({ pagerItems: [], assignedNoteCategories: ["x"] })), []);
+});
+
+test("a role without pagerItems falls back to the ordered legacy keys", () => {
+  const role = { pagerFields: ["sequence", "key"], assignedNoteCategories: ["Zeta", "Alpha"] };
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(role)), ["sequence", "key"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(role)), ["Zeta", "Alpha"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(null)), []);
+});
+
+test("notes appear in the role's custom order, not alphabetical or item order", () => {
+  const item = { notes: { Alpha: "a", Beta: "b", Mid: "m", Zeta: "z" } };
+  const role = { pagerItems: ["note:Zeta", "field:key", "note:Alpha", "note:Mid"] };
+  assert.equal(core.notesForRole(item, role).map((n) => n.category).join(","), "Zeta,Alpha,Mid");
+  const moved = { pagerItems: ["note:Mid", "note:Zeta", "note:Alpha"] };
+  assert.equal(core.notesForRole(item, moved).map((n) => n.category).join(","), "Mid,Zeta,Alpha");
+  const sparse = { notes: { Zeta: "z", Alpha: "" } };
+  assert.equal(core.notesForRole(sparse, role).map((n) => n.category).join(","), "Zeta");
+});
+
+test("leader, type and length fields match the native formatter", () => {
+  const item = {
+    id: "s", title: "Song", itemType: "song", lengthInSeconds: 300,
+    details: { leaders: [{ firstName: "Sam" }, { firstName: "Pat" }] },
+  };
+  assert.equal(core.itemDetailsLine(item, ["leader", "type", "length"]), "Sam & Pat \u00b7 Song \u00b7 5:00");
+  assert.equal(core.itemDetailsLine(item, ["length", "leader"]), "5:00 \u00b7 Sam & Pat");
+  assert.equal(core.leaderBylineText([{ firstName: "A" }]), "A");
+  assert.equal(core.leaderBylineText([{ firstName: "A" }, { firstName: "B" }, { firstName: "C" }]), "A + 2");
+  assert.equal(core.leaderBylineText([]), null);
+  assert.equal(core.lengthText(3725), "1:02:05");
+  assert.equal(core.lengthText(0), null);
+  assert.equal(core.itemDetailsLine({ itemType: "background_video", lengthInSeconds: 0 }, ["type", "length", "leader"]), "Background Video");
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerItems: ["field:length", "field:leader", "field:type"] })), ["length", "leader", "type"]);
 });

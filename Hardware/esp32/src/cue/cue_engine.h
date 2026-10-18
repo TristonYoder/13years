@@ -11,7 +11,7 @@
 
 namespace cue {
 
-static const int kMaxNoteCategoriesPerRole = 4;
+static const int kMaxNoteCategoriesPerRole = 8;
 
 struct RoleView {
   bool found = false;
@@ -21,7 +21,7 @@ struct RoleView {
   pagersync::ClockFormat clockFormat = pagersync::ClockFormat::Unset;
   String assignedNoteCategories[kMaxNoteCategoriesPerRole];
   int assignedNoteCategoryCount = 0;
-  uint16_t pagerFields = 0;
+  pagersync::FieldOrder pagerFieldOrder;
   CueState state = CueState::Off;
 
   bool hasNoteCategory(const String &category) const {
@@ -213,6 +213,8 @@ private:
   bool applyAnchor(JsonVariantConst anchor);
   void applyNextItem(JsonVariantConst next);
   bool categoryAssignedToAnyRole(const char *category) const;
+  int currentNoteIndex(const cue::RoleView &role, int nth) const;
+  int nextNoteIndex(const cue::RoleView &role, int nth) const;
   void resetForEpochChange();
   void applyCueDeltas(JsonArrayConst deltas);
   void handleSyncReply(JsonObjectConst doc);

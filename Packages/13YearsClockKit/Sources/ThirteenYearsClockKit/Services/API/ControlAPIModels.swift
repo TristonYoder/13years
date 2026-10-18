@@ -300,6 +300,7 @@ public enum ControlAPIRequests {
         public var pcoTeamPosition: String?
         public var assignedNoteCategories: [String]?
         public var pagerFields: [String]?
+        public var pagerItems: [String]?
         public var state: String?
     }
 

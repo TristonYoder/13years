@@ -1157,6 +1157,21 @@ public final class ControlAPIRouter {
             }
             pagerFields = parsed
         }
+        var pagerItems: [RolePagerItem]?
+        if let raw = request.pagerItems {
+            guard raw.count <= ContentLimits.maxNoteCategories + PagerItemField.allCases.count else {
+                return Self.error(400, "Too many pagerItems", detail: "At most \(ContentLimits.maxNoteCategories + PagerItemField.allCases.count).")
+            }
+            var parsed: [RolePagerItem] = []
+            for value in raw {
+                if let tooLong = tooLong(value, ContentLimits.identifier, "pagerItems entry") { return tooLong }
+                guard let item = RolePagerItem(token: value) else {
+                    return Self.error(400, "Unknown pagerItems value", detail: "Use \"field:<name>\" with one of \(PagerItemField.allCases.map(\.rawValue).joined(separator: ", ")), or \"note:<category>\".")
+                }
+                parsed.append(item)
+            }
+            pagerItems = parsed
+        }
         if let name = request.name?.trimmingCharacters(in: .whitespaces) {
             guard !name.isEmpty else { return Self.error(400, "Role name cannot be empty") }
             engine.renameRole(id: id, name: name)
@@ -1173,18 +1188,16 @@ public final class ControlAPIRouter {
         if let teamPosition = request.pcoTeamPosition {
             engine.setPCOTeamPosition(forRoleId: id, teamPosition.isEmpty ? nil : teamPosition)
         }
-        if let categories = request.assignedNoteCategories {
-            let current = Set(engine.roles.first(where: { $0.id == id })?.assignedNoteCategories ?? [])
-            let desired = Set(categories)
-            for category in desired.subtracting(current) {
-                engine.setNoteCategory(forRoleId: id, category: category, isOn: true)
+        if let pagerItems {
+            engine.setPagerItems(forRoleId: id, pagerItems)
+        } else {
+            if let categories = request.assignedNoteCategories, var role = engine.roles.first(where: { $0.id == id }) {
+                role.assignedNoteCategories = categories
+                engine.setPagerItems(forRoleId: id, role.pagerItems ?? [])
             }
-            for category in current.subtracting(desired) {
-                engine.setNoteCategory(forRoleId: id, category: category, isOn: false)
+            if let pagerFields {
+                engine.setPagerFields(forRoleId: id, pagerFields)
             }
-        }
-        if let pagerFields {
-            engine.setPagerFields(forRoleId: id, pagerFields)
         }
         if let rawState = request.state {
             guard let state = Self.cueState(rawState) else { return unknownCueState() }

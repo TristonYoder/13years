@@ -602,7 +602,7 @@ static void testDetailsJson() {
   filter["type"] = true;
   buildTimerItemFilter(filter["timerItem"].to<JsonObject>());
   buildNextItemFilter(filter["nextItem"].to<JsonObject>());
-  filter["roleCues"] = true;
+  buildRoleCueFilter(filter["roleCues"][0].to<JsonObject>());
 
   const char *src =
       "{\"type\":\"TIMER_ANCHOR\",\"timerItem\":{\"id\":\"i1\",\"title\":\"Song\",\"itemType\":\"song\",\"lengthInSeconds\":300,"
@@ -614,10 +614,13 @@ static void testDetailsJson() {
       "\"arrangement\":{\"id\":\"a\",\"name\":\"Default\",\"bpm\":72,\"meter\":\"4/4\",\"sequence\":[\"Verse 1\",\"Chorus\"],\"sequenceShort\":[\"V1\",\"C\",\"V2\"],\"hasChords\":true,\"notes\":\"long notes\"},"
       "\"customSequence\":[],\"customSequenceShort\":[],"
       "\"media\":{\"id\":\"m\",\"title\":\"clip\",\"mediaType\":\"background_video\",\"themes\":[\"t\"],\"thumbnailURL\":\"http://x\"},"
+      "\"leaders\":[{\"firstName\":\"Sam\",\"name\":\"Sam Rivera\",\"personId\":\"p1\",\"photoThumbnailURL\":\"https://example.com/p.jpg\"},{\"firstName\":\"Pat\"}],"
       "\"itemTimes\":[{\"id\":\"t1\",\"planTimeId\":\"p\",\"length\":300}]}},"
       "\"nextItem\":{\"id\":\"n1\",\"title\":\"Sermon\",\"itemType\":\"item\",\"lengthInSeconds\":1800,\"notes\":{},\"startsAtMs\":1760000000000,"
       "\"details\":{\"servicePosition\":\"post\",\"customSequenceShort\":[\"C\",\"B\"],\"arrangement\":{\"id\":\"a\",\"bpm\":90.5,\"sequenceShort\":[\"V1\"]},\"htmlDetails\":\"<p>x</p>\"}},"
-      "\"roleCues\":[{\"id\":\"r\",\"name\":\"Band\",\"state\":\"OFF\",\"pagerFields\":[\"bpm\",\"key\",\"bogus\",\"itemDetails\",\"startTime\"]},{\"id\":\"s\",\"name\":\"Host\",\"state\":\"OFF\"}]}";
+      "\"roleCues\":[{\"id\":\"r\",\"name\":\"Band\",\"state\":\"OFF\",\"lastUpdated\":1,\"pcoTeamPosition\":\"Drums\",\"assignedNoteCategories\":[\"Zeta\",\"Alpha\"],"
+      "\"pagerFields\":[\"bpm\",\"key\",\"bogus\",\"itemDetails\",\"startTime\",\"leader\",\"key\"],"
+      "\"pagerItems\":[\"note:Zeta\",\"field:bpm\",\"field:key\",\"note:Alpha\"]},{\"id\":\"s\",\"name\":\"Host\",\"state\":\"OFF\"}]}";
   JsonDocument doc;
   CHECK(!deserializeJson(doc, src, strlen(src), DeserializationOption::Filter(filter)));
 
@@ -654,6 +657,10 @@ static void testDetailsJson() {
   CHECK_STR(d.description, "Slow build");
   CHECK_STR(d.mediaType, "Background Video");
   CHECK(d.position == ServicePosition::During);
+  CHECK_STR(d.leader, "Sam & Pat");
+  setItemBasics(d, "song", 300);
+  CHECK_STR(d.type, "Song");
+  CHECK_STR(d.length, "5:00");
 
   ItemDetails n;
   parseItemDetails(n, doc["nextItem"]["details"]);
@@ -662,10 +669,24 @@ static void testDetailsJson() {
   CHECK(n.position == ServicePosition::Post);
   CHECK(doc["nextItem"]["startsAtMs"].is<int64_t>());
   CHECK(doc["nextItem"]["startsAtMs"].as<int64_t>() == 1760000000000LL);
-  CHECK(doc["nextItem"]["itemType"].isNull());
+  CHECK_STR(doc["nextItem"]["itemType"].as<const char *>(), "item");
+  CHECK(doc["roleCues"][0]["pagerItems"].isNull());
+  CHECK(doc["roleCues"][0]["pcoTeamPosition"].isNull());
+  CHECK(doc["roleCues"][0]["lastUpdated"].isNull());
+  CHECK_STR(doc["roleCues"][0]["assignedNoteCategories"][0].as<const char *>(), "Zeta");
+  CHECK(details["leaders"][0]["personId"].isNull());
+  CHECK(details["leaders"][0]["photoThumbnailURL"].isNull());
+  CHECK(details["leaders"][0]["name"].isNull());
+  CHECK_STR(details["leaders"][1]["firstName"].as<const char *>(), "Pat");
   CHECK(doc["nextItem"]["details"]["htmlDetails"].isNull());
 
-  CHECK(parsePagerFields(doc["roleCues"][0]["pagerFields"]) == (kFieldBpm | kFieldKey | kFieldStartTime));
+  CHECK(parsePagerFields(doc["roleCues"][0]["pagerFields"]) == (kFieldBpm | kFieldKey | kFieldStartTime | kFieldLeader));
+  FieldOrder order = parsePagerFieldOrder(doc["roleCues"][0]["pagerFields"]);
+  CHECK(order.count == 4);
+  CHECK(order.bits[0] == kFieldBpm && order.bits[1] == kFieldKey && order.bits[2] == kFieldStartTime && order.bits[3] == kFieldLeader);
+  char orderedLine[160];
+  formatDetailsLine(d, order, false, 0, 0, false, orderedLine, sizeof(orderedLine));
+  CHECK_STR(orderedLine, "72 BPM | G | Sam & Pat");
   CHECK(parsePagerFields(doc["roleCues"][1]["pagerFields"]) == 0);
 
   ItemDetails none;
@@ -675,8 +696,66 @@ static void testDetailsJson() {
 
   std::string slimFiltered;
   serializeJson(doc["timerItem"], slimFiltered);
-  CHECK(slimFiltered.size() < 520);
+  CHECK(slimFiltered.size() < 560);
 #endif
+}
+
+static void testOrderedFieldsAndNotes() {
+  using namespace pagersync;
+  ItemDetails d;
+  strcpy(d.key, "G");
+  strcpy(d.bpm, "72");
+  strcpy(d.meter, "4/4");
+  strcpy(d.leader, "Sam");
+  setItemBasics(d, "background_video", 3725);
+  CHECK_STR(d.type, "Background Video");
+  CHECK_STR(d.length, "1:02:05");
+
+  FieldOrder order;
+  CHECK(order.add(kFieldMeter));
+  CHECK(order.add(kFieldKey));
+  CHECK(!order.add(kFieldMeter));
+  CHECK(!order.add(0));
+  CHECK(order.add(kFieldBpm));
+  CHECK(order.mask() == (kFieldMeter | kFieldKey | kFieldBpm));
+  char line[160];
+  formatDetailsLine(d, order, false, 0, 0, false, line, sizeof(line));
+  CHECK_STR(line, "4/4 | G | 72 BPM");
+
+  FieldOrder reversed;
+  reversed.add(kFieldLength);
+  reversed.add(kFieldType);
+  reversed.add(kFieldLeader);
+  formatDetailsLine(d, reversed, false, 0, 0, false, line, sizeof(line));
+  CHECK_STR(line, "1:02:05 | Background Video | Sam");
+  CHECK_STR(detailsLine(d, kFieldLeader | kFieldType | kFieldLength | kFieldKey), "G | Sam | Background Video | 1:02:05");
+
+  setItemBasics(d, "", 0);
+  CHECK_STR(d.type, "");
+  CHECK_STR(d.length, "");
+
+  char buf[40];
+  formatLeaders(buf, sizeof(buf), "Sam", "Pat", 1);
+  CHECK_STR(buf, "Sam");
+  formatLeaders(buf, sizeof(buf), "Sam", "Pat", 2);
+  CHECK_STR(buf, "Sam & Pat");
+  formatLeaders(buf, sizeof(buf), "Sam", "Pat", 5);
+  CHECK_STR(buf, "Sam + 4");
+  formatLeaders(buf, sizeof(buf), "", "", 0);
+  CHECK_STR(buf, "");
+
+  NoteRef notes[4] = {{"Alpha", "a"}, {"Beta", "b"}, {"Mid", ""}, {"Zeta", "z"}};
+  const char *custom[3] = {"Zeta", "Alpha", "Mid"};
+  CHECK(orderedNoteIndex(custom, 3, notes, 4, 0) == 3);
+  CHECK(orderedNoteIndex(custom, 3, notes, 4, 1) == 0);
+  CHECK(orderedNoteIndex(custom, 3, notes, 4, 2) == -1);
+  const char *moved[3] = {"Beta", "Zeta", "Alpha"};
+  CHECK(orderedNoteIndex(moved, 3, notes, 4, 0) == 1);
+  CHECK(orderedNoteIndex(moved, 3, notes, 4, 1) == 3);
+  CHECK(orderedNoteIndex(moved, 3, notes, 4, 2) == 0);
+  CHECK(orderedNoteIndex(moved, 0, notes, 4, 0) == -1);
+  const char *unknown[1] = {"Nope"};
+  CHECK(orderedNoteIndex(unknown, 1, notes, 4, 0) == -1);
 }
 
 static void testJson64() {
@@ -923,6 +1002,7 @@ int main() {
   testClockFormat();
   testDetailsLine();
   testDetailsJson();
+  testOrderedFieldsAndNotes();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

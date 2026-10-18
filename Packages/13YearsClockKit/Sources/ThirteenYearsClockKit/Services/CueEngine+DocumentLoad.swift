@@ -21,8 +21,7 @@ extension CueEngine {
                         merged[index].personName = role.personName
                         merged[index].clockFormat = role.clockFormat
                         merged[index].pcoTeamPosition = role.pcoTeamPosition
-                        merged[index].assignedNoteCategories = role.assignedNoteCategories
-                        merged[index].pagerFields = role.pagerFields
+                        merged[index].pagerItems = role.pagerItems
                     } else if merged.count < ContentLimits.maxRoles {
                         var added = role
                         added.state = .off

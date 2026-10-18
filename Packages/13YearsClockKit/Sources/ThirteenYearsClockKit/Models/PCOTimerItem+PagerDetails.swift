@@ -14,7 +14,7 @@ extension PCOTimerItem {
     ) -> [String] {
         guard !isHeader else { return [] }
         var segments: [String] = []
-        for field in PagerItemField.normalized(fields) {
+        for field in PagerItemField.ordered(fields) {
             switch field {
             case .key:
                 if let key = details?.displayKey { segments.append(key) }
@@ -43,11 +43,33 @@ extension PCOTimerItem {
                 }
             case .startTime:
                 if let startTime { segments.append("@ " + clockFormat.string(from: startTime, timeZone: timeZone)) }
+            case .leader:
+                if let names = PCOItemLeader.bylineNames(runSheetLeaders) { segments.append(names) }
+            case .type:
+                if let label = pagerTypeText { segments.append(label) }
+            case .length:
+                if let length = pagerLengthText { segments.append(length) }
             case .itemDetails:
                 break
             }
         }
         return segments
+    }
+
+    public var pagerTypeText: String? {
+        let trimmed = itemType.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    public var pagerLengthText: String? {
+        guard lengthInSeconds > 0 else { return nil }
+        let hours = lengthInSeconds / 3600
+        let minutes = (lengthInSeconds % 3600) / 60
+        let seconds = lengthInSeconds % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            : String(format: "%d:%02d", minutes, seconds)
     }
 
     public func pagerDetailsLine(
