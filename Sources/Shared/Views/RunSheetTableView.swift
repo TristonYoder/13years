@@ -128,8 +128,9 @@ struct RunSheetTableView: View {
             let viewportWidth = max(0, geometry.size.width - Self.verticalScrollerWidth)
             let widths = resolvedWidths(for: viewportWidth)
             let rowWidth = self.rowWidth(widths)
+            let overflows = rowWidth + 2 * Self.outerPadding > viewportWidth + 0.5
             ScrollViewReader { proxy in
-                ScrollView([.horizontal, .vertical]) {
+                ScrollView(overflows ? [.horizontal, .vertical] : .vertical) {
                     LazyVStack(alignment: .leading, spacing: Self.cardGap, pinnedViews: [.sectionHeaders]) {
                         Section {
                             ForEach(groups) { group in
@@ -145,8 +146,7 @@ struct RunSheetTableView: View {
                     .padding(.bottom, Self.outerPadding)
                     .frame(minWidth: viewportWidth, alignment: .leading)
                 }
-                .scrollIndicators(rowWidth + 2 * Self.outerPadding > viewportWidth + 0.5 ? .visible : .hidden, axes: .horizontal)
-                .scrollIndicators(.automatic, axes: .vertical)
+                .scrollIndicators(.automatic)
                 .focusable()
                 .focused($isFocused)
                 .focusEffectDisabled()
