@@ -110,9 +110,13 @@ struct RunSheetTableView: View {
         let chrome = 2 * Self.rowPadding + 2 * Self.outerPadding + Self.columnSpacing * CGFloat(max(cols.count - 1, 0))
         let available = totalWidth - chrome
         let extra = max(0, available - fixedTotal)
-        let weights = cols.map { column -> CGFloat in
-            guard column.fixedWidth == nil, userWidth(column) == nil else { return 0 }
+        let dragging = columnDrag?.id
+        var weights = cols.map { column -> CGFloat in
+            guard column.fixedWidth == nil, column.id != dragging else { return 0 }
             return column.id == "title" ? 2 : 1
+        }
+        if weights.allSatisfy({ $0 == 0 }) {
+            weights = cols.map { $0.id == "status" || $0.id == dragging ? 0 : 1 }
         }
         let totalWeight = weights.reduce(0, +)
         var result: [String: CGFloat] = [:]
