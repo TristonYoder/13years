@@ -81,7 +81,7 @@ public struct PagerSettingsView: View {
                 } header: {
                     Text("Layout")
                 } footer: {
-                    Text("Lower third shows the clock, element name and countdown on a single line. Automatic switches to it on very wide windows. Tap the screen to show the role, messages and settings.")
+                    Text("Automatic picks portrait or landscape from the window shape and switches to lower third on very wide windows. Landscape and Portrait keep that layout whatever the shape. Lower third shows the clock, element name and countdown on a single line. Tap the screen to show the role, messages and settings.")
                 }
                 #endif
 

@@ -74,7 +74,7 @@ public struct HostPagerView: View {
               presentation.localItemDetailsSource(includingDescription: false) == nil else {
             return DetailsFetchKey(itemId: nil, host: nil, port: nil)
         }
-        return DetailsFetchKey(itemId: item.id, host: engine.connectedProducerHost, port: engine.connectedProducerAPIPort)
+        return DetailsFetchKey(itemId: item.id, host: engine.connectedProducerHost, port: engine.connectedProducerAPIPort ?? Int(ControlAPIServer.defaultPort))
     }
 
     private var pagerView: some View {
@@ -98,12 +98,10 @@ public struct HostPagerView: View {
             #if os(tvOS)
             landscapeView(size: geo.size)
             #else
-            if PagerLayoutChoice.resolve(layoutRaw).usesLowerThird(for: geo.size) {
-                lowerThirdView(size: geo.size)
-            } else if !PortraitMetrics.isPortrait(geo.size) {
-                landscapeView(size: geo.size)
-            } else {
-                portraitView(size: geo.size)
+            switch PagerLayoutChoice.resolve(layoutRaw).layout(for: geo.size) {
+            case .lowerThird: lowerThirdView(size: geo.size)
+            case .landscape: landscapeView(size: geo.size)
+            case .portrait: portraitView(size: geo.size)
             }
             #endif
         }

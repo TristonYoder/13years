@@ -19,6 +19,18 @@ final class LowerThirdLayoutTests: XCTestCase {
     func testUnknownStoredValueFallsBackToAutomatic() {
         XCTAssertEqual(PagerLayoutChoice.resolve("nonsense"), .automatic)
         XCTAssertEqual(PagerLayoutChoice.resolve("lowerThird"), .lowerThird)
+        XCTAssertEqual(PagerLayoutChoice.resolve("landscape"), .landscape)
+        XCTAssertEqual(PagerLayoutChoice.resolve("portrait"), .portrait)
+    }
+
+    func testExplicitLayoutsIgnoreWindowShape() {
+        let tall = CGSize(width: 390, height: 844)
+        let wide = CGSize(width: 1920, height: 260)
+        XCTAssertEqual(PagerLayoutChoice.landscape.layout(for: tall), .landscape)
+        XCTAssertEqual(PagerLayoutChoice.portrait.layout(for: wide), .portrait)
+        XCTAssertEqual(PagerLayoutChoice.automatic.layout(for: tall), .portrait)
+        XCTAssertEqual(PagerLayoutChoice.automatic.layout(for: CGSize(width: 1024, height: 768)), .landscape)
+        XCTAssertEqual(PagerLayoutChoice.automatic.layout(for: wide), .lowerThird)
     }
 
     func testMetricsStayPositiveOnTinyWindows() {

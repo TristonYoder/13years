@@ -3,8 +3,16 @@
 
 import SwiftUI
 
+public enum PagerResolvedLayout: Equatable, Sendable {
+    case landscape
+    case portrait
+    case lowerThird
+}
+
 public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     case automatic
+    case landscape
+    case portrait
     case lowerThird
 
     public static let storageKey = "pagerLayout"
@@ -16,6 +24,8 @@ public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .automatic: return "Automatic"
+        case .landscape: return "Landscape"
+        case .portrait: return "Portrait"
         case .lowerThird: return "Lower third"
         }
     }
@@ -25,9 +35,17 @@ public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     }
 
     public func usesLowerThird(for size: CGSize) -> Bool {
+        layout(for: size) == .lowerThird
+    }
+
+    public func layout(for size: CGSize) -> PagerResolvedLayout {
         switch self {
-        case .lowerThird: return true
-        case .automatic: return size.height > 0 && size.width / size.height >= Self.lowerThirdAspect
+        case .lowerThird: return .lowerThird
+        case .landscape: return .landscape
+        case .portrait: return .portrait
+        case .automatic:
+            if size.height > 0, size.width / size.height >= Self.lowerThirdAspect { return .lowerThird }
+            return PortraitMetrics.isPortrait(size) ? .portrait : .landscape
         }
     }
 }
