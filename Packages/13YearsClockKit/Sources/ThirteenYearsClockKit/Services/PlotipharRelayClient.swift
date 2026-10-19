@@ -17,7 +17,7 @@ public final class PlotipharRelayClient: NSObject, URLSessionWebSocketDelegate, 
 
     private var session: URLSession!
     private var task: URLSessionWebSocketTask?
-    private let queue = DispatchQueue(label: "dev.7co.13years.relay")
+    private let queue = DispatchQueue(label: "app.13years.relay")
     private var isRunning = false
     private var reconnectWorkItem: DispatchWorkItem?
     private var reconnectDelay: TimeInterval

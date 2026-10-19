@@ -32,4 +32,4 @@ The Pager app is named `13 Years`, the same as the iPhone, iPad and Apple TV app
 7. Delete the branches that fed the release, locally and on GitHub, once they are merged.
 8. Share the release page.
 
-The Pager for iPhone, iPad, Apple TV and Mac ships through TestFlight as one App Store record (`dev.7co.13years.pager`): archive each platform in Xcode and upload it from the Organizer. These builds are not attached to the GitHub release. Archives sign automatically with the 7 and Co LLC team (`DEVELOPMENT_TEAM` in `Config/Local.xcconfig`); the Organizer re-signs for distribution on upload.
+The Pager for iPhone, iPad, Apple TV and Mac ships through TestFlight as one App Store record (`app.13years.pager`): archive each platform in Xcode and upload it from the Organizer. These builds are not attached to the GitHub release. Archives sign automatically with the 7 and Co LLC team (`DEVELOPMENT_TEAM` in `Config/Local.xcconfig`); the Organizer re-signs for distribution on upload.

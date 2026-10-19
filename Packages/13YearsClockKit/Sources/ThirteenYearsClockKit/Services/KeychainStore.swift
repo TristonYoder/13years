@@ -6,7 +6,7 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    private static let service = "dev.7co.13years"
+    private static let service = "app.13years"
 
     static func setString(_ value: String?, forKey key: String) {
         guard let value, !value.isEmpty else {
