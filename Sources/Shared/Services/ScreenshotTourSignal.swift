@@ -5,7 +5,7 @@ import Foundation
 import SwiftUI
 
 public enum ScreenshotTourSignal {
-    public static let notification = Notification.Name("dev.7co.13years.screenshotTourSignal")
+    public static let notification = Notification.Name("app.13years.screenshotTourSignal")
     public static let targetKey = "target"
 
     public static func post(_ name: String, target: String? = nil) {

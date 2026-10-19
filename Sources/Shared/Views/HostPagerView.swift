@@ -123,6 +123,10 @@ public struct HostPagerView: View {
         }
         .onScreenshotTourSignal("pager.chat") { _ in isShowingChat = true }
         .onScreenshotTourSignal("pager.settings") { _ in isShowingSettings = true }
+        .onScreenshotTourSignal("pager.dismiss") { _ in
+            isShowingChat = false
+            isShowingSettings = false
+        }
         .sheet(isPresented: $isShowingChat) {
             PagerChatView(roleId: selectedRoleId, roleName: activeRole?.name ?? "Host")
         }

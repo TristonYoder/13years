@@ -16,7 +16,7 @@ public final class PagerItemDetailsStore: ObservableObject {
     private let retryInterval: TimeInterval
 
     public init(
-        transport: @escaping Transport = PagerItemDetailsTransport.live,
+        transport: @escaping Transport = { try await PagerItemDetailsTransport.standard($0) },
         refreshInterval: TimeInterval = PagerItemDetailsFetch.refreshInterval,
         retryInterval: TimeInterval = PagerItemDetailsFetch.retryInterval
     ) {
@@ -57,6 +57,8 @@ public final class PagerItemDetailsStore: ObservableObject {
 }
 
 public enum PagerItemDetailsTransport {
+    nonisolated(unsafe) public static var standard: PagerItemDetailsStore.Transport = live
+
     public static let live: PagerItemDetailsStore.Transport = { url in
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 4

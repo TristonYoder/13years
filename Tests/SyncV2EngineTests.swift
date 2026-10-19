@@ -693,6 +693,19 @@ final class SyncV2ClientTests: SyncV2TestCase {
         XCTAssertEqual(engine.producerSignal, .stale)
     }
 
+    func testLocallyReceivedLegacyPacketSyncsAClient() {
+        let engine = makeClient()
+        let role = RoleCue(id: "host", name: "Host", state: .standby)
+        var packet = CuePacket(type: .cueUpdate, senderId: "tour", roleCues: [role], timerItem: PCOTimerItem(id: "a", title: "Welcome", itemType: "item", lengthInSeconds: 90))
+        packet.nextItem = CueNextItem(id: "b", title: "Greet", itemType: "item", lengthInSeconds: 15, notes: [:])
+        engine.receiveLocalPacket(packet)
+        XCTAssertTrue(engine.hasSyncedWithProducer)
+        XCTAssertTrue(engine.isProducerLive)
+        XCTAssertEqual(engine.roles.first?.state, .standby)
+        XCTAssertEqual(engine.activeTimerItem?.title, "Welcome")
+        XCTAssertEqual(engine.nextItem?.title, "Greet")
+    }
+
     func testDigestHeartbeatEveryTwoTicks() {
         XCTAssertEqual(CueEngine.digestIntervalTicks, 2)
         XCTAssertEqual(ControlAPIEventHub.digestInterval, 2)

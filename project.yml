@@ -35,6 +35,8 @@ targets:
         excludes:
           - "ProducerMac.entitlements"
           - "Resources"
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/Mac
       - path: Sources/ProducerMac/Resources/13years-pager-merged.bin
         buildPhase: resources
     resources:
@@ -89,6 +91,9 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/PagerIOS
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/IOS
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerIOS/Assets.xcassets
     settings:
@@ -117,6 +122,9 @@ targets:
       - path: Sources/PagerMac
         excludes:
           - "PagerMac.entitlements"
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/Mac
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerMac/Assets.xcassets
     settings:

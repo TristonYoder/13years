@@ -106,10 +106,10 @@ struct ProducerMacApp: App {
                     remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
                     if let options = ScreenshotTourOptions.current {
-                        if ScreenshotTour.current == nil {
-                            ScreenshotTour.current = ScreenshotTour(options: options, engine: cueEngine, documents: documents, flashingWindow: flashingWindow)
+                        if ProducerScreenshotTour.current == nil {
+                            ProducerScreenshotTour.current = ProducerScreenshotTour(options: options, engine: cueEngine, documents: documents, flashingWindow: flashingWindow)
                         }
-                        ScreenshotTour.current?.start()
+                        ProducerScreenshotTour.current?.start()
                     } else {
                         documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
                     }

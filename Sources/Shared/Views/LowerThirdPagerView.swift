@@ -141,6 +141,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { showsControls.toggle() }
+        .onScreenshotTourSignal("pager.lower-third-controls") { _ in showsControls = true }
         .task(id: showsControls) {
             guard showsControls else { return }
             try? await Task.sleep(nanoseconds: 6_000_000_000)

@@ -5,10 +5,11 @@ import SwiftUI
 
 @main
 struct PagerIOSApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: false)
+    @StateObject private var cueEngine = CueEngine(isMasterServer: false, startsNetworking: !ScreenshotTourOptions.isActive)
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        ScreenshotTour.prepareProcess()
         AppFonts.registerIfNeeded()
     }
 
@@ -17,10 +18,14 @@ struct PagerIOSApp: App {
             PagerRootView()
                 .environmentObject(cueEngine)
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { cueEngine.deviceDidBecomeActive() }
+                    if phase == .active && !ScreenshotTourOptions.isActive { cueEngine.deviceDidBecomeActive() }
                 }
                 .onAppear {
                     @MainActor in
+                    if ScreenshotTourOptions.isActive {
+                        PagerScreenshotTour.start(engine: cueEngine)
+                        return
+                    }
                     WatchProducerBridge.attach(to: cueEngine)
                     #if canImport(UIKit)
                     UIApplication.shared.isIdleTimerDisabled = true

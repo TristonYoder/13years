@@ -2558,6 +2558,10 @@ public final class CueEngine: ObservableObject {
     }
     #endif
 
+    public func receiveLocalPacket(_ packet: CuePacket) {
+        handlePacket(packet, origin: .relay)
+    }
+
     func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }
         if let target = packet.to, target != deviceId { return }

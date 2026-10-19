@@ -4,7 +4,7 @@
 import AppKit
 import SwiftUI
 
-extension ScreenshotTour {
+extension ProducerScreenshotTour {
     func steps() -> [Step] {
         var list: [Step] = []
 
@@ -196,52 +196,13 @@ extension ScreenshotTour {
             NSApp.windows.filter { $0.title == "Flash a Pager" }.forEach { $0.close() }
         }))
 
-        list.append(contentsOf: menuSteps())
+        list.append(contentsOf: runner.menuSteps())
         list.append(Step(id: "menu.menu-bar-extra", title: "Menu bar extra", capture: .statusMenu, tracking: { _ in
             let windows = NSApp.windows.filter { String(describing: type(of: $0)).contains("StatusBar") }
             let buttons = windows.flatMap { TourUI.appKitButtons(in: $0.contentView ?? NSView()) }
             buttons.first?.performClick(nil)
         }))
         return list
-    }
-
-    private func menuSteps() -> [Step] {
-        guard let mainMenu = NSApp.mainMenu else { return [] }
-        var seen = Set<String>()
-        var steps: [Step] = []
-        for (position, item) in mainMenu.items.enumerated() where item.submenu != nil && !item.isHidden {
-            let title = item.submenu?.title.isEmpty == false ? item.submenu!.title : item.title
-            var slug = position == 0 ? "app" : Self.slug(title)
-            if slug.isEmpty || seen.contains(slug) { slug = "menu-\(position)" }
-            seen.insert(slug)
-            steps.append(Step(id: "menu.\(slug)", title: position == 0 ? "Application menu" : "\(title) menu", capture: .menus, tracking: { [unowned self] _ in
-                guard let submenu = NSApp.mainMenu?.items.first(where: { $0 === item })?.submenu else { return }
-                let origin = menuOrigin(position: position)
-                submenu.popUp(positioning: nil, at: origin, in: nil)
-            }))
-        }
-        return steps
-    }
-
-    private func menuOrigin(position: Int) -> NSPoint {
-        let screen = NSScreen.screens.first?.visibleFrame ?? .zero
-        return NSPoint(x: screen.minX + 80 + CGFloat(position) * 40, y: screen.maxY - 8)
-    }
-
-    static func slug(_ text: String) -> String {
-        let lowered = text.lowercased()
-        var result = ""
-        var lastDash = false
-        for scalar in lowered.unicodeScalars {
-            if CharacterSet.alphanumerics.contains(scalar) && scalar.isASCII {
-                result.unicodeScalars.append(scalar)
-                lastDash = false
-            } else if !lastDash && !result.isEmpty {
-                result.append("-")
-                lastDash = true
-            }
-        }
-        return result.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private var threadRoleId: String {
@@ -305,26 +266,6 @@ extension ScreenshotTour {
             messages.append(InterTeamMessage(targetRoleId: lighting.id, text: "House to half after the welcome.", timestamp: now.addingTimeInterval(-240)))
         }
         engine.recentMessages = messages.sorted { $0.timestamp > $1.timestamp }
-    }
-
-    @discardableResult
-    func waitForSheet(depth: Int = 1) async throws -> NSWindow {
-        for _ in 0..<40 {
-            if let main = TourUI.mainWindow, TourUI.sheetDepth(of: main) >= depth, let sheet = TourUI.deepestSheet(of: main) {
-                await pause(0.5)
-                return sheet
-            }
-            await pause(0.15)
-        }
-        throw TourUIError.timedOut("sheet")
-    }
-
-    func waitForPopover() async throws {
-        for _ in 0..<30 {
-            if !TourUI.popoverWindows.isEmpty { return }
-            await pause(0.15)
-        }
-        throw TourUIError.timedOut("popover")
     }
 
     @discardableResult

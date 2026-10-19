@@ -15,6 +15,9 @@ struct Arguments {
     var build = ""
     var commit = ""
     var appearance = ""
+    var app = "producer-mac"
+    var device = ""
+    var simulator = ""
     var timeout: TimeInterval = 600
 
     init() {
@@ -29,6 +32,9 @@ struct Arguments {
             case "--build": build = value
             case "--commit": commit = value
             case "--appearance": appearance = value
+            case "--app": app = value
+            case "--device": device = value
+            case "--simulator": simulator = value
             case "--timeout": timeout = TimeInterval(value) ?? 600
             default: break
             }
@@ -42,8 +48,9 @@ struct Request: Decodable {
     let title: String
     let file: String
     let pid: Int
-    let windowIDs: [Int]
-    let includeMenus: Bool
+    let windowIDs: [Int]?
+    let includeMenus: Bool?
+    let orientation: String?
 }
 
 struct TourRecord: Decodable {
@@ -75,6 +82,7 @@ struct ManifestSkip: Encodable {
 
 struct Manifest: Encodable {
     let app: String
+    let device: String
     let version: String
     let build: String
     let commit: String
@@ -88,12 +96,14 @@ enum CaptureError: Error, CustomStringConvertible {
     case noWindows
     case noDisplay
     case writeFailed
+    case simulator(String)
 
     var description: String {
         switch self {
         case .noWindows: return "no matching on-screen windows"
         case .noDisplay: return "windows are not on a single display"
         case .writeFailed: return "could not write PNG"
+        case .simulator(let message): return "simctl screenshot failed: \(message)"
         }
     }
 }
@@ -103,9 +113,10 @@ func isAlive(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 }
 func capture(_ request: Request, to url: URL) async throws -> (Int, Int) {
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
     let owned = content.windows.filter { $0.owningApplication?.processID == pid_t(request.pid) }
-    var windows = owned.filter { request.windowIDs.contains(Int($0.windowID)) }
-    if request.includeMenus {
-        windows += owned.filter { $0.windowLayer >= 100 && !request.windowIDs.contains(Int($0.windowID)) && $0.frame.width > 4 }
+    let ids = request.windowIDs ?? []
+    var windows = owned.filter { ids.contains(Int($0.windowID)) }
+    if request.includeMenus == true {
+        windows += owned.filter { $0.windowLayer >= 100 && !ids.contains(Int($0.windowID)) && $0.frame.width > 4 }
     }
     guard !windows.isEmpty else { throw CaptureError.noWindows }
     let union = windows.map(\.frame).reduce(windows[0].frame) { $0.union($1) }
@@ -128,6 +139,43 @@ func capture(_ request: Request, to url: URL) async throws -> (Int, Int) {
     CGImageDestinationAddImage(destination, image, nil)
     guard CGImageDestinationFinalize(destination) else { throw CaptureError.writeFailed }
     return (image.width, image.height)
+}
+
+func simulatorCapture(_ request: Request, udid: String, to url: URL) throws -> (Int, Int) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+    process.arguments = ["simctl", "io", udid, "screenshot", "--type=png", url.path]
+    let errors = Pipe()
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = errors
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+        let message = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        throw CaptureError.simulator(message.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw CaptureError.writeFailed }
+    let landscape = request.orientation?.hasPrefix("landscape") == true
+    guard landscape, image.height > image.width else { return (image.width, image.height) }
+    let clockwise = request.orientation == "landscapeLeft"
+    guard let context = CGContext(data: nil, width: image.height, height: image.width, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+        throw CaptureError.writeFailed
+    }
+    if clockwise {
+        context.translateBy(x: 0, y: CGFloat(image.width))
+        context.rotate(by: -.pi / 2)
+    } else {
+        context.translateBy(x: CGFloat(image.height), y: 0)
+        context.rotate(by: .pi / 2)
+    }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    guard let rotated = context.makeImage(),
+          let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else { throw CaptureError.writeFailed }
+    CGImageDestinationAddImage(destination, rotated, nil)
+    guard CGImageDestinationFinalize(destination) else { throw CaptureError.writeFailed }
+    return (rotated.width, rotated.height)
 }
 
 func writeJSON(_ object: [String: Any], to url: URL) {
@@ -153,7 +201,9 @@ func run(_ arguments: Arguments) async -> Int32 {
     let ackURL = work.appendingPathComponent(".ack.json")
     let tourURL = work.appendingPathComponent(".tour.json")
     let deadline = Date().addingTimeInterval(arguments.timeout)
-    CGWarpMouseCursorPosition(CGPoint(x: (NSScreen.screens.first?.frame.maxX ?? 1600) - 120, y: 600))
+    if arguments.simulator.isEmpty {
+        CGWarpMouseCursorPosition(CGPoint(x: (NSScreen.screens.first?.frame.maxX ?? 1600) - 120, y: 600))
+    }
     var lastIndex = -1
     while Date() < deadline {
         if FileManager.default.fileExists(atPath: tourURL.path) { break }
@@ -163,7 +213,9 @@ func run(_ arguments: Arguments) async -> Int32 {
             lastIndex = request.index
             let target = work.appendingPathComponent(request.file)
             do {
-                let (width, height) = try await capture(request, to: target)
+                let (width, height) = arguments.simulator.isEmpty
+                    ? try await capture(request, to: target)
+                    : try simulatorCapture(request, udid: arguments.simulator, to: target)
                 print("captured \(request.file) \(width)x\(height)")
                 writeJSON(["index": request.index, "ok": true], to: ackURL)
             } catch {
@@ -200,7 +252,8 @@ func run(_ arguments: Arguments) async -> Int32 {
     }
     let formatter = ISO8601DateFormatter()
     let manifest = Manifest(
-        app: "producer-mac",
+        app: arguments.app,
+        device: arguments.device,
         version: arguments.version,
         build: arguments.build,
         commit: arguments.commit,

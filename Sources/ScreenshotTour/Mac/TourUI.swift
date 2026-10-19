@@ -44,25 +44,17 @@ struct TourElement {
     }
 }
 
-enum TourUIError: Error, CustomStringConvertible {
-    case notFound(String)
-    case timedOut(String)
-    case skipped(String)
-
-    var description: String {
-        switch self {
-        case .notFound(let what): return "not found: \(what)"
-        case .timedOut(let what): return "timed out waiting for \(what)"
-        case .skipped(let reason): return reason
-        }
-    }
-}
-
 @MainActor
 enum TourUI {
+    static var auxiliaryWindowTitles: Set<String> = []
+
     static var mainWindow: NSWindow? {
         NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true && $0.isVisible }
-            ?? NSApp.windows.first { $0.canBecomeMain && $0.isVisible && !$0.isSheet && $0.title != "Flash a Pager" }
+            ?? NSApp.windows.first { $0.canBecomeMain && $0.isVisible && !$0.isSheet && !auxiliaryWindowTitles.contains($0.title) && !isSettingsWindow($0) }
+    }
+
+    static func isSettingsWindow(_ window: NSWindow) -> Bool {
+        window.identifier?.rawValue.contains("Settings") == true
     }
 
     static func children(of object: NSAccessibilityProtocol) -> [NSAccessibilityProtocol] {

@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-import AppKit
+import CoreGraphics
+import Foundation
 
 struct ScreenshotTourOptions {
+    enum Appearance: String {
+        case light
+        case dark
+    }
+
     let outputDirectory: URL
     let documentURL: URL?
     let only: [String]
-    let appearance: NSAppearance.Name?
-    let contentSize: NSSize
+    let appearance: Appearance?
+    let contentSize: CGSize
 
     static let current = ScreenshotTourOptions(arguments: ProcessInfo.processInfo.arguments)
 
@@ -26,13 +32,9 @@ struct ScreenshotTourOptions {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        switch value("-ScreenshotAppearance")?.lowercased() {
-        case "dark": appearance = .darkAqua
-        case "light": appearance = .aqua
-        default: appearance = nil
-        }
+        appearance = value("-ScreenshotAppearance").flatMap { Appearance(rawValue: $0.lowercased()) }
         let size = (value("-ScreenshotWindowSize") ?? "1440x900").split(separator: "x").compactMap { Double($0) }
-        contentSize = size.count == 2 ? NSSize(width: size[0], height: size[1]) : NSSize(width: 1440, height: 900)
+        contentSize = size.count == 2 ? CGSize(width: size[0], height: size[1]) : CGSize(width: 1440, height: 900)
     }
 
     func includes(_ id: String) -> Bool {
