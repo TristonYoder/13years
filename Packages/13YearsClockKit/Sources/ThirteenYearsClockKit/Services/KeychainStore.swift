@@ -7,7 +7,10 @@ import Security
 
 enum KeychainStore {
     private static let service = "dev.7co.13years"
-    private static let isEphemeral = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private static let isEphemeral: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil || environment["THIRTEEN_EPHEMERAL_KEYCHAIN"] == "1"
+    }()
     private static let ephemeralLock = NSLock()
     nonisolated(unsafe) private static var ephemeral: [String: Data] = [:]
 

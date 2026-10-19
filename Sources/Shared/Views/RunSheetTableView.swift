@@ -783,6 +783,7 @@ struct RunSheetColumnsMenu: View {
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             picker
         }
+        .onScreenshotTourSignal("runsheet.columns") { _ in isPresented = true }
     }
 
     private var picker: some View {

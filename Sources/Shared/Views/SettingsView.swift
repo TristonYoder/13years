@@ -233,6 +233,9 @@ public struct SettingsView: View {
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
         }
+        .onScreenshotTourSignal("settings.roles") { _ in showingRoleNotes = true }
+        .onScreenshotTourSignal("settings.waypoints") { _ in showingWaypointLibrary = true }
+        .onScreenshotTourSignal("settings.event-schedule") { _ in showingServiceSchedule = true }
         .sheet(isPresented: $showingRoleNotes) {
             RoleNoteAssignmentView(categories: knownNoteCategories)
         }

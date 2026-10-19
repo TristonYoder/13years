@@ -5,7 +5,7 @@ import SwiftUI
 
 @main
 struct ProducerMacApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true, defersLANServing: true)
+    @StateObject private var cueEngine = CueEngine(isMasterServer: true, hostsControlAPI: true, startsNetworking: !ScreenshotTourOptions.isActive, defersLANServing: true)
     @StateObject private var splash = SplashCoordinator()
     @StateObject private var documents = DocumentController()
     @StateObject private var launchPreferences = LaunchPreferences()
@@ -13,6 +13,7 @@ struct ProducerMacApp: App {
     private let flashingWindow = PagerFlashingWindowController()
 
     init() {
+        ScreenshotTour.prepareProcess()
         AppFonts.registerIfNeeded()
     }
 
@@ -64,7 +65,7 @@ struct ProducerMacApp: App {
                 ))
                 .frame(minWidth: 800, minHeight: 600)
                 .environmentObject(launchPreferences)
-                .splashScreen(isPresented: splash.isPresented)
+                .splashScreen(isPresented: splash.isPresented && !ScreenshotTourOptions.isActive)
                 .overlay {
                     if let name = remoteHub.connectingTo {
                         RemoteConnectingOverlay(name: name, cancel: remoteHub.cancelConnect)
@@ -104,7 +105,14 @@ struct ProducerMacApp: App {
                     splash.markReady()
                     remoteHub.onActivated = { documents.noteRemote($0) }
                     documents.attach(cueEngine)
-                    documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
+                    if let options = ScreenshotTourOptions.current {
+                        if ScreenshotTour.current == nil {
+                            ScreenshotTour.current = ScreenshotTour(options: options, engine: cueEngine, documents: documents, flashingWindow: flashingWindow)
+                        }
+                        ScreenshotTour.current?.start()
+                    } else {
+                        documents.applyLaunchBehavior(launchPreferences, engine: cueEngine) { remoteHub.connect(to: $0) }
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
                     guard let window = note.object as? NSWindow, window.canBecomeMain, !window.isSheet else { return }

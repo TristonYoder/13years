@@ -225,6 +225,7 @@ public struct LiveTimerHeaderView: View {
                 guard !isEditingTimer else { return }
                 isEditingTimer = true
             }
+            .onScreenshotTourSignal("header.timer-keypad") { _ in isEditingTimer = true }
             .timeEntryPopover(
                 isPresented: $isEditingTimer,
                 previewBaseSeconds: item.remainingSeconds,

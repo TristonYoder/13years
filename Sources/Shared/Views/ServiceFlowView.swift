@@ -141,6 +141,16 @@ public struct ServiceFlowView: View {
             }
         }
         #endif
+        .onScreenshotTourSignal("runsheet.add-item") { _ in editorMode = .add }
+        .onScreenshotTourSignal("runsheet.edit-item") { id in
+            if let item = engine.planItems.first(where: { $0.id == id }) { editorMode = .edit(item) }
+        }
+        .onScreenshotTourSignal("runsheet.delete-item") { id in
+            pendingDeleteItem = engine.planItems.first { $0.id == id }
+        }
+        .onScreenshotTourSignal("runsheet.new-waypoint") { id in newWaypointTargetItemId = id }
+        .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
+        .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
             PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition in
                 if let id {

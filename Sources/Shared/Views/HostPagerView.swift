@@ -121,6 +121,8 @@ public struct HostPagerView: View {
             lastSeenMessageId = latestRelevantMessage?.id
             PagerHaptics.shared.prepareIfNeeded()
         }
+        .onScreenshotTourSignal("pager.chat") { _ in isShowingChat = true }
+        .onScreenshotTourSignal("pager.settings") { _ in isShowingSettings = true }
         .sheet(isPresented: $isShowingChat) {
             PagerChatView(roleId: selectedRoleId, roleName: activeRole?.name ?? "Host")
         }

@@ -40,6 +40,7 @@ public struct MessagesView: View {
                 }
                 .help("Clear message history on every connected device — cannot be undone")
             }
+            .onScreenshotTourSignal("messages.clear-history") { _ in showingClearConfirmation = true }
             .confirmationDialog(
                 "Clear message history on every connected device?",
                 isPresented: $showingClearConfirmation,

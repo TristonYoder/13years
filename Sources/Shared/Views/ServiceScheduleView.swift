@@ -49,6 +49,7 @@ public struct ServiceScheduleView: View {
                     }
                 }
             }
+            .onScreenshotTourSignal("settings.add-schedule") { _ in editorTarget = .add }
             .sheet(item: $editorTarget) { target in
                 ServiceScheduleEditorView(target: target)
             }

@@ -145,6 +145,7 @@ struct RunSheetNotePillView: View {
         .help(pill.text)
         .accessibilityLabel("\(pill.category) note")
         .accessibilityHint(pill.text)
+        .onScreenshotTourSignal("runsheet.note-pill", target: pill.text) { _ in isPresented = true }
         #if os(macOS) || os(iOS)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
