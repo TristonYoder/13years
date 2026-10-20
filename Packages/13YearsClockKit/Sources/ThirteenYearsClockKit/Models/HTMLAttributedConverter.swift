@@ -516,10 +516,12 @@ public enum HTMLAttributedConverter {
                 if frame.mono == true { mono = true }
                 if let value = frame.baseline { baseline = value }
             }
+            #if !os(Linux)
             var intent: InlinePresentationIntent = []
             if isBold { intent.insert(.stronglyEmphasized) }
             if isItalic { intent.insert(.emphasized) }
             if !intent.isEmpty { container.inlinePresentationIntent = intent }
+            #endif
             if isUnderlined { container[HTMLUnderlineKey.self] = true }
             if isStruck { container[HTMLStrikethroughKey.self] = true }
             if let color { container[HTMLForegroundColorKey.self] = color }
