@@ -23,6 +23,8 @@ public final class CueEngine: ObservableObject {
     @Published public var currentDocumentURL: URL?
     @Published public var selectedMessageThreadId: String = "all"
     @Published private var messageReadAt: [String: Date] = [:]
+    public let incomingMessages = PassthroughSubject<InterTeamMessage, Never>()
+    static let incomingMessageFreshness: TimeInterval = 300
     @Published public var roles: [RoleCue] = RoleCue.defaultRoles {
         didSet {
             persistRoles()
@@ -46,8 +48,36 @@ public final class CueEngine: ObservableObject {
     @Published public var activeItemIndex: Int = 0 {
         didSet { persistCurrentFlow() }
     }
-    @Published public var activeTimerItem: PCOTimerItem?
+    @Published public var activeTimerItem: PCOTimerItem? {
+        didSet { trackActuals(from: oldValue) }
+    }
+    @Published public internal(set) var itemActuals: [ItemActual] = [] {
+        didSet { if itemActuals != oldValue { persistCurrentFlow() } }
+    }
+    @Published public internal(set) var skippedItemIds: [String: Set<String>] = [:] {
+        didSet {
+            guard skippedItemIds != oldValue else { return }
+            persistCurrentFlow()
+            rebroadcastIfNextItemChanged()
+        }
+    }
+    @Published public internal(set) var isRehearsalMode = false {
+        didSet {
+            guard isRehearsalMode != oldValue else { return }
+            actualsContextDidChange()
+            rebroadcastIfNextItemChanged()
+        }
+    }
+    @Published public internal(set) var rehearsalPlanTimeId: String? {
+        didSet {
+            guard rehearsalPlanTimeId != oldValue, isRehearsalMode else { return }
+            rebroadcastIfNextItemChanged()
+        }
+    }
+    var actualRun: ActualRun?
+    var hasStartedPlan = false
     @Published public var nextItem: PCOTimerItem?
+    @Published public var nextItemStartsAtMs: Int?
     @Published var isActiveTimerActualOverride: Bool = false
     var actualOverrideItemId: String?
     @Published public var isPCOConnected: Bool = false
@@ -58,6 +88,9 @@ public final class CueEngine: ObservableObject {
     @Published public var pcoLastError: String?
     @Published public var pcoNoteCategories: [PCOClient.PCONoteCategory] = []
     @Published public internal(set) var pcoPendingChanges: PCOPendingChanges?
+    @Published public internal(set) var pcoPlanContext: PCOPlanContext?
+    @Published public internal(set) var isRefreshingPCOPlanContext = false
+    @Published public internal(set) var pcoPlanContextError: String?
     @Published public var isPCOLiveSyncEnabled: Bool = false {
         didSet { write(isPCOLiveSyncEnabled, forKey: Self.pcoLiveSyncDefaultsKey) }
     }
@@ -68,13 +101,48 @@ public final class CueEngine: ObservableObject {
     }
     private static let hourFormatThresholdDefaultsKey = "hourFormatThreshold"
 
+    @Published public var clockFormat: ClockFormat = ClockFormat.systemDefault {
+        didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
+    }
+    private static let clockFormatDefaultsKey = "clockFormat"
+    @Published public var runSheetLayout = RunSheetLayoutSettings()
+    private var legacyRunSheetHiddenColumns: [String]?
+
+    public var runSheetColumnWidths: [String: Double] {
+        get { runSheetLayout.columnWidths ?? [:] }
+        set { runSheetLayout.columnWidths = newValue.isEmpty ? nil : newValue }
+    }
+    @Published public internal(set) var producerClockFormat: ClockFormat?
+
+    public var displayClockFormat: ClockFormat {
+        if let override = roles.first(where: { selectedRoleIds.contains($0.id) && $0.clockFormat != nil })?.clockFormat {
+            return override
+        }
+        if isMasterServer || isRemoteMirror { return clockFormat }
+        return producerClockFormat ?? clockFormat
+    }
+
+    public var displayPagerFields: [PagerItemField] {
+        let fields = roles.first(where: { selectedRoleIds.contains($0.id) && $0.pagerFields != nil })?.pagerFields
+        return PagerItemField.ordered(fields ?? [])
+    }
+
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
     @Published public var pcoPlans: [PCOClient.PCOPlanInfo] = []
     @Published public var eventTimes: [EventTime] = [] {
-        didSet { if eventTimes != oldValue { persistCurrentFlow() } }
+        didSet {
+            guard eventTimes != oldValue else { return }
+            persistCurrentFlow()
+            actualsContextDidChange()
+        }
     }
     @Published public var liveEventTimeId: String? {
-        didSet { if liveEventTimeId != oldValue { persistCurrentFlow() } }
+        didSet {
+            guard liveEventTimeId != oldValue else { return }
+            persistCurrentFlow()
+            actualsContextDidChange()
+            rebroadcastIfNextItemChanged()
+        }
     }
     @Published public var isChangingEventTime: Bool = false
     @Published public var pcoSelectedServiceTypeId: String?
@@ -165,6 +233,7 @@ public final class CueEngine: ObservableObject {
 
     func stampUtcOffset(_ packet: inout CuePacket) {
         packet.utcOffsetSeconds = timeZoneProvider().secondsFromGMT()
+        packet.clockFormat = clockFormat.rawValue
     }
 
     nonisolated public static func persistentDeviceId() -> String {
@@ -197,6 +266,7 @@ public final class CueEngine: ObservableObject {
     #endif
     private let hostsControlAPI: Bool
     let pcoClient = PCOClient()
+    let pcoReferenceCache = PCOReferenceCache()
     var pcoChangeTracking = PCOChangeTracking()
     private let plotipharPairingClient = PlotipharPairingClient()
     private let plotipharClient = PlotipharClient()
@@ -225,11 +295,13 @@ public final class CueEngine: ObservableObject {
         self.pcoDefaultServiceTypeId = UserDefaults.standard.string(forKey: Self.defaultServiceTypeDefaultsKey)
         self.hourFormatThreshold = UserDefaults.standard.string(forKey: Self.hourFormatThresholdDefaultsKey)
             .flatMap(HourFormatThreshold.init(rawValue:)) ?? .over90Minutes
+        self.clockFormat = UserDefaults.standard.string(forKey: Self.clockFormatDefaultsKey)
+            .flatMap(ClockFormat.init(rawValue:)) ?? ClockFormat.systemDefault
 
-        self.pcoOAuthTokens = KeychainStore.codable(OAuthTokens.self, forKey: Self.pcoTokensKeychainKey)
+        self.pcoOAuthTokens = isMasterServer ? KeychainStore.codable(OAuthTokens.self, forKey: Self.pcoTokensKeychainKey) : nil
         self.pcoUserName = UserDefaults.standard.string(forKey: Self.pcoUserNameDefaultsKey)
         self.isPCOConnected = pcoOAuthTokens != nil
-        KeychainStore.setString(nil, forKey: "pcoSecret")
+        if isMasterServer { KeychainStore.setString(nil, forKey: "pcoSecret") }
         self.plotipharRelayHost = UserDefaults.standard.string(forKey: Self.relayHostDefaultsKey).flatMap(RelayHostPolicy.normalized) ?? RelayHostPolicy.defaultHost
         self.proxyToken = KeychainStore.string(forKey: Self.proxyTokenKeychainKey) ?? ""
         self.isProxyEnabled = UserDefaults.standard.object(forKey: Self.proxyEnabledDefaultsKey) != nil
@@ -277,12 +349,24 @@ public final class CueEngine: ObservableObject {
         }
 
         refreshPCOTokensIfNeeded()
+        migrateLegacyRunSheetHiddenColumns()
 
         if UserDefaults.standard.bool(forKey: Self.pcoLiveSyncDefaultsKey) {
             enablePCOLiveSync()
         }
 
         updateControlAPI()
+    }
+
+    private static let legacyRunSheetHiddenColumnsKey = "runSheetHiddenColumns"
+
+    private func migrateLegacyRunSheetHiddenColumns() {
+        guard !isRemoteMirror,
+              let raw = UserDefaults.standard.string(forKey: Self.legacyRunSheetHiddenColumnsKey) else { return }
+        let hidden = raw.split(separator: ",").map(String.init)
+        legacyRunSheetHiddenColumns = hidden
+        if runSheetLayout.hiddenColumns == nil { runSheetLayout.hiddenColumns = hidden }
+        UserDefaults.standard.removeObject(forKey: Self.legacyRunSheetHiddenColumnsKey)
     }
 
     private func write(_ value: Any?, forKey key: String) {
@@ -459,6 +543,7 @@ public final class CueEngine: ObservableObject {
             loadUpcomingPCOPlan(serviceTypeId: serviceTypeId)
             return
         }
+        pcoReferenceCache.removeAll()
         if planId != currentPCOPlanId {
             disablePCOLiveSync()
             eventTimes.removeAll { $0.pcoPlanTimeId != nil }
@@ -475,6 +560,7 @@ public final class CueEngine: ObservableObject {
                 }
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
                 await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
+                await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
             } catch {
                 pcoLastError = error.localizedDescription
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
@@ -695,10 +781,15 @@ public final class CueEngine: ObservableObject {
             activeItemIndex: activeItemIndex,
             eventTimes: eventTimes,
             liveEventTimeId: liveEventTimeId,
+            pcoPlanContext: pcoPlanContext,
+            itemActuals: itemActuals.isEmpty ? nil : itemActuals,
+            skippedItemIds: ItemActuals.sortedSkips(skippedItemIds),
             settings: .init(
                 hourFormatThreshold: hourFormatThreshold,
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
-                plotipharRelayHost: plotipharRelayHost
+                plotipharRelayHost: plotipharRelayHost,
+                clockFormat: clockFormat,
+                runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout
             )
         )
     }
@@ -714,6 +805,9 @@ public final class CueEngine: ObservableObject {
         blank.activeItemIndex = 0
         blank.eventTimes = []
         blank.liveEventTimeId = nil
+        blank.pcoPlanContext = nil
+        blank.itemActuals = nil
+        blank.skippedItemIds = nil
         apply(blank)
         currentDocumentURL = nil
     }
@@ -741,6 +835,9 @@ public final class CueEngine: ObservableObject {
         waypoints = document.waypoints
         serviceSchedules = sortedByStartsAt(document.serviceSchedules)
         hourFormatThreshold = document.settings.hourFormatThreshold
+        if let format = document.settings.clockFormat { clockFormat = format }
+        runSheetLayout = document.settings.runSheetLayout
+            ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
     }
 
@@ -748,7 +845,15 @@ public final class CueEngine: ObservableObject {
         restoreEventTimes(document.eventTimes, liveId: document.liveEventTimeId)
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false }
+        let validIds = Set(items.map(\.id))
+        isRehearsalMode = false
+        rehearsalPlanTimeId = nil
+        actualRun = nil
+        hasStartedPlan = false
+        itemActuals = ItemActuals.pruned(document.itemActuals ?? [], validItemIds: validIds)
+        skippedItemIds = ItemActuals.skips(from: document.skippedItemIds, validItemIds: validIds)
         planItems = items
+        pcoPlanContext = Self.context(document.pcoPlanContext, matching: items)
         if items.isEmpty {
             activeItemIndex = 0
             activeTimerItem = nil
@@ -759,11 +864,21 @@ public final class CueEngine: ObservableObject {
         reconcileEventTimesWithPlan()
     }
 
+    static func context(_ context: PCOPlanContext?, matching items: [PCOTimerItem]) -> PCOPlanContext? {
+        guard let context, items.contains(where: { $0.pcoPlanId == context.planId }) else { return nil }
+        return context
+    }
+
     public func importFlow(title: String?, items: [PCOTimerItem]) {
         if isRemoteMirror {
             _ = loadPlanIntoRemote(title: title, items: items)
             return
         }
+        let newPlanId = items.first?.pcoPlanId
+        if newPlanId == nil || newPlanId != planItems.first?.pcoPlanId {
+            resetLiveOperations()
+        }
+        hasStartedPlan = false
         var stamped = items
         for index in stamped.indices {
             stamped[index].sequence = index + 1
@@ -772,6 +887,7 @@ public final class CueEngine: ObservableObject {
             stamped[index].isRunning = false
         }
         planItems = stamped
+        pcoPlanContext = Self.context(pcoPlanContext, matching: stamped)
         if let firstSelectable = stamped.firstIndex(where: { !$0.isHeader }) {
             activeItemIndex = firstSelectable
             var item = stamped[firstSelectable]
@@ -785,10 +901,11 @@ public final class CueEngine: ObservableObject {
         reconcileEventTimesWithPlan()
     }
 
-    public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) {
+    @discardableResult
+    public func addPlanItem(title: String, itemType: String, lengthInSeconds: Int, isDurationActual: Bool = false) -> String? {
         if isRemoteMirror {
             remoteCommands?.send(.planItemAdd(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual))
-            return
+            return nil
         }
         var item = PCOTimerItem(
             title: title,
@@ -806,13 +923,16 @@ public final class CueEngine: ObservableObject {
             activeTimerItem = item
             broadcastTimerUpdate()
         }
+        return item.id
     }
 
-    public func updatePlanItem(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]? = nil, isDurationActual: Bool? = nil) {
+    public func updatePlanItem(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]? = nil, isDurationActual: Bool? = nil, description: String? = nil, servicePosition: PCOServicePosition? = nil) {
         if isRemoteMirror {
             var fields: [String: Any] = ["title": title, "itemType": itemType, "lengthInSeconds": lengthInSeconds]
             if let notes { fields["notes"] = notes }
             if let isDurationActual { fields["isDurationActual"] = isDurationActual }
+            if let description { fields["description"] = description }
+            if let servicePosition { fields["servicePosition"] = servicePosition.rawValue }
             remoteCommands?.send(.planItemUpdate(id: id, body: RemoteCommand.body(fields)))
             return
         }
@@ -828,6 +948,9 @@ public final class CueEngine: ObservableObject {
         }
         if let isDurationActual {
             planItems[index].isDurationActual = isDurationActual
+        }
+        if planItems[index].pcoPlanId == nil {
+            applyManualDetails(at: index, description: description, servicePosition: servicePosition)
         }
 
         if activeTimerItem?.id == id {
@@ -846,6 +969,20 @@ public final class CueEngine: ObservableObject {
         }
     }
 
+    private func applyManualDetails(at index: Int, description: String?, servicePosition: PCOServicePosition?) {
+        guard description != nil || servicePosition != nil else { return }
+        let trimmed = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var details = planItems[index].details ?? PCOItemDetails()
+        if let trimmed {
+            details.description = trimmed.isEmpty ? nil : trimmed
+        }
+        if let servicePosition {
+            details.servicePosition = servicePosition
+        }
+        let isEmpty = details == PCOItemDetails()
+        planItems[index].details = isEmpty ? nil : details
+    }
+
     public func removePlanItem(id: String) {
         if isRemoteMirror {
             remoteCommands?.send(.planItemRemove(id: id))
@@ -853,6 +990,7 @@ public final class CueEngine: ObservableObject {
         }
         guard let index = planItems.firstIndex(where: { $0.id == id }) else { return }
         let wasActive = activeTimerItem?.id == id
+        forgetLiveOperations(forItemId: id)
         planItems.remove(at: index)
         renumberPlanItems()
 
@@ -897,6 +1035,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard let tappedIndex = planItems.firstIndex(where: { $0.id == id }) else { return }
+        markPlanStarted()
         let index = resolveSelectableIndex(startingAt: tappedIndex)
         let previousIndex = activeItemIndex
         activeItemIndex = index
@@ -1271,7 +1410,7 @@ public final class CueEngine: ObservableObject {
     }
 
     func jumpPCOLive(toEventTime eventTimeId: String, itemId targetItemId: String) {
-        guard isPCOLiveSyncEnabled,
+        guard isPCOLiveSyncEnabled, !isRehearsalMode,
               let targetPlanTimeId = eventTimes.first(where: { $0.id == eventTimeId })?.pcoPlanTimeId,
               let serviceTypeId = currentPCOServiceTypeId,
               let planId = currentPCOPlanId,
@@ -1342,7 +1481,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func syncElapsedTimeFromPCOLive() {
-        guard isPCOLiveSyncEnabled,
+        guard isPCOLiveSyncEnabled, !isRehearsalMode,
               let serviceTypeId = currentPCOServiceTypeId,
               let planId = currentPCOPlanId else { return }
         Task {
@@ -1374,7 +1513,7 @@ public final class CueEngine: ObservableObject {
     }
 
     private func mirrorToPCOLive(direction: PCOClient.PCOLiveDirection, count: Int = 1, targetItemId: String? = nil) {
-        guard count > 0,
+        guard count > 0, isPCOLiveSyncEnabled, !isRehearsalMode,
               let serviceTypeId = currentPCOServiceTypeId,
               let planId = currentPCOPlanId else { return }
         Task {
@@ -1408,7 +1547,7 @@ public final class CueEngine: ObservableObject {
         targetItemId: String?,
         alreadyCorrected: Bool = false
     ) async {
-        guard isPCOLiveSyncEnabled else { return }
+        guard isPCOLiveSyncEnabled, !isRehearsalMode else { return }
         do {
             guard let currentItemTime = try await pcoClient.fetchCurrentItemTime(serviceTypeId: serviceTypeId, planId: planId) else { return }
             noteLivePCOPlanTime(currentItemTime.planTimeId)
@@ -1514,7 +1653,11 @@ public final class CueEngine: ObservableObject {
     var activeTimerItemForBroadcast: PCOTimerItem? {
         guard var item = activeTimerItem else { return nil }
         item.isDurationActual = activeTimerActualForDisplay
-        return item
+        return item.broadcastTrimmed(fields: broadcastPagerFields)
+    }
+
+    var broadcastPagerFields: Set<PagerItemField> {
+        Set(roles.flatMap { $0.pagerFields ?? [] })
     }
 
     public func nextPlanItem(startTimer: Bool = true) {
@@ -1523,6 +1666,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard !planItems.isEmpty, let targetIndex = nextSelectableIndex(after: activeItemIndex) else { return }
+        markPlanStarted()
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
@@ -1539,6 +1683,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard !planItems.isEmpty, let targetIndex = previousSelectableIndex(before: activeItemIndex) else { return }
+        markPlanStarted()
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
@@ -1549,7 +1694,7 @@ public final class CueEngine: ObservableObject {
         mirrorToPCOLive(direction: .previous, count: steps, targetItemId: item.id)
     }
 
-    var derivedNextPlanItem: PCOTimerItem? {
+    public var derivedNextPlanItem: PCOTimerItem? {
         guard activeTimerItem != nil, planItems.indices.contains(activeItemIndex),
               let index = nextSelectableIndex(after: activeItemIndex) else { return nil }
         return planItems[index]
@@ -1557,38 +1702,57 @@ public final class CueEngine: ObservableObject {
 
     var nextItemForBroadcast: CueNextItem? {
         guard let item = derivedNextPlanItem else { return nil }
-        return CueNextItem(item: item, noteCategories: Set(roles.flatMap(\.assignedNoteCategories)))
+        let fields = broadcastPagerFields
+        return CueNextItem(
+            item: item,
+            noteCategories: Set(roles.flatMap(\.assignedNoteCategories)),
+            pagerFields: fields,
+            startsAtMs: fields.contains(.startTime) ? projectedStartMs(ofItemId: item.id) : nil
+        )
+    }
+
+    func projectedStartMs(ofItemId itemId: String, now: Date = Date()) -> Int? {
+        let fromSchedule = runSheetSchedule(now: now).entry(forItemId: itemId)?.projectedStart
+        let running = activeTimerItem.flatMap { $0.isRunning ? now.addingTimeInterval(TimeInterval(max(0, $0.remainingSeconds))) : nil }
+        guard let date = fromSchedule ?? running else { return nil }
+        return Int((date.timeIntervalSince1970).rounded()) * 1000
+    }
+
+    public var nextItemStartDate: Date? {
+        if let ms = nextItemStartsAtMs { return Date(timeIntervalSince1970: TimeInterval(ms) / 1000) }
+        guard !planItems.isEmpty, let next = derivedNextPlanItem else { return nil }
+        return projectedStartMs(ofItemId: next.id).map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
     }
 
     private func rebroadcastIfNextItemChanged() {
         guard isMasterServer, !isRemoteMirror, let active = activeTimerItem,
               planItems.indices.contains(activeItemIndex), planItems[activeItemIndex].id == active.id,
-              nextItemForBroadcast != syncV2.lastNextItem else { return }
+              nextItemForBroadcast?.withoutStart != syncV2.lastNextItem?.withoutStart else { return }
         broadcastTimerUpdate()
     }
 
-    private func nextSelectableIndex(after index: Int) -> Int? {
+    private func nextSelectableIndex(after index: Int, includingOmitted: Bool = false) -> Int? {
         var candidate = index + 1
         while candidate < planItems.count {
-            if !planItems[candidate].isHeader { return candidate }
+            if !planItems[candidate].isHeader, includingOmitted || !isOmittedFromNavigation(planItems[candidate]) { return candidate }
             candidate += 1
         }
         return nil
     }
 
-    private func previousSelectableIndex(before index: Int) -> Int? {
+    private func previousSelectableIndex(before index: Int, includingOmitted: Bool = false) -> Int? {
         var candidate = index - 1
         while candidate >= 0 {
-            if !planItems[candidate].isHeader { return candidate }
+            if !planItems[candidate].isHeader, includingOmitted || !isOmittedFromNavigation(planItems[candidate]) { return candidate }
             candidate -= 1
         }
         return nil
     }
 
-    private func realItemStepCount(from: Int, to: Int) -> Int {
+    func realItemStepCount(from: Int, to: Int) -> Int {
         guard from != to, planItems.indices.contains(from), planItems.indices.contains(to) else { return 0 }
         let range = from < to ? (from + 1)...to : to...(from - 1)
-        return planItems[range].filter { !$0.isHeader }.count
+        return planItems[range].filter { !$0.isHeader && !isPCOExcluded($0) }.count
     }
 
     private func resolveSelectableIndex(startingAt index: Int) -> Int {
@@ -1596,6 +1760,8 @@ public final class CueEngine: ObservableObject {
         if !planItems[index].isHeader { return index }
         if let forward = nextSelectableIndex(after: index - 1) { return forward }
         if let backward = previousSelectableIndex(before: index + 1) { return backward }
+        if let forward = nextSelectableIndex(after: index - 1, includingOmitted: true) { return forward }
+        if let backward = previousSelectableIndex(before: index + 1, includingOmitted: true) { return backward }
         return index
     }
 
@@ -1638,6 +1804,7 @@ public final class CueEngine: ObservableObject {
             return
         }
         guard var item = activeTimerItem, !item.isHeader else { return }
+        if !item.isRunning { markPlanStarted() }
         item.isRunning.toggle()
         activeTimerItem = item
         broadcastTimerUpdate()
@@ -1651,10 +1818,11 @@ public final class CueEngine: ObservableObject {
         }
         guard var item = activeTimerItem, !item.isHeader else { return }
         item.elapsedSeconds = 0
+        actualRun?.elapsedBase = 0
         activeTimerItem = item
         broadcastTimerUpdate()
 
-        guard isPCOLiveSyncEnabled,
+        guard isPCOLiveSyncEnabled, !isRehearsalMode,
               let serviceTypeId = currentPCOServiceTypeId,
               let planId = currentPCOPlanId else { return }
         Task {
@@ -1722,26 +1890,9 @@ public final class CueEngine: ObservableObject {
     }
 
     public func setNoteCategory(forRoleId roleId: String, category: String, isOn: Bool) {
-        if isRemoteMirror {
-            guard let role = roles.first(where: { $0.id == roleId }) else { return }
-            var categories = role.assignedNoteCategories
-            if isOn {
-                if !categories.contains(category) { categories.append(category) }
-            } else {
-                categories.removeAll { $0 == category }
-            }
-            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["assignedNoteCategories": categories])))
-            return
-        }
-        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
-        if isOn {
-            if !roles[index].assignedNoteCategories.contains(category) {
-                roles[index].assignedNoteCategories.append(category)
-            }
-        } else {
-            roles[index].assignedNoteCategories.removeAll { $0 == category }
-        }
-        broadcastState()
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        let items = role.pagerItems ?? []
+        setPagerItems(forRoleId: roleId, isOn ? RolePagerItem.inserting(.note(category), into: items) : RolePagerItem.removing(.note(category), from: items))
     }
 
     public func setPersonName(forRoleId roleId: String, personName: String?) {
@@ -1752,6 +1903,43 @@ public final class CueEngine: ObservableObject {
         guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
         roles[index].personName = personName
         broadcastState()
+    }
+
+    public func setClockFormat(forRoleId roleId: String, _ format: ClockFormat?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["clockFormat": format?.rawValue ?? ""])))
+            return
+        }
+        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        roles[index].clockFormat = format
+        broadcastState()
+    }
+
+    public func setPagerFields(forRoleId roleId: String, _ fields: [PagerItemField]?) {
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        var updated = role
+        updated.pagerFields = fields
+        if fields != nil, updated.pagerItems == nil { updated.pagerItems = [] }
+        setPagerItems(forRoleId: roleId, updated.pagerItems)
+    }
+
+    public func setPagerField(forRoleId roleId: String, field: PagerItemField, isOn: Bool) {
+        guard let role = roles.first(where: { $0.id == roleId }) else { return }
+        let items = role.pagerItems ?? []
+        setPagerItems(forRoleId: roleId, isOn ? RolePagerItem.inserting(.field(field), into: items) : RolePagerItem.removing(.field(field), from: items))
+    }
+
+    public func setPagerItems(forRoleId roleId: String, _ items: [RolePagerItem]?) {
+        let normalized = items.map(RolePagerItem.ordered)
+        if isRemoteMirror {
+            remoteCommands?.send(.roleUpdate(id: roleId, body: RemoteCommand.body(["pagerItems": (normalized ?? []).map(\.token)])))
+            return
+        }
+        guard let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        guard roles[index].pagerItems != normalized else { return }
+        roles[index].pagerItems = normalized
+        broadcastState()
+        if activeTimerItem != nil { broadcastTimerUpdate() }
     }
 
     @discardableResult
@@ -1867,13 +2055,31 @@ public final class CueEngine: ObservableObject {
         if isMasterServer { _ = nextRev() }
     }
 
+    public static let allMessagesThreadId = "all"
+
+    private func readAt(forSenderRoleId roleId: String) -> Date {
+        max(messageReadAt[roleId] ?? .distantPast, messageReadAt[Self.allMessagesThreadId] ?? .distantPast)
+    }
+
+    private func isUnread(_ message: InterTeamMessage) -> Bool {
+        guard let role = message.senderRoleId else { return false }
+        return message.timestamp > readAt(forSenderRoleId: role)
+    }
+
+    public var unreadMessageCount: Int {
+        recentMessages.reduce(0) { $0 + (isUnread($1) ? 1 : 0) }
+    }
+
     public func hasUnreadMessage(forRoleId roleId: String) -> Bool {
-        let readAt = messageReadAt[roleId] ?? .distantPast
-        return recentMessages.contains { $0.senderRoleId == roleId && $0.timestamp > readAt }
+        recentMessages.contains { $0.senderRoleId == roleId && isUnread($0) }
     }
 
     public func markThreadRead(roleId: String) {
-        guard hasUnreadMessage(forRoleId: roleId) else { return }
+        if roleId == Self.allMessagesThreadId {
+            guard unreadMessageCount > 0 else { return }
+        } else {
+            guard hasUnreadMessage(forRoleId: roleId) else { return }
+        }
         messageReadAt[roleId] = Date()
     }
 
@@ -2075,6 +2281,10 @@ public final class CueEngine: ObservableObject {
         let existingIds = Set(recentMessages.map(\.id))
         let newOnes = incoming.prefix(Self.maxStoredMessages).map { $0.clampedForStorage() }.filter { !existingIds.contains($0.id) }
         guard !newOnes.isEmpty else { return }
+        let freshCutoff = Date().addingTimeInterval(-Self.incomingMessageFreshness)
+        for message in newOnes where message.senderRoleId != nil && message.timestamp > freshCutoff {
+            incomingMessages.send(message)
+        }
         recentMessages.append(contentsOf: newOnes)
         recentMessages = SyncHash.sortedNewestFirst(recentMessages)
         if recentMessages.count > Self.maxStoredMessages {
@@ -2087,6 +2297,8 @@ public final class CueEngine: ObservableObject {
         let activeItemIndex: Int
         var eventTimes: [EventTime]?
         var liveEventTimeId: String?
+        var actuals: [ItemActual]?
+        var skips: [String: [String]]?
     }
     private static let persistedFlowDefaultsKey = "persistedFlow"
 
@@ -2096,7 +2308,14 @@ public final class CueEngine: ObservableObject {
             erase(forKey: Self.persistedFlowDefaultsKey)
             return
         }
-        let flow = PersistedFlow(items: planItems, activeItemIndex: activeItemIndex, eventTimes: eventTimes, liveEventTimeId: liveEventTimeId)
+        let flow = PersistedFlow(
+            items: planItems,
+            activeItemIndex: activeItemIndex,
+            eventTimes: eventTimes,
+            liveEventTimeId: liveEventTimeId,
+            actuals: itemActuals.isEmpty ? nil : itemActuals,
+            skips: ItemActuals.sortedSkips(skippedItemIds)
+        )
         guard let data = try? JSONEncoder().encode(flow) else { return }
         write(data, forKey: Self.persistedFlowDefaultsKey)
     }
@@ -2106,6 +2325,9 @@ public final class CueEngine: ObservableObject {
               let flow = try? JSONDecoder().decode(PersistedFlow.self, from: data) else { return }
         restoreEventTimes(flow.eventTimes ?? [], liveId: flow.liveEventTimeId)
         guard !flow.items.isEmpty else { return }
+        let validIds = Set(flow.items.map(\.id))
+        itemActuals = ItemActuals.pruned(flow.actuals ?? [], validItemIds: validIds)
+        skippedItemIds = ItemActuals.skips(from: flow.skips, validItemIds: validIds)
         planItems = flow.items
         activeItemIndex = min(max(flow.activeItemIndex, 0), flow.items.count - 1)
         var restoredItem = flow.items[activeItemIndex]
@@ -2243,7 +2465,7 @@ public final class CueEngine: ObservableObject {
         self.activeTimerItem = item
     }
 
-    private func broadcastState() {
+    func broadcastState() {
         broadcastLegacyState()
         emitV2Roles()
     }
@@ -2335,6 +2557,10 @@ public final class CueEngine: ObservableObject {
         return server
     }
     #endif
+
+    public func receiveLocalPacket(_ packet: CuePacket) {
+        handlePacket(packet, origin: .relay)
+    }
 
     func handlePacket(_ packet: CuePacket, origin: PacketOrigin = .relay) {
         guard packet.senderId != deviceId else { return }

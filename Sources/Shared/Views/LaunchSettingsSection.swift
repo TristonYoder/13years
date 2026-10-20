@@ -84,7 +84,7 @@ struct LaunchSettingsSection: View {
             if let error = preferences.bookmarkError {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppPalette.negative)
             }
         }
     }

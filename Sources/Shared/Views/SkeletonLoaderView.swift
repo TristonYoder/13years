@@ -80,8 +80,11 @@ public struct SkeletonLoaderView: View {
         #if os(tvOS)
         return .landscape
         #else
-        if PagerLayoutChoice.resolve(layoutRaw).usesLowerThird(for: size) { return .lowerThird }
-        return PortraitMetrics.isPortrait(size) ? .portrait : .landscape
+        switch PagerLayoutChoice.resolve(layoutRaw).layout(for: size) {
+        case .lowerThird: return .lowerThird
+        case .landscape: return .landscape
+        case .portrait: return .portrait
+        }
         #endif
     }
 

@@ -7,18 +7,21 @@
 #include <esp_timer.h>
 #include "cue_state.h"
 #include "sync/sync_core.h"
+#include "sync/details_line.h"
 
 namespace cue {
 
-static const int kMaxNoteCategoriesPerRole = 4;
+static const int kMaxNoteCategoriesPerRole = 8;
 
 struct RoleView {
   bool found = false;
   String id;
   String name;
   String personName;
+  pagersync::ClockFormat clockFormat = pagersync::ClockFormat::Unset;
   String assignedNoteCategories[kMaxNoteCategoriesPerRole];
   int assignedNoteCategoryCount = 0;
+  pagersync::FieldOrder pagerFieldOrder;
   CueState state = CueState::Off;
 
   bool hasNoteCategory(const String &category) const {
@@ -84,6 +87,9 @@ struct NextItemView {
   int lengthInSeconds = 0;
   Note notes[kMaxNotes];
   int noteCount = 0;
+  pagersync::ItemDetails details;
+  bool hasStartsAt = false;
+  int64_t startsAtMs = 0;
 };
 
 class Engine {
@@ -109,6 +115,7 @@ public:
   bool hasClockOffset() const { return clock_.hasOffset(); }
   bool hasUtcOffset() const { return hasUtcOffset_; }
   int32_t utcOffsetSeconds() const { return hasUtcOffset_ ? utcOffsetSeconds_ : 0; }
+  bool use24HourClock() const { return pagersync::resolveUse24h(activeRole().clockFormat, producerClockFormat_); }
   bool wallClockMs(int64_t &ms) const;
   double clockOffsetMs() const { return clock_.offsetMs(); }
   bool producerIsV2() const { return producerV2_; }
@@ -133,6 +140,8 @@ public:
   const char *nextNoteText() const;
   bool nextFirstNote(const char *&category, const char *&text) const;
   int nextLengthSeconds() const { return next_.lengthInSeconds; }
+  bool timerDetailsLine(char *out, size_t cap) const;
+  bool nextDetailsLine(char *out, size_t cap) const;
   int roleNoteCount() const;
   bool roleNoteAt(int index, const char *&category, const char *&text) const;
 
@@ -172,6 +181,7 @@ private:
   NoteEntry notes_[kMaxNoteCategories];
   int noteCount_ = 0;
   NextItemView next_;
+  pagersync::ItemDetails timerDetails_;
   MessageView messages_[kMaxMessages];
   int messageCount_ = 0;
 
@@ -189,6 +199,7 @@ private:
   bool producerV2_ = false;
   int32_t utcOffsetSeconds_ = 0;
   bool hasUtcOffset_ = false;
+  pagersync::ClockFormat producerClockFormat_ = pagersync::ClockFormat::Unset;
   bool catchUpWanted_ = false;
   bool syncBurstWanted_ = false;
   bool noOffsetBurstDone_ = false;
@@ -202,6 +213,8 @@ private:
   bool applyAnchor(JsonVariantConst anchor);
   void applyNextItem(JsonVariantConst next);
   bool categoryAssignedToAnyRole(const char *category) const;
+  int currentNoteIndex(const cue::RoleView &role, int nth) const;
+  int nextNoteIndex(const cue::RoleView &role, int nth) const;
   void resetForEpochChange();
   void applyCueDeltas(JsonArrayConst deltas);
   void handleSyncReply(JsonObjectConst doc);

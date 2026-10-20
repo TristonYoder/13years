@@ -40,6 +40,7 @@ public struct MessagesView: View {
                 }
                 .help("Clear message history on every connected device — cannot be undone")
             }
+            .onScreenshotTourSignal("messages.clear-history") { _ in showingClearConfirmation = true }
             .confirmationDialog(
                 "Clear message history on every connected device?",
                 isPresented: $showingClearConfirmation,
@@ -130,7 +131,7 @@ public struct MessagesView: View {
                     if message.isHighPriority {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppPalette.negative)
                     }
                 }
 
@@ -139,12 +140,12 @@ public struct MessagesView: View {
                     .padding(.vertical, 8)
                     .foregroundStyle(isFromProducer ? Color.white : Color.primary)
                     .background(
-                        isFromProducer ? Color.accentColor : Color.primary.opacity(0.1),
+                        isFromProducer ? Color.accentColor : AppPalette.bubbleReceived,
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
 
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
+                Text(engine.displayClockFormat.string(from: message.timestamp))
+                    .font(.clock(.caption2, weight: .regular))
                     .foregroundStyle(.secondary)
             }
 
@@ -167,7 +168,7 @@ public struct MessagesView: View {
                 #if os(iOS) || os(macOS)
                 .toggleStyle(.button)
                 #endif
-                .tint(.red)
+                .tint(AppPalette.negative)
                 .help("Mark as high priority")
             }
 

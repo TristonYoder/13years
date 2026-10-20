@@ -21,27 +21,47 @@ public struct CueNextItem: Codable, Equatable, Sendable {
     public var itemType: String
     public var lengthInSeconds: Int
     public var notes: [String: String]
+    public var details: PCOItemDetails?
+    public var startsAtMs: Int?
 
-    public init(id: String, title: String, itemType: String, lengthInSeconds: Int, notes: [String: String]) {
+    public init(
+        id: String,
+        title: String,
+        itemType: String,
+        lengthInSeconds: Int,
+        notes: [String: String],
+        details: PCOItemDetails? = nil,
+        startsAtMs: Int? = nil
+    ) {
         self.id = id
         self.title = title
         self.itemType = itemType
         self.lengthInSeconds = lengthInSeconds
         self.notes = notes
+        self.details = details
+        self.startsAtMs = startsAtMs
     }
 
-    public init(item: PCOTimerItem, noteCategories: Set<String>) {
+    public init(item: PCOTimerItem, noteCategories: Set<String>, pagerFields: Set<PagerItemField> = [], startsAtMs: Int? = nil) {
         self.init(
             id: item.id,
             title: item.title,
             itemType: item.itemType,
             lengthInSeconds: item.lengthInSeconds,
-            notes: item.notes.filter { noteCategories.contains($0.key) }
+            notes: item.notes.filter { noteCategories.contains($0.key) },
+            details: item.details?.broadcastTrimmed(fields: pagerFields),
+            startsAtMs: pagerFields.contains(.startTime) ? startsAtMs : nil
         )
     }
 
     public var timerItem: PCOTimerItem {
-        PCOTimerItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes)
+        PCOTimerItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, details: details)
+    }
+
+    public var withoutStart: CueNextItem {
+        var copy = self
+        copy.startsAtMs = nil
+        return copy
     }
 }
 
@@ -83,11 +103,12 @@ public struct CuePacket: Codable, Sendable {
     public var to: String?
     public var receivedAtMs: Double?
     public var utcOffsetSeconds: Int?
+    public var clockFormat: String?
     public private(set) var anchorRejected = false
 
     private enum CodingKeys: String, CodingKey {
         case type, timestamp, senderId, roleCues, timerItem, nextItem, message, messages
-        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to, utcOffsetSeconds
+        case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to, utcOffsetSeconds, clockFormat
     }
 
     public init(
@@ -136,6 +157,7 @@ public struct CuePacket: Codable, Sendable {
         epoch = try container.decodeIfPresent(Int.self, forKey: .epoch)
         to = try container.decodeIfPresent(String.self, forKey: .to)
         utcOffsetSeconds = try? container.decodeIfPresent(Int.self, forKey: .utcOffsetSeconds)
+        clockFormat = try? container.decodeIfPresent(String.self, forKey: .clockFormat)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -164,6 +186,7 @@ public struct CuePacket: Codable, Sendable {
         try container.encodeIfPresent(epoch, forKey: .epoch)
         try container.encodeIfPresent(to, forKey: .to)
         try container.encodeIfPresent(utcOffsetSeconds, forKey: .utcOffsetSeconds)
+        try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
     }
 
     public func encode() -> Data? {

@@ -40,7 +40,7 @@ public struct SettingsView: View {
                 if let name = engine.pcoUserName {
                     HStack {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(AppPalette.positive)
                         Text("Signed in as **\(name)**")
                     }
                 }
@@ -71,12 +71,12 @@ public struct SettingsView: View {
 
             Section {
                 Button(action: { showingRoleNotes = true }) {
-                    Label("Roles & Notes", systemImage: "person.text.rectangle")
+                    Label("Roles & Pager Fields", systemImage: "person.text.rectangle")
                 }
             } header: {
                 Text("Roles")
             } footer: {
-                Text("Add, rename, or remove roles, and choose which note categories each one sees on its pager.")
+                Text("Add, rename, or remove roles, and drag the item fields and note categories each one sees onto its pager, in the order you want them.")
             }
 
             Section {
@@ -123,6 +123,22 @@ public struct SettingsView: View {
                 Text("HH:MM:SS Formatting")
             } footer: {
                 Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
+            }
+
+            Section {
+                Picker("Clock", selection: Binding(
+                    get: { engine.clockFormat },
+                    set: { engine.setClockFormat($0) }
+                )) {
+                    ForEach(ClockFormat.allCases) { format in
+                        Text(format.label).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Clock")
+            } footer: {
+                Text("How time-of-day appears on pagers and in End @ entry. Each role can override this in Roles.")
             }
 
             #if os(macOS) || os(iOS)
@@ -175,7 +191,7 @@ public struct SettingsView: View {
                 if let sentAt = connectPingSentAt {
                     Label("Sent — check that device for \"Live\"", systemImage: "checkmark.circle.fill")
                         .font(.footnote)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppPalette.positive)
                         .id(sentAt)
                 }
 
@@ -217,6 +233,9 @@ public struct SettingsView: View {
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
         }
+        .onScreenshotTourSignal("settings.roles") { _ in showingRoleNotes = true }
+        .onScreenshotTourSignal("settings.waypoints") { _ in showingWaypointLibrary = true }
+        .onScreenshotTourSignal("settings.event-schedule") { _ in showingServiceSchedule = true }
         .sheet(isPresented: $showingRoleNotes) {
             RoleNoteAssignmentView(categories: knownNoteCategories)
         }
@@ -240,11 +259,11 @@ public struct SettingsView: View {
         case .synced:
             Label("Role assignments synced from Plotiphar for this plan", systemImage: "checkmark.circle.fill")
                 .font(.footnote)
-                .foregroundStyle(.green)
+                .foregroundStyle(AppPalette.positive)
         case .error(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppPalette.warning)
         }
     }
 }
@@ -265,8 +284,7 @@ struct HourFormatOptionCard: View {
                 VStack(spacing: 2) {
                     ForEach(Self.sampleMinutes, id: \.self) { minutes in
                         Text(TimeFormatting.string(forSeconds: minutes * 60, threshold: threshold))
-                            .font(.system(.callout, design: .monospaced))
-                            .monospacedDigit()
+                            .font(.clock(.callout, weight: .regular))
                     }
                 }
                 .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
@@ -276,7 +294,7 @@ struct HourFormatOptionCard: View {
             .foregroundStyle(isSelected ? Color.white : Color.primary)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.12))
+                    .fill(isSelected ? Color.accentColor : AppPalette.surfaceSubtle)
             )
         }
         .buttonStyle(.plain)

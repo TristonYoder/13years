@@ -16,6 +16,9 @@ struct PCOChangeTracking {
     var pushDelay: TimeInterval = 0.8
     var fetchRemote: (@MainActor (_ serviceTypeId: String, _ planId: String) async throws -> [PCOTimerItem])?
     var reorderRemote: (@MainActor (_ serviceTypeId: String, _ planId: String, _ itemIds: [String]) async throws -> Void)?
+    var fetchContext: (@MainActor (_ serviceTypeId: String, _ planId: String) async throws -> PCOPlanContext)?
+    var contextRefreshInterval: TimeInterval = 120
+    var writeLength: (@MainActor (_ serviceTypeId: String, _ planId: String, _ itemId: String, _ seconds: Int) async throws -> Void)?
 }
 
 extension CueEngine {
@@ -50,6 +53,41 @@ extension CueEngine {
         guard generation == pcoChangeTracking.writeGeneration, !isPCOWriteActive,
               currentPCOPlanId == planId, pcoChangeTracking.baselinePlanId == planId else { return }
         receivePCOSnapshot(remote, serviceTypeId: serviceTypeId, planId: planId)
+        if let fetchedAt = pcoPlanContext?.fetchedAt, pcoPlanContext?.planId == planId,
+           Date().timeIntervalSince(fetchedAt) < pcoChangeTracking.contextRefreshInterval { return }
+        await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+    }
+
+    public func refreshPCOPlanContext() async {
+        if isRemoteMirror {
+            remoteCommands?.send(.pcoPlanContextRefresh)
+            return
+        }
+        guard isPCOConnected, let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
+        pcoReferenceCache.removeAll()
+        await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+    }
+
+    func refreshPCOPlanContext(serviceTypeId: String, planId: String) async {
+        guard !isRemoteMirror else { return }
+        isRefreshingPCOPlanContext = true
+        defer { isRefreshingPCOPlanContext = false }
+        let context: PCOPlanContext
+        do {
+            if let fetchContext = pcoChangeTracking.fetchContext {
+                context = try await fetchContext(serviceTypeId, planId)
+            } else {
+                context = try await pcoClient.fetchPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+            }
+        } catch {
+            pcoPlanContextError = error.localizedDescription
+            AppLog.cue.error("CueEngine: PCO plan context refresh failed: \(error.localizedDescription, privacy: .private)")
+            return
+        }
+        guard currentPCOPlanId == planId else { return }
+        pcoPlanContextError = nil
+        pcoPlanContext = context
+        applyPCOTeamAssignments()
     }
 
     @discardableResult
@@ -154,7 +192,8 @@ extension CueEngine {
         guard !isRemoteMirror, pcoChangeTracking.pollTask == nil else { return }
         pcoChangeTracking.pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                let interval = self?.pcoChangeTracking.pollInterval ?? 30
+                var interval = self?.pcoChangeTracking.pollInterval ?? 30
+                if self?.isPCOLiveSyncEnabled == true { interval = min(interval, 10) }
                 try? await Task.sleep(nanoseconds: UInt64(max(interval, 1) * 1_000_000_000))
                 guard !Task.isCancelled, let engine = self else { return }
                 await engine.checkPCOForChanges()
@@ -162,7 +201,25 @@ extension CueEngine {
         }
     }
 
+    func applyRemotePCODetails(_ remote: [PCOTimerItem]) {
+        var activeChanged = false
+        for item in remote {
+            guard let baselineIndex = pcoChangeTracking.baseline.firstIndex(where: { $0.id == item.id }),
+                  pcoChangeTracking.baseline[baselineIndex].details != item.details else { continue }
+            pcoChangeTracking.baseline[baselineIndex].details = item.details
+            if let index = planItems.firstIndex(where: { $0.id == item.id }) {
+                planItems[index].details = item.details
+            }
+            if activeTimerItem?.id == item.id {
+                activeChanged = activeChanged || activeTimerItem?.details?.broadcastTrimmed != item.details?.broadcastTrimmed
+                activeTimerItem?.details = item.details
+            }
+        }
+        if activeChanged { broadcastTimerUpdate() }
+    }
+
     func receivePCOSnapshot(_ remote: [PCOTimerItem], serviceTypeId: String, planId: String) {
+        applyRemotePCODetails(remote)
         let changes = PCOPlanDiff.changes(from: pcoChangeTracking.baseline, to: remote)
         guard !changes.isEmpty else {
             pcoChangeTracking.pendingRemote = []
@@ -193,7 +250,7 @@ extension CueEngine {
         pcoPendingChanges = nil
     }
 
-    private func schedulePCOPush(key: String, _ work: @escaping @MainActor (CueEngine) async -> Void) {
+    func schedulePCOPush(key: String, _ work: @escaping @MainActor (CueEngine) async -> Void) {
         ensurePCOBaseline()
         pcoChangeTracking.debounces[key]?.cancel()
         pcoChangeTracking.writeGeneration += 1
@@ -224,13 +281,17 @@ extension CueEngine {
         update(&pcoChangeTracking.baseline[index])
     }
 
-    private func writeItemLengthToPCO(id: String) async {
+    func writeItemLengthToPCO(id: String) async {
         guard let item = planItems.first(where: { $0.id == id }),
               let serviceTypeId = item.pcoServiceTypeId,
               let planId = item.pcoPlanId else { return }
         let length = item.lengthInSeconds
         do {
-            try await pcoClient.updateItemLength(serviceTypeId: serviceTypeId, planId: planId, itemId: id, lengthInSeconds: length)
+            if let writeLength = pcoChangeTracking.writeLength {
+                try await writeLength(serviceTypeId, planId, id, length)
+            } else {
+                try await pcoClient.updateItemLength(serviceTypeId: serviceTypeId, planId: planId, itemId: id, lengthInSeconds: length)
+            }
             recordPCOWrite(itemId: id) { $0.lengthInSeconds = length }
             pcoLastError = nil
         } catch {

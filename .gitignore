@@ -23,3 +23,5 @@ xcuserdata/
 /.build/
 /.swiftpm/
 /Package.resolved
+
+/Screenshots/

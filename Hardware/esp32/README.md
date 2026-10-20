@@ -85,7 +85,21 @@ requests a (rate-limited) catch-up. If the producer is silent for
 5 s the pager sends one `PING`, and closes the socket to reconnect at 20 s. `status` also prints free, minimum free and
 largest-block heap.
 
-The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly) lives in
+Per-role pager fields: a role's `pagerFields` array (key, bpm, meter, arrangement, sequence,
+description, mediaType, servicePosition, startTime, leader, type, length) selects what the
+one-line details under the current and next item show, in the order the array lists them
+(the role's drag-and-drop order on the producer), joined with ` | ` (the bundled fonts are
+ASCII only). `leader` is the item leaders' first names (`Sam`, `Sam & Pat`, `Sam + 2`),
+`type` the item type and `length` the planned length (`5:00`); both come from keys the
+packets already carry. The role's `assignedNoteCategories` array is likewise the order its
+notes show in: the first non-empty note in that order is the current note. The producer also
+sends a combined `pagerItems` list; the packet filter drops it, since the two arrays above
+carry the same order. The packet filter keeps only the `details` keys those fields need
+from `timerItem` and `nextItem`; `src/sync/details_line.h` holds the parser, the filter
+and the formatter. `@ h:mm` start times use the producer wall clock and UTC offset.
+The `itemDetails` field (the native and web pagers' side panel) is ignored: it is not a bit in the field mask, its HTML is never sent over the LAN socket, and the screen has no room for it.
+
+The pure logic (hash, offset estimator, anchor math, rev guard, epoch, frame reassembly, details line) lives in
 `src/sync/sync_core.h` with no Arduino dependency. The host test runs on a Mac
 without hardware:
 

@@ -7,6 +7,10 @@ Cue lights and pagers for live production teams. A producer runs the show from a
 - **Pager (iPhone, iPad, Apple TV, Mac):** join the beta on [TestFlight](https://testflight.apple.com/join/yydaPnPF).
 - **Producer for Mac** and the Mac Pager as disk images: [latest release](https://github.com/TristonYoder/13years/releases/latest).
 
+## Run sheet
+
+The producer's run sheet pulls everything it can from a Planning Center plan: item descriptions, songs with key, BPM, meter and sequence, media, and per-time exclusions. It has a list and (on Mac) a customizable table view, projected start times and totals, and a plan panel with notes, times and team (roles can link to a team position). It records actual lengths per event, lets you skip items or rehearse without logging, and can save actual lengths back to the plan. Each role chooses which item details its pagers show. Attachments and lyric or chord charts open on demand from the producer without being sent to pagers.
+
 ## Components
 
 | Path | What it is |

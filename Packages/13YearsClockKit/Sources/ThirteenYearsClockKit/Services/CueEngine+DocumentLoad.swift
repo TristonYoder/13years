@@ -19,7 +19,9 @@ extension CueEngine {
                     if let index = merged.firstIndex(where: { $0.id == role.id }) {
                         merged[index].name = role.name
                         merged[index].personName = role.personName
-                        merged[index].assignedNoteCategories = role.assignedNoteCategories
+                        merged[index].clockFormat = role.clockFormat
+                        merged[index].pcoTeamPosition = role.pcoTeamPosition
+                        merged[index].pagerItems = role.pagerItems
                     } else if merged.count < ContentLimits.maxRoles {
                         var added = role
                         added.state = .off
@@ -39,6 +41,9 @@ extension CueEngine {
         }
         if let raw = body.settings?.hourFormatThreshold, let threshold = HourFormatThreshold(rawValue: raw) {
             document.settings.hourFormatThreshold = threshold
+        }
+        if let raw = body.settings?.clockFormat, let format = ClockFormat(rawValue: raw) {
+            document.settings.clockFormat = format
         }
 
         let items = body.items

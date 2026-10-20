@@ -49,6 +49,7 @@ public struct ServiceScheduleView: View {
                     }
                 }
             }
+            .onScreenshotTourSignal("settings.add-schedule") { _ in editorTarget = .add }
             .sheet(item: $editorTarget) { target in
                 ServiceScheduleEditorView(target: target)
             }
@@ -106,10 +107,10 @@ public struct ServiceScheduleView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         }
                     }
-                    Text("\(schedule.startsAt.formatted(date: .abbreviated, time: .shortened)) \u{2014} live at \(schedule.goLiveAt.formatted(date: .omitted, time: .shortened))")
+                    Text("\(engine.clockFormat.dateTime(schedule.startsAt)) \u{2014} live at \(engine.clockFormat.string(from: schedule.goLiveAt))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -147,14 +148,14 @@ public struct ServiceScheduleView: View {
             } label: {
                 Label("Edit\u{2026}", systemImage: "pencil")
             }
-            .tint(.blue)
+            .tint(AppPalette.info)
 
             Button {
                 engine.goLiveWithSchedule(id: schedule.id)
             } label: {
                 Label("Go Live Now", systemImage: "play.fill")
             }
-            .tint(.green)
+            .tint(AppPalette.positive)
 
             Button(role: .destructive) {
                 pendingDeleteSchedule = schedule
@@ -165,7 +166,7 @@ public struct ServiceScheduleView: View {
     }
 
     private func nextScheduledLine(_ schedule: ServiceSchedule) -> String {
-        "Next: \(schedule.title) \u{2014} \(schedule.startsAt.formatted(date: .abbreviated, time: .shortened)), live at \(schedule.goLiveAt.formatted(date: .omitted, time: .shortened))"
+        "Next: \(schedule.title) \u{2014} \(engine.clockFormat.dateTime(schedule.startsAt)), live at \(engine.clockFormat.string(from: schedule.goLiveAt))"
     }
 }
 
@@ -217,10 +218,12 @@ private struct ServiceScheduleEditorView: View {
                     TextField("Title", text: $title)
                     #if os(tvOS)
                     LabeledContent("Starts At") {
-                        Text(startsAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(engine.clockFormat.dateTime(startsAt))
+                            .font(.clock(.body, weight: .regular))
                     }
                     #else
                     DatePicker("Starts At", selection: $startsAt)
+                        .environment(\.locale, engine.clockFormat.pickerLocale)
                     #endif
                 }
 
@@ -298,7 +301,7 @@ private struct ServiceScheduleEditorView: View {
         } header: {
             Text("Go-Live Timing")
         } footer: {
-            Text("Live at \(resolvedGoLiveAt.formatted(date: .omitted, time: .shortened)).")
+            Text("Live at \(engine.clockFormat.string(from: resolvedGoLiveAt)).")
         }
     }
 
@@ -410,5 +413,11 @@ private struct ServiceScheduleEditorView: View {
             )
         }
         dismiss()
+    }
+}
+
+private extension ClockFormat {
+    func dateTime(_ date: Date) -> String {
+        "\(date.formatted(date: .abbreviated, time: .omitted)), \(string(from: date))"
     }
 }

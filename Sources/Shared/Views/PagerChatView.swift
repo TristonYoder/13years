@@ -89,16 +89,16 @@ public struct PagerChatView: View {
             VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text(isBroadcast ? "EVERYONE" : "DIRECT")
-                        .font(.inter(size: labelSize, weight: .heavy))
+                        .font(.system(size: labelSize, weight: .heavy))
                         .tracking(0.8)
-                        .foregroundStyle(isBroadcast ? Color.orange : Color.blue)
+                        .foregroundStyle(isBroadcast ? AppPalette.warning : AppPalette.info)
                     Text(message.sender)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if message.isHighPriority {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppPalette.negative)
                     }
                 }
 
@@ -107,12 +107,12 @@ public struct PagerChatView: View {
                     .padding(.vertical, 8)
                     .foregroundStyle(isMine ? Color.white : Color.primary)
                     .background(
-                        isMine ? Color.blue : Color.gray.opacity(0.2),
+                        isMine ? AppPalette.info : AppPalette.bubbleReceived,
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
 
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
+                Text(engine.displayClockFormat.string(from: message.timestamp))
+                    .font(.clock(.caption2, weight: .regular))
                     .foregroundStyle(.secondary)
             }
 
@@ -133,7 +133,7 @@ public struct PagerChatView: View {
                 send()
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.inter(size: 28))
+                    .font(.system(size: 28))
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
@@ -158,11 +158,11 @@ private struct TVFocusableRow: ViewModifier {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(isFocused ? 0.12 : 0))
+                    .fill(isFocused ? AppPalette.glassSoft : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(isFocused ? 0.8 : 0), lineWidth: 3)
+                    .stroke(isFocused ? AppPalette.focusRing : Color.clear, lineWidth: 3)
             )
             .focusable()
     }

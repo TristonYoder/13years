@@ -141,6 +141,16 @@ public final class ControlAPIRouter {
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(planStatus())
 
+        case "rehearsal":
+            if allows(method, "GET") { return json(rehearsalStatus()) }
+            guard allows(method, "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.RehearsalBody.self, body) else { return badBody() }
+            if let tooLong = tooLong(request.planTimeId ?? "", ContentLimits.identifier, "planTimeId") { return tooLong }
+            guard engine.setRehearsalMode(request.enabled, planTimeId: request.planTimeId) else {
+                return Self.error(404, "Unknown rehearsal plan time id", detail: request.planTimeId ?? "")
+            }
+            return json(rehearsalStatus())
+
         case "messages":
             if allows(method, "GET") { return json(engine.recentMessages) }
             if allows(method, "DELETE") {
@@ -197,6 +207,12 @@ public final class ControlAPIRouter {
                     return Self.error(400, "Unknown hourFormatThreshold", detail: HourFormatThreshold.allCases.map(\.rawValue).joined(separator: ", "))
                 }
                 engine.hourFormatThreshold = threshold
+            }
+            if let raw = request.clockFormat {
+                guard let format = ClockFormat(rawValue: raw) else {
+                    return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+                }
+                engine.setClockFormat(format)
             }
             return json(settingsStatus())
 
@@ -414,6 +430,23 @@ public final class ControlAPIRouter {
             }
             engine.setActivePlanItem(id: request.itemId)
             return json(snapshot())
+
+        case ("plan", "actuals"):
+            if allows(method, "GET") { return json(actualsStatus()) }
+            guard allows(method, "DELETE") else { return methodNotAllowed() }
+            engine.clearActuals()
+            return json(actualsStatus())
+
+        case ("plan", "skips"):
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            return json(skipsStatus())
+
+        case ("plan", "context"):
+            guard allows(method, "GET") else { return methodNotAllowed() }
+            guard let context = engine.pcoPlanContext else {
+                return Self.error(404, "No Planning Center plan context", detail: "Load a Planning Center plan first.")
+            }
+            return json(context)
 
         case ("plan", "items"):
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -755,6 +788,18 @@ public final class ControlAPIRouter {
             Task { @MainActor in await engine.checkPCOForChanges() }
             return accepted(pcoStatus())
 
+        case ("pco", "plan-context", "refresh"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.currentPCOPlanId != nil else {
+                return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            guard engine.isPCOConnected else {
+                return Self.error(409, "Not signed in to Planning Center", detail: "Sign in with POST /v1/pco/sign-in first.")
+            }
+            let engine = engine
+            Task { @MainActor in await engine.refreshPCOPlanContext() }
+            return accepted(pcoStatus())
+
         case ("pco", "authorize", "complete"):
             guard allows(method, "POST") else { return methodNotAllowed() }
             guard let request = decode(ControlAPIRequests.PCOAuthorizeCompleteBody.self, body),
@@ -788,6 +833,21 @@ public final class ControlAPIRouter {
             guard allows(method, "POST") else { return methodNotAllowed() }
             engine.syncPlotipharAssignments()
             return accepted(plotipharStatus())
+
+        case ("plan", "actuals", "save-to-pco"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.currentPCOPlanId != nil else {
+                return Self.error(409, "No Planning Center plan is loaded", detail: "Sync a plan with POST /v1/pco/sync first.")
+            }
+            guard engine.isPCOConnected else {
+                return Self.error(409, "Not signed in to Planning Center", detail: "Sign in with POST /v1/pco/sign-in first.")
+            }
+            let changes = engine.actualLengthChanges()
+            guard !changes.isEmpty else {
+                return Self.error(409, "No actual lengths to save", detail: "No synced item has a recorded actual that differs from its planned length.")
+            }
+            engine.saveActualLengthsToPCO()
+            return accepted(["count": changes.count])
 
         case ("plan", "items", "reorder"):
             guard allows(method, "POST", "PUT") else { return methodNotAllowed() }
@@ -874,6 +934,30 @@ public final class ControlAPIRouter {
             engine.setDurationIsActual(id: itemId, isActual: isActual)
             return json(planStatus())
 
+        case ("plan", "items", let itemId, "skip"):
+            guard allows(method, "POST", "PUT", "DELETE") else { return methodNotAllowed() }
+            guard let item = engine.planItems.first(where: { $0.id == itemId }) else {
+                return Self.error(404, "Unknown plan item id", detail: itemId)
+            }
+            guard !item.isHeader else { return Self.error(400, "Headers cannot be skipped") }
+            var skipped = !allows(method, "DELETE")
+            if !body.isEmpty {
+                guard let request = decode(ControlAPIRequests.SkipBody.self, body) else { return badBody() }
+                if let value = request.skipped, !allows(method, "DELETE") { skipped = value }
+            }
+            engine.setItemSkipped(id: itemId, skipped: skipped)
+            return json(skipsStatus())
+
+        case ("plan", "items", let itemId, "use-actual"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.planItems.contains(where: { $0.id == itemId }) else {
+                return Self.error(404, "Unknown plan item id", detail: itemId)
+            }
+            guard engine.useActualAsPlannedLength(itemId: itemId) else {
+                return Self.error(409, "No actual length recorded for this item", detail: itemId)
+            }
+            return json(planStatus())
+
         case ("plan", "items", let itemId, "waypoints"):
             guard allows(method, "POST", "PUT") else { return methodNotAllowed() }
             guard engine.planItems.contains(where: { $0.id == itemId }) else {
@@ -893,6 +977,57 @@ public final class ControlAPIRouter {
         default:
             return Self.error(404, "Unknown path")
         }
+    }
+
+    private func validate(_ details: PCOItemDetails) -> HTTPResponse? {
+        if let tooLong = tooLong(details.description ?? "", ContentLimits.noteValue, "Description") { return tooLong }
+        if let tooLong = tooLong(details.htmlDetails ?? "", ContentLimits.noteValue * 8, "htmlDetails") { return tooLong }
+        if let tooLong = tooLong(details.keyName ?? "", ContentLimits.name, "keyName") { return tooLong }
+        let shortFields: [(String?, String)] = [
+            (details.key?.id, "key id"), (details.key?.name, "key name"), (details.key?.startingKey, "startingKey"),
+            (details.key?.endingKey, "endingKey"), (details.arrangement?.id, "arrangement id"),
+            (details.arrangement?.name, "arrangement name"), (details.arrangement?.meter, "meter"),
+            (details.arrangement?.notes, "arrangement notes"), (details.song?.id, "song id"),
+            (details.song?.title, "song title"), (details.song?.author, "song author"),
+            (details.song?.copyright, "song copyright"), (details.media?.id, "media id"),
+            (details.media?.title, "media title"), (details.media?.mediaType, "mediaType"),
+            (details.media?.thumbnailURL, "thumbnailURL"),
+        ]
+        for (value, label) in shortFields {
+            if let tooLong = tooLong(value ?? "", ContentLimits.noteValue, label) { return tooLong }
+        }
+        let lists: [([String], String, Int)] = [
+            (details.customSequence, "customSequence", ContentLimits.name),
+            (details.customSequenceShort, "customSequenceShort", ContentLimits.sequenceToken),
+            (details.arrangement?.sequence ?? [], "arrangement sequence", ContentLimits.name),
+            (details.arrangement?.sequenceShort ?? [], "arrangement sequenceShort", ContentLimits.sequenceToken),
+            (details.key?.alternateKeys ?? [], "alternateKeys", ContentLimits.name),
+            (details.song?.themes ?? [], "song themes", ContentLimits.name),
+            (details.media?.themes ?? [], "media themes", ContentLimits.name),
+        ]
+        for (values, label, limit) in lists {
+            guard values.count <= ContentLimits.maxDetailListEntries else { return limitReached(label, ContentLimits.maxDetailListEntries) }
+            for value in values {
+                if let tooLong = tooLong(value, limit, label) { return tooLong }
+            }
+        }
+        guard details.leaders.count <= ContentLimits.maxDetailListEntries else { return limitReached("leaders", ContentLimits.maxDetailListEntries) }
+        for leader in details.leaders {
+            let fields: [(String?, String)] = [
+                (leader.personId, "leader personId"), (leader.teamPositionId, "leader teamPositionId"),
+                (leader.name, "leader name"), (leader.firstName, "leader firstName"),
+                (leader.photoThumbnailURL, "leader photoThumbnailURL"),
+            ]
+            for (value, label) in fields {
+                if let tooLong = tooLong(value ?? "", ContentLimits.noteValue, label) { return tooLong }
+            }
+        }
+        guard details.itemTimes.count <= CueEngine.maxEventTimes * 2 else { return limitReached("itemTimes", CueEngine.maxEventTimes * 2) }
+        for time in details.itemTimes {
+            if let tooLong = tooLong(time.id, ContentLimits.identifier, "itemTime id") { return tooLong }
+            if let tooLong = tooLong(time.planTimeId ?? "", ContentLimits.identifier, "itemTime planTimeId") { return tooLong }
+        }
+        return nil
     }
 
     private func validate(_ request: ControlAPIRequests.DocumentLoadBody) -> HTTPResponse? {
@@ -923,6 +1058,7 @@ public final class ControlAPIRouter {
             for waypointId in item.waypointIds {
                 if let tooLong = tooLong(waypointId, ContentLimits.identifier, "Waypoint id") { return tooLong }
             }
+            if let details = item.details, let rejected = validate(details) { return rejected }
         }
         if let times = request.eventTimes {
             guard times.count <= CueEngine.maxEventTimes else { return limitReached("event times", CueEngine.maxEventTimes) }
@@ -944,6 +1080,7 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(role.name, ContentLimits.name, "Role name") { return tooLong }
                 if let tooLong = tooLong(role.personName ?? "", ContentLimits.name, "personName") { return tooLong }
                 if let tooLong = tooLong(role.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+                if let tooLong = tooLong(role.pcoTeamPosition ?? "", ContentLimits.name * 2, "pcoTeamPosition") { return tooLong }
                 guard role.assignedNoteCategories.count <= ContentLimits.maxNoteCategories else {
                     return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
                 }
@@ -980,6 +1117,9 @@ public final class ControlAPIRouter {
         if let raw = request.settings?.hourFormatThreshold, HourFormatThreshold(rawValue: raw) == nil {
             return Self.error(400, "Unknown hourFormatThreshold", detail: HourFormatThreshold.allCases.map(\.rawValue).joined(separator: ", "))
         }
+        if let raw = request.settings?.clockFormat, ClockFormat(rawValue: raw) == nil {
+            return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+        }
         return nil
     }
 
@@ -987,6 +1127,17 @@ public final class ControlAPIRouter {
         if let name = request.name, let tooLong = tooLong(name.trimmingCharacters(in: .whitespaces), ContentLimits.name, "Role name") { return tooLong }
         if let tooLong = tooLong(request.personName ?? "", ContentLimits.name, "personName") { return tooLong }
         if let tooLong = tooLong(request.plotipharRoleId ?? "", ContentLimits.identifier, "plotipharRoleId") { return tooLong }
+        if let tooLong = tooLong(request.pcoTeamPosition ?? "", ContentLimits.name * 2, "pcoTeamPosition") { return tooLong }
+        var clockFormat: ClockFormat??
+        if let raw = request.clockFormat {
+            if raw.isEmpty || raw == "default" {
+                clockFormat = .some(nil)
+            } else if let format = ClockFormat(rawValue: raw) {
+                clockFormat = .some(format)
+            } else {
+                return Self.error(400, "Unknown clockFormat", detail: ClockFormat.allCases.map(\.rawValue).joined(separator: ", "))
+            }
+        }
         if let categories = request.assignedNoteCategories {
             guard categories.count <= ContentLimits.maxNoteCategories else {
                 return Self.error(400, "Too many note categories", detail: "At most \(ContentLimits.maxNoteCategories).")
@@ -995,6 +1146,32 @@ public final class ControlAPIRouter {
                 if let tooLong = tooLong(category, ContentLimits.identifier, "Note category") { return tooLong }
             }
         }
+        var pagerFields: [PagerItemField]?
+        if let raw = request.pagerFields {
+            var parsed: [PagerItemField] = []
+            for value in raw {
+                guard let field = PagerItemField(rawValue: value) else {
+                    return Self.error(400, "Unknown pagerFields value", detail: PagerItemField.allCases.map(\.rawValue).joined(separator: ", "))
+                }
+                parsed.append(field)
+            }
+            pagerFields = parsed
+        }
+        var pagerItems: [RolePagerItem]?
+        if let raw = request.pagerItems {
+            guard raw.count <= ContentLimits.maxNoteCategories + PagerItemField.allCases.count else {
+                return Self.error(400, "Too many pagerItems", detail: "At most \(ContentLimits.maxNoteCategories + PagerItemField.allCases.count).")
+            }
+            var parsed: [RolePagerItem] = []
+            for value in raw {
+                if let tooLong = tooLong(value, ContentLimits.identifier, "pagerItems entry") { return tooLong }
+                guard let item = RolePagerItem(token: value) else {
+                    return Self.error(400, "Unknown pagerItems value", detail: "Use \"field:<name>\" with one of \(PagerItemField.allCases.map(\.rawValue).joined(separator: ", ")), or \"note:<category>\".")
+                }
+                parsed.append(item)
+            }
+            pagerItems = parsed
+        }
         if let name = request.name?.trimmingCharacters(in: .whitespaces) {
             guard !name.isEmpty else { return Self.error(400, "Role name cannot be empty") }
             engine.renameRole(id: id, name: name)
@@ -1002,17 +1179,24 @@ public final class ControlAPIRouter {
         if let personName = request.personName {
             engine.setPersonName(forRoleId: id, personName: personName.isEmpty ? nil : personName)
         }
+        if let clockFormat {
+            engine.setClockFormat(forRoleId: id, clockFormat)
+        }
         if FeatureFlags.plotiphar, let plotipharRoleId = request.plotipharRoleId {
             engine.setPlotipharRoleId(forRoleId: id, plotipharRoleId: plotipharRoleId.isEmpty ? nil : plotipharRoleId)
         }
-        if let categories = request.assignedNoteCategories {
-            let current = Set(engine.roles.first(where: { $0.id == id })?.assignedNoteCategories ?? [])
-            let desired = Set(categories)
-            for category in desired.subtracting(current) {
-                engine.setNoteCategory(forRoleId: id, category: category, isOn: true)
+        if let teamPosition = request.pcoTeamPosition {
+            engine.setPCOTeamPosition(forRoleId: id, teamPosition.isEmpty ? nil : teamPosition)
+        }
+        if let pagerItems {
+            engine.setPagerItems(forRoleId: id, pagerItems)
+        } else {
+            if let categories = request.assignedNoteCategories, var role = engine.roles.first(where: { $0.id == id }) {
+                role.assignedNoteCategories = categories
+                engine.setPagerItems(forRoleId: id, role.pagerItems ?? [])
             }
-            for category in current.subtracting(desired) {
-                engine.setNoteCategory(forRoleId: id, category: category, isOn: false)
+            if let pagerFields {
+                engine.setPagerFields(forRoleId: id, pagerFields)
             }
         }
         if let rawState = request.state {
@@ -1035,6 +1219,7 @@ public final class ControlAPIRouter {
         }
         if let tooLong = tooLong(request.itemType ?? "", ContentLimits.name, "itemType") { return tooLong }
         if let length = request.lengthInSeconds, !TimerLimits.isValidLength(length) { return lengthOutOfRange() }
+        if let description = request.description, let tooLong = tooLong(description, ContentLimits.noteValue, "Description") { return tooLong }
         if let notes = request.notes {
             guard notes.count <= ContentLimits.maxNoteCategories else {
                 return Self.error(400, "Too many notes", detail: "At most \(ContentLimits.maxNoteCategories) categories.")
@@ -1050,7 +1235,9 @@ public final class ControlAPIRouter {
             itemType: request.itemType ?? existing.itemType,
             lengthInSeconds: request.lengthInSeconds ?? existing.lengthInSeconds,
             notes: request.notes,
-            isDurationActual: request.isDurationActual
+            isDurationActual: request.isDurationActual,
+            description: request.description,
+            servicePosition: request.servicePosition
         )
         return json(engine.planItems.first(where: { $0.id == id }))
     }
@@ -1121,6 +1308,7 @@ public final class ControlAPIRouter {
             waypoints: waypointStatuses(),
             schedules: scheduleStatus(),
             eventTimes: eventTimeStatus(),
+            liveOps: liveOpsStatus(),
             epoch: engine.syncV2.epoch,
             utcOffsetSeconds: engine.timeZoneProvider().secondsFromGMT()
         )
@@ -1138,7 +1326,8 @@ public final class ControlAPIRouter {
             formattedRemaining: TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold),
             isDurationActualForDisplay: engine.activeTimerActualForDisplay,
             anchor: anchor,
-            nextItem: engine.derivedNextPlanItem
+            nextItem: engine.derivedNextPlanItem,
+            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil
         )
     }
 
@@ -1181,7 +1370,8 @@ public final class ControlAPIRouter {
             serviceTypes: engine.pcoServiceTypes.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
             plans: engine.pcoPlans.map { ControlAPIState.PCOStatus.PlanInfo(id: $0.id, title: $0.title, dates: $0.dates) },
             noteCategories: engine.pcoNoteCategories.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) },
-            pendingChanges: engine.pendingPCOChangesForCurrentPlan
+            pendingChanges: engine.pendingPCOChangesForCurrentPlan,
+            planContext: engine.pcoPlanContext
         )
     }
 
@@ -1264,6 +1454,40 @@ public final class ControlAPIRouter {
         )
     }
 
+    private func liveOpsStatus() -> ControlAPIState.LiveOpsStatus {
+        ControlAPIState.LiveOpsStatus(
+            isRehearsalMode: engine.isRehearsalMode,
+            rehearsalPlanTimeId: engine.rehearsalPlanTimeId,
+            actualsEventTimeId: engine.actualsEventTimeId,
+            actuals: engine.itemActualsIncludingLive,
+            skippedItemIds: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
+        )
+    }
+
+    private func actualsStatus() -> ControlAPIRequests.ActualsStatus {
+        ControlAPIRequests.ActualsStatus(
+            eventTimeId: engine.actualsEventTimeId,
+            isLogging: !engine.isRehearsalMode,
+            actuals: engine.currentItemActuals
+        )
+    }
+
+    private func skipsStatus() -> ControlAPIRequests.SkipsStatus {
+        ControlAPIRequests.SkipsStatus(
+            eventTimeId: engine.actualsEventTimeId,
+            skippedItemIds: (engine.skippedItemIds[engine.skipsKey] ?? []).sorted(),
+            all: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
+        )
+    }
+
+    private func rehearsalStatus() -> ControlAPIRequests.RehearsalStatus {
+        ControlAPIRequests.RehearsalStatus(
+            enabled: engine.isRehearsalMode,
+            planTimeId: engine.rehearsalPlanTimeId,
+            availableTimes: engine.rehearsalPlanTimes
+        )
+    }
+
     private func eventTimeStatus() -> ControlAPIState.EventTimeStatus {
         ControlAPIState.EventTimeStatus(
             entries: engine.eventTimes.map(eventTimeEntry),
@@ -1278,7 +1502,7 @@ public final class ControlAPIRouter {
             name: time.name,
             day: time.day,
             startTime: time.startTime,
-            displayName: time.displayName,
+            displayName: time.displayName(engine.clockFormat),
             pcoPlanTimeId: time.pcoPlanTimeId
         )
     }
@@ -1319,6 +1543,7 @@ public final class ControlAPIRouter {
     private func settingsStatus() -> ControlAPIState.SettingsStatus {
         ControlAPIState.SettingsStatus(
             hourFormatThreshold: engine.hourFormatThreshold.rawValue,
+            clockFormat: engine.clockFormat.rawValue,
             controlAPIPort: engine.controlAPIPort,
             connectedAPIClients: connectedClientCount()
         )

@@ -105,7 +105,7 @@ final class CueDisplayStyleTests: XCTestCase {
         XCTAssertEqual(s.groundColor(for: .off), CueDisplayStyle.ground)
         for state in CueState.allCases { XCTAssertNil(s.frameColor(for: state)) }
         XCTAssertFalse(s.showsBadgePill)
-        XCTAssertEqual(s.cardFill, Color.black.opacity(0.28))
+        XCTAssertEqual(s.cardFill, AppPalette.scrimSoft)
         XCTAssertEqual(s.primaryText(for: .go), CueDisplayStyle.darkText)
         XCTAssertEqual(s.primaryText(for: .off), .white)
     }

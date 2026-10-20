@@ -27,6 +27,10 @@ extension CueEngine {
             EventTime(id: $0.id, name: $0.name, day: $0.day, startTime: $0.startTime, pcoPlanTimeId: $0.pcoPlanTimeId)
         })
         assign(\.liveEventTimeId, state.eventTimes?.liveId)
+        assign(\.itemActuals, state.liveOps?.actuals ?? [])
+        assign(\.skippedItemIds, (state.liveOps?.skippedItemIds ?? [:]).mapValues(Set.init))
+        assign(\.rehearsalPlanTimeId, state.liveOps?.rehearsalPlanTimeId)
+        assign(\.isRehearsalMode, state.liveOps?.isRehearsalMode ?? false)
         assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)
@@ -34,6 +38,7 @@ extension CueEngine {
         assign(\.recentMessages, state.messages)
         assign(\.notificationsClearedAt, state.notificationsClearedAt)
         assign(\.hourFormatThreshold, HourFormatThreshold(rawValue: state.settings.hourFormatThreshold) ?? hourFormatThreshold)
+        assign(\.clockFormat, ClockFormat(rawValue: state.settings.clockFormat) ?? clockFormat)
         assign(\.isPCOConnected, state.pco.isConnected)
         assign(\.pcoUserName, state.pco.userName)
         assign(\.pcoLastError, state.pco.lastError)
@@ -45,6 +50,7 @@ extension CueEngine {
         assign(\.pcoPlans, state.pco.plans.map { PCOClient.PCOPlanInfo(id: $0.id, title: $0.title, dates: $0.dates) })
         assign(\.pcoNoteCategories, state.pco.noteCategories.map { PCOClient.PCONoteCategory(id: $0.id, name: $0.name) })
         assign(\.pcoPendingChanges, state.pco.pendingChanges)
+        assign(\.pcoPlanContext, state.pco.planContext)
         assign(\.remoteControllerCount, state.settings.connectedAPIClients)
     }
 
@@ -53,6 +59,7 @@ extension CueEngine {
         if let timer {
             var item = timer.item
             if nextItem != timer.nextItem { nextItem = timer.nextItem }
+            if nextItemStartsAtMs != timer.nextStartsAtMs { nextItemStartsAtMs = timer.nextStartsAtMs }
             item.isRunning = timer.isRunning
             assign(\.isActiveTimerActualOverride, timer.isDurationActualForDisplay)
             if actualOverrideItemId != item.id { actualOverrideItemId = item.id }
@@ -74,6 +81,7 @@ extension CueEngine {
             cancelDisplayTick()
             assign(\.activeTimerItem, nil)
             if nextItem != nil { nextItem = nil }
+            if nextItemStartsAtMs != nil { nextItemStartsAtMs = nil }
             actualOverrideItemId = nil
         }
     }
@@ -96,5 +104,14 @@ extension CueEngine {
     public func setHourFormatThreshold(_ threshold: HourFormatThreshold) {
         hourFormatThreshold = threshold
         if isRemoteMirror { remoteCommands?.send(.hourFormat(threshold.rawValue)) }
+    }
+
+    public func setClockFormat(_ format: ClockFormat) {
+        clockFormat = format
+        if isRemoteMirror {
+            remoteCommands?.send(.clockFormat(format.rawValue))
+        } else {
+            broadcastTimerUpdate()
+        }
     }
 }

@@ -80,6 +80,19 @@ final class DocumentAutosaverTests: XCTestCase {
         _ = saver
     }
 
+    func testSkippingAnItemAutosaves() async {
+        let engine = CueEngine()
+        engine.currentDocumentURL = url
+        engine.planItems = [PCOTimerItem(id: "i", title: "T"), PCOTimerItem(id: "j", title: "U")]
+        let writes = Box()
+        let saver = makeSaver(engine, writes: writes)
+        saver.reseed()
+        engine.setItemSkipped(id: "j", skipped: true)
+        await settle()
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertFalse(saver.hasUnsavedChanges)
+    }
+
     func testLiveCueAndTimerChangesDoNotWrite() async {
         let engine = CueEngine()
         engine.currentDocumentURL = url

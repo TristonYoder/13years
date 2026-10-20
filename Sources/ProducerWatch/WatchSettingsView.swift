@@ -117,7 +117,7 @@ struct WatchSettingsView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Text(value)
-                    .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                    .font(.inter(size: 16, weight: .semibold).monospacedDigit())
             }
             Spacer()
             Image(systemName: "chevron.right")

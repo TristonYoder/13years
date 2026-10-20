@@ -35,6 +35,8 @@ targets:
         excludes:
           - "ProducerMac.entitlements"
           - "Resources"
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/Mac
       - path: Sources/ProducerMac/Resources/13years-pager-merged.bin
         buildPhase: resources
     resources:
@@ -89,6 +91,9 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/PagerIOS
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/UIKit
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerIOS/Assets.xcassets
     settings:
@@ -117,6 +122,9 @@ targets:
       - path: Sources/PagerMac
         excludes:
           - "PagerMac.entitlements"
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/Mac
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerMac/Assets.xcassets
     settings:
@@ -145,6 +153,9 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/PagerTV
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/UIKit
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerTV/Assets.xcassets
     settings:
@@ -189,15 +200,25 @@ targets:
       - path: Sources/ProducerWatch
         excludes:
           - "ExtensionInfo.plist"
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/AppPalette.generated.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/CueState.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/HourFormatThreshold.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/InterTeamMessage.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOTimerItem.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOTimerItem+RunSheet.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOTimerItem+PagerDetails.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PagerItemField.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOItemDetails.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOPlanContext.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ItemActual.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/RoleCue.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerAnchor.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/TimerLimits.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerDocument.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/RunSheetLayoutSettings.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/Waypoint.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ClockFormat.swift
+      - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ProducerClock.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/EventTime.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/ServiceSchedule.swift
       - path: Packages/13YearsClockKit/Sources/ThirteenYearsClockKit/Models/PCOPlanChanges.swift

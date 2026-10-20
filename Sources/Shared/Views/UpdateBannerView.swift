@@ -48,12 +48,12 @@ struct UpdateSettingsSection: View {
                 }
             } else if updates.lastCheckedAt != nil, !updates.lastCheckFailed {
                 Label("You're up to date", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppPalette.positive)
             }
 
             if updates.lastCheckFailed {
                 Label("Couldn't reach GitHub", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
             }
 
             Button(updates.isChecking ? "Checking…" : "Check for Updates") {

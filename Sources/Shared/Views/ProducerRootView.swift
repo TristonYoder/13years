@@ -35,6 +35,9 @@ public struct ProducerRootView: View {
             guard !engine.isRemoteMirror else { return }
             UpdateChecker.shared.startPeriodicChecks()
         }
+        #if os(macOS) || os(iOS)
+        .modifier(MessageNotificationsModifier())
+        #endif
     }
 
     private var adaptiveNavigation: some View {
@@ -61,6 +64,11 @@ public struct ProducerRootView: View {
     private func sidebarRow(_ mode: AppMode) -> some View {
         Label { Text(mode.displayName) } icon: { mode.icon }
             .font(.body.weight(.medium))
+            .modifier(UnreadBadge(count: badgeCount(for: mode)))
+    }
+
+    private func badgeCount(for mode: AppMode) -> Int {
+        mode == .messages ? engine.unreadMessageCount : 0
     }
 
     private var toggleSidebarAction: () -> Void {
@@ -121,6 +129,7 @@ public struct ProducerRootView: View {
             ForEach(AppMode.sidebarCases, id: \.self) { mode in
                 NavigationStack { detailView(for: mode) }
                     .tabItem { Label { Text(mode.displayName) } icon: { mode.icon } }
+                    .modifier(UnreadBadge(count: badgeCount(for: mode)))
                     .tag(mode)
             }
         }
@@ -169,3 +178,15 @@ private struct SidebarPanel: ViewModifier {
     }
 }
 #endif
+
+private struct UnreadBadge: ViewModifier {
+    let count: Int
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content
+        #else
+        content.badge(count)
+        #endif
+    }
+}

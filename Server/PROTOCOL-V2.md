@@ -122,7 +122,9 @@ nextItem: {
   "title": string,
   "itemType": string,
   "lengthInSeconds": int,
-  "notes": { "<category>": "<text>" }
+  "notes": { "<category>": "<text>" },
+  "details": { ... },
+  "startsAtMs": int
 }
 ```
 
@@ -131,6 +133,7 @@ nextItem: {
 - When the next item changes without the timer changing (a plan edit, a reorder), the producer sends a new `TIMER_ANCHOR` (with a new `rev`) carrying the new `nextItem`.
 - The 4096-byte limit on a v2 `PONG` still holds: drop the oldest messages first, then the longest note values of `nextItem`.
 - `nextItem` is not part of any digest hash. A pager that misses a change recovers on the next catch-up.
+- `details` and `startsAtMs` (additive, optional) serve per-role pager fields. `roleCues[].pagerFields` lists the fields a role shows (`key`, `bpm`, `meter`, `arrangement`, `sequence`, `description`, `mediaType`, `servicePosition`, `startTime`, `leader`, `type`, `length`, `itemDetails`) in the order the pager shows them, and `roleCues[].assignedNoteCategories` lists the note categories in the order its notes show. `roleCues[].pagerItems` (additive) is the same two lists as one ordered array of `field:<name>` and `note:<category>` strings; a receiver that knows it prefers it, and one that does not keeps reading the two older keys, which the sender always writes in the same order. `leader` is carried as `details.leaders[].firstName` only (no photo, id or surname), and only when some role chose it; `type` and `length` use `itemType` and `lengthInSeconds`, which every item already carries (`nextItem.itemType` is read by the ESP32 pager for this). `itemDetails` selects the full-details side panel and adds nothing to `details`: `htmlDetails` is never carried in `timerItem`, `nextItem` or any other packet, since a frame over a small pager's receive buffer would be discarded together with the update inside it. Pagers that want it fetch `GET /v1/plan/items/{id}` from the producer's Control API instead. `details` has the same shape as `timerItem.details` but holds only the keys the union of all roles' fields needs (`servicePosition`, `keyName`, `key.name`, `key.startingKey`, `arrangement.name`/`bpm`/`meter`/`sequenceShort`, `customSequenceShort`, `media.mediaType`, `leaders[].firstName`, `description` cut to 140 characters), and is absent when no role chose a field. `startsAtMs` is the next item's projected start in producer epoch milliseconds, present only when a role chose `startTime`; it is not compared when deciding whether `nextItem` changed. A `PONG` over the size limit drops `nextItem.details` last.
 - Control API: `timer.nextItem` carries the full next item (all notes) in the snapshot and the `timer` event, so clients that already hold the plan need no extra data.
 
 ## Pager presentation rules

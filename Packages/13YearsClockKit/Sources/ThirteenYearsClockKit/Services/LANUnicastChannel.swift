@@ -473,7 +473,13 @@ public final class LANUnicastClient: @unchecked Sendable {
             let advertisesMode = LANDiscoveryRouting.advertisesMode(txt: txtDictionary)
             self.queue.async {
                 guard !self.isConnectingToAssignedHost, self.manualHost == nil else { return }
-                if self.connection != nil, !advertisesMode { return }
+                if self.connection != nil, !advertisesMode {
+                    if let port = advertisedAPIPort, let known = self.lastDiscovered, known.endpoint == target.endpoint, known.advertisedAPIPort != port {
+                        self.lastDiscovered = (known.endpoint, known.name, known.advertisedIPv4, port)
+                        DispatchQueue.main.async { [weak self] in self?.onConnectedAPIPort?(port) }
+                    }
+                    return
+                }
                 let previous = self.lastDiscovered?.endpoint
                 self.lastDiscovered = (target.endpoint, displayName, target.advertisedIPv4, advertisedAPIPort)
                 if let current = self.connection, let previous, previous != target.endpoint {

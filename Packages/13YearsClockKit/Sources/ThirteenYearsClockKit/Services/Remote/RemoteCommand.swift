@@ -36,6 +36,11 @@ public enum RemoteCommand: Equatable, Sendable {
     case planImport(text: String, title: String?)
     case itemDurationActual(itemId: String, isActual: Bool)
     case itemWaypoints(itemId: String, waypointIds: [String])
+    case itemSkip(itemId: String, skipped: Bool)
+    case itemUseActual(itemId: String)
+    case actualsClear
+    case actualsSaveToPCO
+    case rehearsal(enabled: Bool, planTimeId: String?)
     case waypointCreate(name: String)
     case waypointCreateAndAssign(name: String, itemId: String)
     case waypointRename(ref: String, name: String)
@@ -66,6 +71,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoChangesAccept(revision: String?)
     case pcoChangesDismiss(revision: String?)
     case pcoChangesCheck
+    case pcoPlanContextRefresh
     case eventTimeCreate(name: String?, day: String?, startTime: String?)
     case eventTimeUpdate(id: String, name: String, day: String, startTime: String)
     case eventTimeDelete(id: String)
@@ -73,6 +79,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case eventTimeNext
     case loadDocument(body: Data)
     case hourFormat(String)
+    case clockFormat(String)
 
     public var isIdempotent: Bool {
         switch self {
@@ -136,6 +143,16 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("plan/items/\(Self.segment(itemId))/duration-actual", ["isActual": isActual])
         case .itemWaypoints(let itemId, let waypointIds):
             return Self.post("plan/items/\(Self.segment(itemId))/waypoints", ["waypoints": waypointIds])
+        case .itemSkip(let itemId, let skipped):
+            return Self.post("plan/items/\(Self.segment(itemId))/skip", ["skipped": skipped])
+        case .itemUseActual(let itemId):
+            return Self.post("plan/items/\(Self.segment(itemId))/use-actual")
+        case .actualsClear:
+            return Request(method: "DELETE", path: "/v1/plan/actuals", body: nil)
+        case .actualsSaveToPCO:
+            return Self.post("plan/actuals/save-to-pco")
+        case .rehearsal(let enabled, let planTimeId):
+            return Request(method: "PUT", path: "/v1/rehearsal", body: Self.json(["enabled": enabled, "planTimeId": planTimeId ?? NSNull()]))
         case .waypointCreate(let name), .waypointCreateAndAssign(let name, _):
             return Self.post("waypoints", ["name": name])
         case .waypointRename(let ref, let name):
@@ -195,6 +212,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/changes/accept", ["revision": revision ?? NSNull()])
         case .pcoChangesDismiss(let revision):
             return Self.post("pco/changes/dismiss", ["revision": revision ?? NSNull()])
+        case .pcoPlanContextRefresh:
+            return Self.post("pco/plan-context/refresh")
         case .pcoChangesCheck:
             return Self.post("pco/changes/check")
         case .eventTimeCreate(let name, let day, let startTime):
@@ -211,6 +230,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PUT", path: "/v1/document", body: body)
         case .hourFormat(let raw):
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["hourFormatThreshold": raw]))
+        case .clockFormat(let raw):
+            return Request(method: "PUT", path: "/v1/settings", body: Self.json(["clockFormat": raw]))
         }
     }
 
