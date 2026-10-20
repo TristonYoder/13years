@@ -20,7 +20,7 @@ final class ProducerScreenshotTour: ScreenshotTourClient {
         self.flashingWindow = flashingWindow
         TourUI.auxiliaryWindowTitles = ["Flash a Pager"]
         runner.beforeCapture = { [unowned self] in
-            if engine.pcoLastError != nil { engine.pcoLastError = nil }
+            if self.engine.pcoLastError != nil { self.engine.pcoLastError = nil }
         }
     }
 

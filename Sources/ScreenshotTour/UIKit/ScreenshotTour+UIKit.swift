@@ -20,12 +20,16 @@ extension ScreenshotTour {
     }
 
     static var orientationName: String {
+        #if os(tvOS)
+        return "landscape"
+        #else
         switch windowScene?.effectiveGeometry.interfaceOrientation {
         case .landscapeLeft: return "landscapeLeft"
         case .landscapeRight: return "landscapeRight"
         case .portraitUpsideDown: return "portraitUpsideDown"
         default: return "portrait"
         }
+        #endif
     }
 
     func waitForInterface() async {
@@ -80,6 +84,7 @@ extension ScreenshotTour {
         }
     }
 
+    #if os(iOS)
     func rotate(to orientation: UIInterfaceOrientationMask) async throws {
         guard let scene = Self.windowScene else { throw TourUIError.notFound("window scene") }
         let wanted: (UIInterfaceOrientation) -> Bool = { current in
@@ -93,7 +98,10 @@ extension ScreenshotTour {
         }
         if wanted(scene.effectiveGeometry.interfaceOrientation) { return }
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
+        let refusal = RotationRefusal()
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation)) { error in
+            refusal.message = error.localizedDescription
+        }
         for _ in 0..<40 {
             await pause(0.1)
             if wanted(scene.effectiveGeometry.interfaceOrientation) {
@@ -101,8 +109,13 @@ extension ScreenshotTour {
                 return
             }
         }
-        throw TourUIError.timedOut("rotation")
+        let failure = refusal.message
+        if let failure, UIDevice.current.userInterfaceIdiom == .pad {
+            throw TourUIError.skipped("the simulator is in \(Self.orientationName.hasPrefix("landscape") ? "landscape" : "portrait") and iPadOS refused to rotate the app (\(failure)); switch the simulator to Full Screen Apps or rotate it to capture this layout")
+        }
+        throw TourUIError.timedOut("rotation" + (failure.map { " (\($0))" } ?? ""))
     }
+    #endif
 
     func presentedScrollView() -> UIScrollView? {
         var root = Self.keyWindow?.rootViewController
@@ -123,3 +136,9 @@ extension ScreenshotTour {
         return largest(in: view)
     }
 }
+
+#if os(iOS)
+private final class RotationRefusal: @unchecked Sendable {
+    var message: String?
+}
+#endif

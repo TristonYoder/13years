@@ -9,13 +9,13 @@ DOCUMENT="${SCREENSHOT_DOCUMENT:-$HOME/Documents/campusClock.13years}"
 APPEARANCE="${SCREENSHOT_APPEARANCE:-light}"
 ONLY="${SCREENSHOT_ONLY:-}"
 APPS="${SCREENSHOT_APP:-producer-mac}"
-SIM_DEVICE="${SCREENSHOT_DEVICE:-C9291001-B2B1-4622-BAA1-5E8A0B5DD87C}"
+SIM_DEVICE="${SCREENSHOT_DEVICE:-}"
 DERIVED="$ROOT/build/screenshots-dd"
 WORK_ROOT="$ROOT/build/screenshots-work"
 SKIP_BUILD="${SCREENSHOT_SKIP_BUILD:-0}"
 
 usage() {
-    echo "usage: $0 [--app producer-mac|pager-mac|pager-ios|all] [--device name|udid] [--document path] [--appearance light|dark] [--only id,id] [--skip-build]" >&2
+    echo "usage: $0 [--app producer-mac|pager-mac|pager-ios|pager-ipad|pager-tv|all] [--device name|udid] [--document path] [--appearance light|dark] [--only id,id] [--skip-build]" >&2
     exit 2
 }
 
@@ -32,8 +32,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$APPS" in
-    all) APPS="producer-mac pager-mac pager-ios" ;;
-    producer-mac|pager-mac|pager-ios) ;;
+    all) APPS="producer-mac pager-mac pager-ios pager-ipad pager-tv" ;;
+    producer-mac|pager-mac|pager-ios|pager-ipad|pager-tv) ;;
     *) usage ;;
 esac
 [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || usage
@@ -114,6 +114,7 @@ run_mac_app() {
             scheme=PagerMac
             product="13 Years"
             bundle_id="app.13years.pager.screenshots"
+            extra_args=(-ScreenshotRole Lighting)
             ;;
     esac
     local out work
@@ -194,22 +195,40 @@ for runtime, devices in json.load(sys.stdin)["devices"].items():
     for device in devices:
         if wanted in (device["udid"], device["name"]) and device.get("isAvailable", True):
             if field == "runtime":
-                print(runtime.rsplit(".", 1)[-1].replace("iOS-", "iOS ").replace("-", "."))
+                print(runtime.rsplit(".", 1)[-1].replace("-", " ", 1).replace("-", "."))
             else:
                 print(device[field])
             sys.exit(0)
 sys.exit(1)
-' "$SIM_DEVICE" "$1"
+' "$1" "$2"
 }
 
-run_ios_app() {
-    local app="pager-ios" scheme=Pager product="13 Years" bundle_id="app.13years.pager.screenshots"
+run_simulator_app() {
+    local app="$1" scheme=Pager product="13 Years" bundle_id="app.13years.pager.screenshots"
+    local device platform=iphonesimulator status_bar=1
+    local -a extra_args=()
+    case "$app" in
+        pager-ios) device="C9291001-B2B1-4622-BAA1-5E8A0B5DD87C" ;;
+        pager-ipad)
+            device="3078FD60-80AD-4D55-81FC-961C52086F64"
+            extra_args=(-ScreenshotRole Lighting)
+            ;;
+        pager-tv)
+            device="F67A6346-D782-49CF-A389-09468AF5B2EB"
+            scheme=PagerTV
+            product="13 Years TV"
+            platform=appletvsimulator
+            status_bar=0
+            extra_args=(-ScreenshotRole Lighting)
+            ;;
+    esac
+    device="${SIM_DEVICE:-$device}"
     local out udid name runtime state
     out="$(output_dir "$app")"
-    udid="$(simulator_field udid)" || { echo "no available simulator named $SIM_DEVICE" >&2; return 1; }
-    name="$(simulator_field name)"
-    runtime="$(simulator_field runtime)"
-    state="$(simulator_field state)"
+    udid="$(simulator_field "$device" udid)" || { echo "no available simulator named $device" >&2; return 1; }
+    name="$(simulator_field "$device" name)"
+    runtime="$(simulator_field "$device" runtime)"
+    state="$(simulator_field "$device" state)"
     echo "==> Simulator $name ($runtime) $udid"
     if [[ "$state" != "Booted" ]]; then
         xcrun simctl boot "$udid" || return 1
@@ -230,7 +249,7 @@ run_ios_app() {
             -quiet || return 1
     fi
 
-    local bundle="$DERIVED/Build/Products/Debug-iphonesimulator/$product.app"
+    local bundle="$DERIVED/Build/Products/Debug-$platform/$product.app"
     [[ -d "$bundle" ]] || { echo "missing build at $bundle" >&2; return 1; }
     [[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$bundle/Info.plist")" == "$bundle_id" ]] || { echo "$bundle is not the screenshot build; run without --skip-build" >&2; return 1; }
     compile_driver || return 1
@@ -250,11 +269,14 @@ run_ios_app() {
     cp "$DOCUMENT" "$work/document/" || return 1
     local doc_copy="$work/document/$(basename "$DOCUMENT")"
 
-    xcrun simctl ui "$udid" appearance "$APPEARANCE"
-    xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
-        --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
+    xcrun simctl ui "$udid" appearance "$APPEARANCE" >/dev/null 2>&1 || echo "    (the simulator does not support an appearance override)"
+    if [[ "$status_bar" == "1" ]]; then
+        xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
+    fi
 
-    local -a args=(-ScreenshotTour "$work/out" -ScreenshotDocument "$doc_copy" -ScreenshotAppearance "$APPEARANCE")
+    local -a args=(-ScreenshotTour "$work/out" -ScreenshotDocument "$doc_copy" -ScreenshotAppearance "$APPEARANCE"
+                   ${extra_args[@]+"${extra_args[@]}"})
     [[ -n "$ONLY" ]] && args+=(-ScreenshotTourOnly "$ONLY")
 
     echo "==> Running the $app tour"
@@ -280,7 +302,7 @@ run_ios_app() {
 STATUS=0
 for app in $APPS; do
     case "$app" in
-        pager-ios) run_ios_app || STATUS=$? ;;
+        pager-ios|pager-ipad|pager-tv) run_simulator_app "$app" || STATUS=$? ;;
         *) run_mac_app "$app" || STATUS=$? ;;
     esac
 done

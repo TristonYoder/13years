@@ -92,7 +92,7 @@ targets:
       - path: Sources/Shared
       - path: Sources/PagerIOS
       - path: Sources/ScreenshotTour/Core
-      - path: Sources/ScreenshotTour/IOS
+      - path: Sources/ScreenshotTour/UIKit
       - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerIOS/Assets.xcassets
@@ -153,6 +153,9 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/PagerTV
+      - path: Sources/ScreenshotTour/Core
+      - path: Sources/ScreenshotTour/UIKit
+      - path: Sources/ScreenshotTour/Pager
     resources:
       - path: Sources/PagerTV/Assets.xcassets
     settings:

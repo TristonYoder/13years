@@ -44,6 +44,7 @@ extension PagerScreenshotTour {
             try await show(Scene(role: role, state: .off, layout: .landscape))
             await pause(1.2)
         }))
+        list.append(contentsOf: extraRoleSteps())
         list.append(roleMenuStep())
 
         list.append(Step(id: "pager.chat", title: "Messages sheet", capture: Self.sheetCapture, prepare: { [unowned self] in
@@ -71,7 +72,30 @@ extension PagerScreenshotTour {
         return list
     }
 
+    private func extraRoleSteps() -> [Step] {
+        guard let role = runner.options.role else { return [] }
+        let slug = role.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: "-")
+        let variants: [(PagerResolvedLayout, CueState, String, String)] = [
+            (.portrait, .off, "portrait", "Portrait"),
+            (.landscape, .off, "details-split", "Landscape with the item details split"),
+            (.landscape, .standby, "details-split-standby", "Landscape with the item details split, STANDBY"),
+            (.lowerThird, .off, "lower-third", "Lower third")
+        ]
+        return variants.map { layout, state, suffix, title in
+            Step(id: "pager.\(slug)-\(suffix)", title: "\(role) pager, \(title)", prepare: { [unowned self] in
+                guard hasRole(named: role) else {
+                    throw TourUIError.skipped("the document has no \(role) role")
+                }
+                try await show(Scene(role: role, state: state, layout: layout))
+                await pause(1.2)
+            })
+        }
+    }
+
     func show(_ scene: Scene) async throws {
+        guard Self.supportedLayouts.contains(scene.layout) else {
+            throw TourUIError.skipped("Apple TV always uses the landscape layout")
+        }
         try apply(scene)
         try await arrange(scene.layout)
     }
@@ -88,14 +112,35 @@ extension PagerScreenshotTour {
         await pause(0.8)
     }
 
-    #if os(iOS)
-    static var waitingLayout: PagerResolvedLayout { .portrait }
-    static var sheetLayout: PagerResolvedLayout { .portrait }
-    static var sheetCapture: ScreenshotTour.Capture { .screen }
+    #if os(iOS) || os(tvOS)
+    #if os(tvOS)
+    static var waitingLayout: PagerResolvedLayout { .landscape }
+    static var sheetLayout: PagerResolvedLayout { .landscape }
+    static var supportedLayouts: [PagerResolvedLayout] { [.landscape] }
 
     func arrange(_ layout: PagerResolvedLayout) async throws {
-        try await runner.rotate(to: layout == .portrait ? .portrait : .landscapeRight)
+        await pause(0.3)
     }
+
+    private func platformSteps() -> [Step] {
+        [Step(id: "pager.landscape-go-fullscreen", title: "Landscape pager, GO with the full screen cue display", prepare: { [unowned self] in
+            try await show(Scene(state: .go, layout: .landscape, cueDisplay: .fullscreen))
+        })]
+    }
+    #else
+    static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    static var currentLayout: PagerResolvedLayout { ScreenshotTour.orientationName.hasPrefix("landscape") ? .landscape : .portrait }
+    static var waitingLayout: PagerResolvedLayout { isPad ? currentLayout : .portrait }
+    static var sheetLayout: PagerResolvedLayout { isPad ? currentLayout : .portrait }
+    static var supportedLayouts: [PagerResolvedLayout] { [.portrait, .landscape, .lowerThird] }
+
+    func arrange(_ layout: PagerResolvedLayout) async throws {
+        try await runner.rotate(to: layout == .portrait ? .portrait : (Self.isPad ? .landscape : .landscapeRight))
+    }
+
+    private func platformSteps() -> [Step] { [] }
+    #endif
+    static var sheetCapture: ScreenshotTour.Capture { .screen }
 
     private func waitForSheetPresented() async throws {
         for _ in 0..<40 {
@@ -119,22 +164,25 @@ extension PagerScreenshotTour {
 
     private func roleMenuStep() -> Step {
         Step(id: "pager.role-menu", title: "Role menu", prepare: {
-            throw TourUIError.skipped("the role picker is a SwiftUI menu that opens only from a touch, which the simulator tour does not synthesize")
+            throw TourUIError.skipped("the role picker is a SwiftUI menu that opens only from a touch or the remote, which the simulator tour does not synthesize")
         })
     }
 
     private func pickerSteps() -> [Step] {
         [("cue-display", "Cue display"), ("layout", "Layout")].map { slug, title in
             Step(id: "pager.settings-\(slug)-picker", title: "Pager Settings, \(title) picker", prepare: {
-                throw TourUIError.skipped("menu pickers open only from a touch, which the simulator tour does not synthesize")
+                #if os(tvOS)
+                if slug == "layout" { throw TourUIError.skipped("Pager Settings on Apple TV has no layout picker") }
+                #endif
+                throw TourUIError.skipped("menu pickers open only from a touch or the remote, which the simulator tour does not synthesize")
             })
         }
     }
 
-    private func platformSteps() -> [Step] { [] }
     #else
     static var waitingLayout: PagerResolvedLayout { .landscape }
     static var sheetLayout: PagerResolvedLayout { .landscape }
+    static var supportedLayouts: [PagerResolvedLayout] { [.portrait, .landscape, .lowerThird] }
     static var sheetCapture: ScreenshotTour.Capture { .appWindows }
 
     static func windowSize(for layout: PagerResolvedLayout) -> CGSize {

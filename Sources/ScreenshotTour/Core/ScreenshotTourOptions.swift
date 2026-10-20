@@ -15,6 +15,7 @@ struct ScreenshotTourOptions {
     let only: [String]
     let appearance: Appearance?
     let contentSize: CGSize
+    let role: String?
 
     static let current = ScreenshotTourOptions(arguments: ProcessInfo.processInfo.arguments)
 
@@ -33,6 +34,7 @@ struct ScreenshotTourOptions {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         appearance = value("-ScreenshotAppearance").flatMap { Appearance(rawValue: $0.lowercased()) }
+        role = value("-ScreenshotRole").flatMap { $0.isEmpty ? nil : $0 }
         let size = (value("-ScreenshotWindowSize") ?? "1440x900").split(separator: "x").compactMap { Double($0) }
         contentSize = size.count == 2 ? CGSize(width: size[0], height: size[1]) : CGSize(width: 1440, height: 900)
     }

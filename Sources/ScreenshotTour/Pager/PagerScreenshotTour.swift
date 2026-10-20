@@ -89,14 +89,19 @@ final class PagerScreenshotTour: ScreenshotTourClient {
         for item in items where !item.isHeader {
             bodies[item.id] = try? ControlAPIJSON.encoder.encode(item)
         }
+        let served = bodies
         PagerItemDetailsTransport.standard = { url in
-            guard let body = bodies[url.lastPathComponent] else { return (404, Data()) }
+            guard let body = served[url.lastPathComponent] else { return (404, Data()) }
             return (200, body)
         }
         engine.connectedProducerHost = Self.producerHost
     }
 
     static let producerHost = "producer.local"
+
+    func hasRole(named name: String) -> Bool {
+        roles.contains { $0.name == name }
+    }
 
     func roleId(named name: String) -> String? {
         roles.first { $0.name == name }?.id ?? roles.first?.id
@@ -133,7 +138,7 @@ final class PagerScreenshotTour: ScreenshotTourClient {
     }
 
     private func layoutChoice(for layout: PagerResolvedLayout) -> PagerLayoutChoice {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         return layout == .lowerThird ? .lowerThird : .automatic
         #else
         return .automatic
