@@ -4,7 +4,7 @@ Cue lights and pagers for live production teams. A producer runs the show from a
 
 ## Get the apps
 
-- **Pager (iPhone, iPad, Apple TV, Mac):** join the beta on [TestFlight](https://testflight.apple.com/join/yydaPnPF).
+- **Pager (iPhone, iPad, Apple TV, Mac):** join the beta on [TestFlight](https://testflight.apple.com/join/sbn2ecQQ).
 - **Producer for Mac** and the Mac Pager as disk images: [latest release](https://github.com/TristonYoder/13years/releases/latest).
 
 ## Run sheet
