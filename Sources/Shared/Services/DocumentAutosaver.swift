@@ -41,7 +41,7 @@ public final class DocumentAutosaver: ObservableObject {
     private let writeDocument: @Sendable (ProducerDocument, URL) throws -> Void
     private let onFailure: (Error, URL) -> Void
     private let indexThrottle: TimeInterval
-    private let queue = DispatchQueue(label: "dev.7co.13years.autosave")
+    private let queue = DispatchQueue(label: "app.13years.autosave")
     private var baseline: ProducerDocument
     private var manualBaseline: ProducerDocument?
     private var isSuspended = false

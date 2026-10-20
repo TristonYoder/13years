@@ -41,7 +41,7 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 PCO_OAUTH_CLIENT_ID = your-planning-center-oauth-client-id
 ```
 
-Register your own OAuth application at Planning Center (redirect URI `thirteenyears://oauth/callback`, scope `services`). Without a client ID the app builds, but PCO sign-in reports that none is configured. Bundle identifiers use the `dev.7co.13years` prefix in `project.yml`; change them to build under your own account.
+Register your own OAuth application at Planning Center (redirect URI `thirteenyears://oauth/callback`, scope `services`). Without a client ID the app builds, but PCO sign-in reports that none is configured. Bundle identifiers use the `app.13years` prefix in `project.yml`; change them to build under your own account.
 
 CI (`.github/workflows/apple-build.yml`) writes `Config/Local.xcconfig` from two repository secrets:
 

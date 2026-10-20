@@ -19,7 +19,7 @@ public final class LANUnicastServer: @unchecked Sendable {
     public var onStatusChanged: ((Bool) -> Void)?
 
     private var listener: NWListener?
-    private let queue = DispatchQueue(label: "dev.7co.13years.lanunicast.server", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "app.13years.lanunicast.server", qos: .userInteractive)
     private var isRunning = false
     private var bindAttempt = 0
     private var connections: [UInt64: NWConnection] = [:]
@@ -251,7 +251,7 @@ public final class LANUnicastClient: @unchecked Sendable {
     private var browser: NWBrowser?
     private var assignListener: NWListener?
     private var connection: NWConnection?
-    private let queue = DispatchQueue(label: "dev.7co.13years.lanunicast.client", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "app.13years.lanunicast.client", qos: .userInteractive)
     private var isRunning = false
     private var lastDiscovered: (endpoint: NWEndpoint, name: String, advertisedIPv4: String?, advertisedAPIPort: Int?)?
     private var isConnectingToAssignedHost = false

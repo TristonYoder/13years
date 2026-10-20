@@ -23,7 +23,7 @@
 	<true/>
 
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>dev.7co.13years.pager</string>
+	<string>app.13years.pager</string>
 
 	<key>NSAppTransportSecurity</key>
 	<dict>

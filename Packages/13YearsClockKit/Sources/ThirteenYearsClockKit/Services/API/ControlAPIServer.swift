@@ -16,7 +16,7 @@ public final class ControlAPIServer: ControlAPIBroadcaster, @unchecked Sendable 
     public var onClientCountChanged: ((Int) -> Void)?
 
     private let router: ControlAPIRouter
-    private let queue = DispatchQueue(label: "dev.7co.13years.controlapi", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "app.13years.controlapi", qos: .userInitiated)
     private var listener: NWListener?
     private var isRunning = false
     private var bindAttempt = 0

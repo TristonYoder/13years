@@ -15,7 +15,7 @@
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>dev.7co.13years.document</string>
+				<string>app.13years.document</string>
 			</array>
 		</dict>
 		<dict>
@@ -27,7 +27,7 @@
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>dev.7co.13years.template</string>
+				<string>app.13years.template</string>
 			</array>
 		</dict>
 	</array>
@@ -73,7 +73,7 @@
 			<key>UTTypeDescription</key>
 			<string>13 Years Document</string>
 			<key>UTTypeIdentifier</key>
-			<string>dev.7co.13years.document</string>
+			<string>app.13years.document</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
@@ -91,7 +91,7 @@
 			<key>UTTypeDescription</key>
 			<string>13 Years Template</string>
 			<key>UTTypeIdentifier</key>
-			<string>dev.7co.13years.template</string>
+			<string>app.13years.template</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
