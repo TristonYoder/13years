@@ -111,7 +111,7 @@ extension ScreenshotTour {
         }
         let failure = refusal.message
         if let failure, UIDevice.current.userInterfaceIdiom == .pad {
-            throw TourUIError.skipped("the simulator is in \(Self.orientationName.hasPrefix("landscape") ? "landscape" : "portrait") and iPadOS refused to rotate the app (\(failure)); switch the simulator to Full Screen Apps or rotate it to capture this layout")
+            throw TourUIError.skipped("iPadOS refused to rotate the app (\(failure))")
         }
         throw TourUIError.timedOut("rotation" + (failure.map { " (\($0))" } ?? ""))
     }

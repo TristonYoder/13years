@@ -106,7 +106,7 @@ extension ProducerScreenshotTour {
             showRunSheet(layout: "list")
             await pause(0.4)
             if engine.eventTimes.contains(where: { $0.pcoPlanTimeId != nil }) {
-                throw TourUIError.skipped("the demo document's event times come from Planning Center, so they have no editor")
+                throw TourUIError.skipped("event times from Planning Center have no editor")
             }
             throw TourUIError.skipped("the event time editor has no tour hook yet")
         }))
@@ -183,7 +183,7 @@ extension ProducerScreenshotTour {
             _ = try await waitForSheet(depth: 2)
         }))
         list.append(Step(id: "connect-to", title: "Connect To… sheet", prepare: {
-            throw TourUIError.skipped("Connect To… browses Bonjour, which needs the Local Network permission and live peers")
+            throw TourUIError.skipped("Connect To… needs Bonjour, Local Network permission and live peers")
         }))
         list.append(Step(id: "flash-pager", title: "Flash a Pager window", capture: .window({ NSApp.windows.first { $0.isVisible && $0.title == "Flash a Pager" } }), prepare: { [unowned self] in
             engine.appMode = .producerControl

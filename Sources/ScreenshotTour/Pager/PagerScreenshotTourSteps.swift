@@ -164,7 +164,7 @@ extension PagerScreenshotTour {
 
     private func roleMenuStep() -> Step {
         Step(id: "pager.role-menu", title: "Role menu", prepare: {
-            throw TourUIError.skipped("the role picker is a SwiftUI menu that opens only from a touch or the remote, which the simulator tour does not synthesize")
+            throw TourUIError.skipped("the role menu needs a touch or the remote")
         })
     }
 
@@ -174,7 +174,7 @@ extension PagerScreenshotTour {
                 #if os(tvOS)
                 if slug == "layout" { throw TourUIError.skipped("Pager Settings on Apple TV has no layout picker") }
                 #endif
-                throw TourUIError.skipped("menu pickers open only from a touch or the remote, which the simulator tour does not synthesize")
+                throw TourUIError.skipped("menu pickers need a touch or the remote")
             })
         }
     }
@@ -222,7 +222,7 @@ extension PagerScreenshotTour {
         Step(id: "pager.role-menu", title: "Role menu", capture: .mainWindowAndMenus, prepare: { [unowned self] in
             try await show(Scene(state: .off, layout: .landscape))
             guard roleMenuButton() != nil else {
-                throw TourUIError.skipped("SwiftUI does not expose the role menu button to in-process accessibility")
+                throw TourUIError.skipped("SwiftUI does not expose the role menu to the tour")
             }
         }, tracking: { [unowned self] _ in
             guard let window = TourUI.mainWindow, let element = roleMenuButton() else { return }
