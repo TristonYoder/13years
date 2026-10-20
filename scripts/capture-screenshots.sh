@@ -252,6 +252,10 @@ run_simulator_app() {
     local bundle="$DERIVED/Build/Products/Debug-$platform/$product.app"
     [[ -d "$bundle" ]] || { echo "missing build at $bundle" >&2; return 1; }
     [[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$bundle/Info.plist")" == "$bundle_id" ]] || { echo "$bundle is not the screenshot build; run without --skip-build" >&2; return 1; }
+    if [[ "$platform" == "iphonesimulator" ]]; then
+        /usr/libexec/PlistBuddy -c "Set :UIRequiresFullScreen true" "$bundle/Info.plist" >/dev/null 2>&1 \
+            || /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$bundle/Info.plist" || return 1
+    fi
     compile_driver || return 1
 
     SIM_UDID="$udid"
