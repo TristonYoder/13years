@@ -356,6 +356,7 @@ struct PagerCueFrame: View {
         #if os(iOS)
         GeometryReader { proxy in
             let edges = bandEdges(safe: proxy.safeAreaInsets)
+            #if compiler(>=6.2)
             if #available(iOS 26.0, *) {
                 Rectangle()
                     .fill(color)
@@ -371,6 +372,11 @@ struct PagerCueFrame: View {
                     .fill(color, style: FillStyle(eoFill: true))
                     .ignoresSafeArea()
             }
+            #else
+            FrameShape(edges: edges, radius: radius)
+                .fill(color, style: FillStyle(eoFill: true))
+                .ignoresSafeArea()
+            #endif
         }
         .allowsHitTesting(false)
         #else
