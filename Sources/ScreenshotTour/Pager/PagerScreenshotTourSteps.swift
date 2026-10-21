@@ -32,6 +32,15 @@ extension PagerScreenshotTour {
         list.append(Step(id: "pager.portrait-go-fullscreen", title: "Portrait pager, GO with the full screen cue display", prepare: { [unowned self] in
             try await show(Scene(state: .go, layout: .portrait, cueDisplay: .fullscreen))
         }))
+        list.append(Step(id: "pager.portrait-standby-fullscreen", title: "Portrait pager, STANDBY with the full screen cue display", prepare: { [unowned self] in
+            try await show(Scene(state: .standby, layout: .portrait, cueDisplay: .fullscreen))
+        }))
+        list.append(Step(id: "pager.landscape-go-fullscreen", title: "Landscape pager, GO with the full screen cue display", prepare: { [unowned self] in
+            try await show(Scene(state: .go, layout: .landscape, cueDisplay: .fullscreen))
+        }))
+        list.append(Step(id: "pager.landscape-standby-fullscreen", title: "Landscape pager, STANDBY with the full screen cue display", prepare: { [unowned self] in
+            try await show(Scene(state: .standby, layout: .landscape, cueDisplay: .fullscreen))
+        }))
         list.append(Step(id: "pager.lower-third-controls", title: "Lower third pager with its controls showing", prepare: { [unowned self] in
             try await show(Scene(state: .off, layout: .lowerThird))
             ScreenshotTourSignal.post("pager.lower-third-controls")
@@ -123,9 +132,7 @@ extension PagerScreenshotTour {
     }
 
     private func platformSteps() -> [Step] {
-        [Step(id: "pager.landscape-go-fullscreen", title: "Landscape pager, GO with the full screen cue display", prepare: { [unowned self] in
-            try await show(Scene(state: .go, layout: .landscape, cueDisplay: .fullscreen))
-        })]
+        []
     }
     #else
     static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -287,7 +294,8 @@ extension PagerScreenshotTour {
             (.standby, .outline, false, "-standby", "STANDBY"),
             (.go, .outline, false, "-go", "GO"),
             (.standby, .outline, true, "-message", "with a producer message"),
-            (.go, .fullscreen, false, "-go-fullscreen", "GO with the full screen cue display")
+            (.go, .fullscreen, false, "-go-fullscreen", "GO with the full screen cue display"),
+            (.standby, .fullscreen, false, "-standby-fullscreen", "STANDBY with the full screen cue display")
         ]
         return variants.map { state, display, messages, suffix, title in
             Step(id: "pager.esp32-size\(suffix)", title: "Mac pager at the ESP32 pager's 240×320 size, \(title)", prepare: { [unowned self] in
