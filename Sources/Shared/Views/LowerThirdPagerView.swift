@@ -133,10 +133,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             }
 
             if let frame = style.frameColor(for: state) {
-                FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
-                    .fill(frame, style: FillStyle(eoFill: true))
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                PagerCueFrame(color: frame, thickness: m.frameThickness, radius: m.frameCornerRadius)
             }
         }
         .contentShape(Rectangle())
