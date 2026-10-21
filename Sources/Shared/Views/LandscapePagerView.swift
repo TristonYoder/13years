@@ -352,48 +352,56 @@ struct PagerCueFrame: View {
     let thickness: CGFloat
     let radius: CGFloat
 
+    private var edges: EdgeInsets {
+        EdgeInsets(top: thickness, leading: thickness, bottom: thickness, trailing: thickness)
+    }
+
     var body: some View {
         #if os(iOS)
         GeometryReader { proxy in
-            let edges = bandEdges(safe: proxy.safeAreaInsets)
-            #if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                Rectangle()
-                    .fill(color)
-                    .overlay {
-                        ConcentricRectangle(corners: .concentric(minimum: .fixed(radius)), isUniform: true)
-                            .padding(edges)
-                            .blendMode(.destinationOut)
-                    }
-                    .compositingGroup()
-                    .ignoresSafeArea()
-            } else {
-                FrameShape(edges: edges, radius: radius)
-                    .fill(color, style: FillStyle(eoFill: true))
-                    .ignoresSafeArea()
+            let cutout = PagerCutout.current(safe: proxy.safeAreaInsets, size: proxy.size)
+            ZStack {
+                band
+                if let cutout {
+                    PagerCutoutBand(cutout: cutout, thickness: thickness)
+                        .fill(color)
+                }
             }
-            #else
-            FrameShape(edges: edges, radius: radius)
-                .fill(color, style: FillStyle(eoFill: true))
-                .ignoresSafeArea()
-            #endif
+            .ignoresSafeArea()
         }
         .allowsHitTesting(false)
         #else
-        FrameShape(edges: EdgeInsets(top: thickness, leading: thickness, bottom: thickness, trailing: thickness), radius: radius)
-            .fill(color, style: FillStyle(eoFill: true))
+        squareBand
             .ignoresSafeArea()
             .allowsHitTesting(false)
         #endif
     }
 
-    private func bandEdges(safe: EdgeInsets) -> EdgeInsets {
-        EdgeInsets(
-            top: max(thickness, safe.top),
-            leading: max(thickness, safe.leading),
-            bottom: thickness,
-            trailing: max(thickness, safe.trailing)
-        )
+    #if os(iOS)
+    @ViewBuilder
+    private var band: some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            Rectangle()
+                .fill(color)
+                .overlay {
+                    ConcentricRectangle(corners: .concentric(minimum: .fixed(radius)), isUniform: true)
+                        .padding(edges)
+                        .blendMode(.destinationOut)
+                }
+                .compositingGroup()
+        } else {
+            squareBand
+        }
+        #else
+        squareBand
+        #endif
+    }
+    #endif
+
+    private var squareBand: some View {
+        FrameShape(edges: edges, radius: radius)
+            .fill(color, style: FillStyle(eoFill: true))
     }
 }
 
