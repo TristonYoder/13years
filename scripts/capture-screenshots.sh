@@ -65,14 +65,20 @@ compile_driver() {
     fi
 }
 
+set_name() {
+    if [[ "$APPEARANCE" == "dark" ]]; then echo "$1-dark"; else echo "$1"; fi
+}
+
 output_dir() {
-    if [[ -n "$ONLY" ]]; then echo "$OUT_ROOT/$1-partial"; else echo "$OUT_ROOT/$1"; fi
+    local name
+    name="$(set_name "$1")"
+    if [[ -n "$ONLY" ]]; then echo "$OUT_ROOT/$name-partial"; else echo "$OUT_ROOT/$name"; fi
 }
 
 finish_app() {
     local app="$1" status="$2" out="$3"
     if [[ $status -eq 0 && -z "$ONLY" ]]; then
-        rm -rf "$OUT_ROOT/$app-partial"
+        rm -rf "$OUT_ROOT/$(set_name "$app")-partial"
         ln -sfn "$VERSION-$BUILD" "$ROOT/Screenshots/latest"
     fi
     [[ $status -eq 0 ]] && echo "==> Wrote $out"

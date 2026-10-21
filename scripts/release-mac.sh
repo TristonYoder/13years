@@ -69,5 +69,5 @@ make_dmg "13 Years Producer $version" "$out/stage-producer" "$out/13-Years-Produ
 make_dmg "13 Years $version" "$out/stage-pager" "$out/13-Years-$version.dmg"
 
 rm -rf "$out/stage-producer" "$out/stage-pager" "$out"/*.zip
-shasum -a 256 "$out"/*.dmg | tee "$out/SHA256SUMS"
+(cd "$out" && shasum -a 256 *.dmg | tee SHA256SUMS)
 echo "release artifacts in $out"
