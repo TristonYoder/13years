@@ -165,10 +165,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             }
 
             if let frame = style.frameColor(for: state) {
-                FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
-                    .fill(frame, style: FillStyle(eoFill: true))
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                PagerCueFrame(color: frame, thickness: m.frameThickness, radius: m.frameCornerRadius)
             }
         }
     }
@@ -350,15 +347,64 @@ enum PagerNoteText {
     }
 }
 
-struct FrameShape: Shape {
+struct PagerCueFrame: View {
+    let color: Color
     let thickness: CGFloat
+    let radius: CGFloat
+
+    var body: some View {
+        #if os(iOS)
+        GeometryReader { proxy in
+            let edges = bandEdges(safe: proxy.safeAreaInsets)
+            if #available(iOS 26.0, *) {
+                Rectangle()
+                    .fill(color)
+                    .overlay {
+                        ConcentricRectangle(corners: .concentric(minimum: .fixed(radius)), isUniform: true)
+                            .padding(edges)
+                            .blendMode(.destinationOut)
+                    }
+                    .compositingGroup()
+                    .ignoresSafeArea()
+            } else {
+                FrameShape(edges: edges, radius: radius)
+                    .fill(color, style: FillStyle(eoFill: true))
+                    .ignoresSafeArea()
+            }
+        }
+        .allowsHitTesting(false)
+        #else
+        FrameShape(edges: EdgeInsets(top: thickness, leading: thickness, bottom: thickness, trailing: thickness), radius: radius)
+            .fill(color, style: FillStyle(eoFill: true))
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        #endif
+    }
+
+    private func bandEdges(safe: EdgeInsets) -> EdgeInsets {
+        EdgeInsets(
+            top: max(thickness, safe.top),
+            leading: max(thickness, safe.leading),
+            bottom: thickness,
+            trailing: max(thickness, safe.trailing)
+        )
+    }
+}
+
+struct FrameShape: Shape {
+    let edges: EdgeInsets
     let radius: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.addRect(rect)
         path.addRoundedRect(
-            in: rect.insetBy(dx: thickness, dy: thickness),
+            in: CGRect(
+                x: rect.minX + edges.leading,
+                y: rect.minY + edges.top,
+                width: rect.width - edges.leading - edges.trailing,
+                height: rect.height - edges.top - edges.bottom
+            ),
             cornerSize: CGSize(width: radius, height: radius),
             style: .continuous
         )
