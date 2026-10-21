@@ -89,7 +89,7 @@ struct CustomScreenURLSection: View {
             if apiOff {
                 Label("The web pager is served by the Control API, which is off on this Producer", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                 Toggle("Enable Control API", isOn: $engine.isControlAPIEnabled)
             }
 
@@ -129,7 +129,7 @@ struct CustomScreenURLSection: View {
                 if customParsed == nil {
                     Label("Enter a host or IP address, like studio.local, 192.168.1.20:13390 or [fe80::1]:13390", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppPalette.warning)
                 }
             }
 

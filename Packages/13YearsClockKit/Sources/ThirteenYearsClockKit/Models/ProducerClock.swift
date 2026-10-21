@@ -66,6 +66,10 @@ public enum ProducerClock {
         return zone
     }
 
+    public static func formatted(localNow: Date, info: ProducerClockInfo, format: ClockFormat) -> String {
+        format.string(from: producerDate(localNow: localNow, offsetMs: info.offsetMs), timeZone: info.timeZone, includesSeconds: true)
+    }
+
     public static func formatted(localNow: Date, info: ProducerClockInfo) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = info.timeZone

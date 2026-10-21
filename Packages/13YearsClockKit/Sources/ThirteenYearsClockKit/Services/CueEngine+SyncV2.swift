@@ -272,6 +272,10 @@ extension CueEngine {
             next.notes.removeValue(forKey: longest)
             pong.nextItem = next
         }
+        if var next = pong.nextItem, next.details != nil, (pong.encode()?.count ?? 0) > Self.maxCatchUpPongBytes {
+            next.details = nil
+            pong.nextItem = next
+        }
         return pong
     }
 
@@ -405,6 +409,7 @@ extension CueEngine {
     func applyReceivedNextItem(_ next: CueNextItem?) {
         let item = next?.timerItem
         if nextItem != item { nextItem = item }
+        if nextItemStartsAtMs != next?.startsAtMs { nextItemStartsAtMs = next?.startsAtMs }
     }
 
     func applyCueDeltas(_ deltas: [CueDelta]) {
@@ -486,6 +491,9 @@ extension CueEngine {
         switch packet.type {
         case .cueUpdate, .timerUpdate, .pong, .timerAnchor, .cueDelta, .digest, .syncReply:
             if producerUTCOffsetSeconds != utc { producerUTCOffsetSeconds = utc }
+            if let format = packet.clockFormat.flatMap(ClockFormat.init(rawValue:)), producerClockFormat != format {
+                producerClockFormat = format
+            }
         default:
             break
         }

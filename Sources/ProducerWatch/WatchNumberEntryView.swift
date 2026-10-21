@@ -62,7 +62,7 @@ struct WatchNumberEntryView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(displayText)
-                    .font(.system(size: 26, weight: .semibold, design: .monospaced))
+                    .font(.inter(size: 26, weight: .semibold).monospacedDigit())
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .foregroundStyle(text.isEmpty ? .secondary : .primary)
@@ -93,7 +93,7 @@ struct WatchNumberEntryView: View {
             TextField(title, text: $text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                .font(.inter(size: 18, weight: .medium).monospacedDigit())
             Button {
                 showingTextEntry = false
             } label: {
@@ -149,7 +149,7 @@ struct WatchNumberEntryView: View {
                 .frame(height: height)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(white: 0.16))
+                        .fill(AppPalette.keypadKey)
                 )
         }
         .buttonStyle(.plain)
@@ -165,7 +165,7 @@ struct WatchNumberEntryView: View {
                 .frame(height: height)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(white: 0.16))
+                        .fill(AppPalette.keypadKey)
                 )
         }
         .buttonStyle(.plain)

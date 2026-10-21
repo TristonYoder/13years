@@ -148,6 +148,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                     state: state,
                     style: style,
                     producerClock: presentation.producerClock,
+                    clockFormat: presentation.clockFormat,
                     roleName: presentation.activeRole?.name ?? "Host Pager",
                     roleColumnMaxWidth: 0.2 * m.size.width,
                     hidesLeading: disconnectPhase == .extended,
@@ -164,10 +165,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             }
 
             if let frame = style.frameColor(for: state) {
-                FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
-                    .fill(frame, style: FillStyle(eoFill: true))
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                PagerCueFrame(color: frame, thickness: m.frameThickness, radius: m.frameCornerRadius)
             }
         }
     }
@@ -178,7 +176,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
             if let item = presentation.activeTimerItem {
                 VStack(spacing: m.margin * 0.2) {
                     Text(item.title.uppercased())
-                        .font(.inter(size: m.titleFontSize, weight: .bold))
+                        .font(.system(size: m.titleFontSize, weight: .bold))
                         .foregroundColor(primary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -193,7 +191,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                             .minimumScaleFactor(0.3)
 
                         Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
-                            .font(.inter(size: m.tagFontSize, weight: .bold))
+                            .font(.system(size: m.tagFontSize, weight: .bold))
                             .tracking(m.tagFontSize * 0.12)
                             .foregroundColor(style.secondaryText(for: state, opacity: 0.6))
                     }
@@ -227,39 +225,52 @@ public struct LandscapePagerView<RoleMenu: View>: View {
 
     @ViewBuilder
     private func cardsRow(_ m: LandscapeMetrics) -> some View {
-        let hasCurrent = !presentation.currentNotes.isEmpty
+        let currentDetails = presentation.currentDetailsLine()
+        let nextDetails = presentation.nextDetailsLine()
+        let hasCurrent = !presentation.currentNotes.isEmpty || currentDetails != nil
         let hasNext = presentation.nextItem != nil
         let width = LandscapeMetrics.cardWidth(for: (hasCurrent ? 1 : 0) + (hasNext ? 1 : 0), in: m)
         if hasCurrent || hasNext {
             HStack(alignment: .top, spacing: m.margin) {
                 if hasCurrent {
-                    card(m, width: width) { scale in currentContent(m, scale: scale) }
+                    card(m, width: width) { scale in currentContent(m, details: currentDetails, scale: scale) }
                 }
                 if hasNext {
-                    card(m, width: width) { scale in nextContent(m, scale: scale) }
+                    card(m, width: width) { scale in nextContent(m, details: nextDetails, scale: scale) }
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func currentContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+    private func detailsText(_ m: LandscapeMetrics, _ line: String, opacity: Double, scale: CGFloat) -> some View {
+        Text(line)
+            .font(.system(size: m.noteFontSize * scale, weight: .semibold))
+            .foregroundColor(.white.opacity(opacity))
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private func currentContent(_ m: LandscapeMetrics, details: String?, scale: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
             Text("CURRENT")
-                .font(.inter(size: m.captionFontSize * scale, weight: .heavy))
+                .font(.system(size: m.captionFontSize * scale, weight: .heavy))
                 .tracking(2)
                 .foregroundColor(.white.opacity(0.5))
+            if let details {
+                detailsText(m, details, opacity: 0.9, scale: scale)
+            }
             noteLines(m, presentation.currentNotes, weight: .bold, opacity: 1, scale: scale)
         }
     }
 
     @ViewBuilder
-    private func nextContent(_ m: LandscapeMetrics, scale: CGFloat) -> some View {
+    private func nextContent(_ m: LandscapeMetrics, details: String?, scale: CGFloat) -> some View {
         if let next = presentation.nextItem {
             VStack(alignment: .leading, spacing: m.margin * 0.3 * scale) {
                 HStack(alignment: .firstTextBaseline, spacing: m.margin * 0.5) {
                     Text(next.title.uppercased())
-                        .font(.inter(size: m.nextTitleFontSize * scale, weight: .bold))
+                        .font(.system(size: m.nextTitleFontSize * scale, weight: .bold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -270,6 +281,9 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                         .foregroundColor(.white.opacity(0.7))
                         .lineLimit(1)
                 }
+                if let details {
+                    detailsText(m, details, opacity: 0.8, scale: scale)
+                }
                 noteLines(m, presentation.nextNotes, weight: .medium, opacity: 0.85, scale: scale)
             }
         }
@@ -279,7 +293,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             ForEach(notes, id: \.category) { note in
                 PagerNoteText.line(category: note.category, text: note.text)
-                    .font(.inter(size: m.noteFontSize * scale, weight: weight))
+                    .font(.system(size: m.noteFontSize * scale, weight: weight))
                     .foregroundColor(.white.opacity(opacity))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -333,15 +347,78 @@ enum PagerNoteText {
     }
 }
 
-struct FrameShape: Shape {
+struct PagerCueFrame: View {
+    let color: Color
     let thickness: CGFloat
+    let radius: CGFloat
+
+    private var edges: EdgeInsets {
+        EdgeInsets(top: thickness, leading: thickness, bottom: thickness, trailing: thickness)
+    }
+
+    var body: some View {
+        #if os(iOS)
+        GeometryReader { proxy in
+            let cutout = PagerCutout.current(safe: proxy.safeAreaInsets, size: proxy.size)
+            ZStack {
+                band
+                if let cutout {
+                    PagerCutoutBand(cutout: cutout, thickness: thickness)
+                        .fill(color)
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .allowsHitTesting(false)
+        #else
+        squareBand
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        #endif
+    }
+
+    #if os(iOS)
+    @ViewBuilder
+    private var band: some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            Rectangle()
+                .fill(color)
+                .overlay {
+                    ConcentricRectangle(corners: .concentric(minimum: .fixed(radius)), isUniform: true)
+                        .padding(edges)
+                        .blendMode(.destinationOut)
+                }
+                .compositingGroup()
+        } else {
+            squareBand
+        }
+        #else
+        squareBand
+        #endif
+    }
+    #endif
+
+    private var squareBand: some View {
+        FrameShape(edges: edges, radius: radius)
+            .fill(color, style: FillStyle(eoFill: true))
+    }
+}
+
+struct FrameShape: Shape {
+    let edges: EdgeInsets
     let radius: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.addRect(rect)
         path.addRoundedRect(
-            in: rect.insetBy(dx: thickness, dy: thickness),
+            in: CGRect(
+                x: rect.minX + edges.leading,
+                y: rect.minY + edges.top,
+                width: rect.width - edges.leading - edges.trailing,
+                height: rect.height - edges.top - edges.bottom
+            ),
             cornerSize: CGSize(width: radius, height: radius),
             style: .continuous
         )

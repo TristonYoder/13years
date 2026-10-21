@@ -31,7 +31,7 @@ public final class DirectPeerChannel: @unchecked Sendable {
     public var onPacketReceived: ((CuePacket) -> Void)?
 
     private var listener: NWListener?
-    private let queue = DispatchQueue(label: "dev.7co.13years.directpeer", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "app.13years.directpeer", qos: .userInteractive)
     private var isRunning = false
 
     private var localToken: String = ""

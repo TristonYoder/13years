@@ -68,9 +68,9 @@ struct LauncherView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(colorScheme == .dark ? 0.08 : 0.4), lineWidth: 1)
+                .strokeBorder(AppPalette.launcherBorder, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.25), radius: 30, y: 14)
+        .shadow(color: AppPalette.scrimSoft, radius: 30, y: 14)
     }
 
     @ViewBuilder
@@ -215,7 +215,7 @@ private struct RecentRow: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(isHovering ? 0.08 : 0))
+                    .fill(isHovering ? AppPalette.surfaceControl : Color.clear)
             )
             .contentShape(Rectangle())
         }

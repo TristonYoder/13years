@@ -43,6 +43,7 @@ public final class UpdateChecker: ObservableObject {
     @Published private var dismissedVersion: String? = UserDefaults.standard.string(forKey: dismissedKey)
 
     private var periodicTask: Task<Void, Never>?
+    public var isAutomaticCheckingSuspended = false
 
     public var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -54,7 +55,7 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func startPeriodicChecks() {
-        guard periodicTask == nil else { return }
+        guard periodicTask == nil, !isAutomaticCheckingSuspended else { return }
         periodicTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.check()

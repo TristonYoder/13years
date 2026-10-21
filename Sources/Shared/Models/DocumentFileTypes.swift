@@ -5,8 +5,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let thirteenYearsDocument = UTType(exportedAs: "dev.7co.13years.document")
-    static let thirteenYearsTemplate = UTType(exportedAs: "dev.7co.13years.template")
+    static let thirteenYearsDocument = UTType(exportedAs: "app.13years.document")
+    static let thirteenYearsTemplate = UTType(exportedAs: "app.13years.template")
 }
 
 #if !os(tvOS)

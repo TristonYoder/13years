@@ -200,13 +200,14 @@ static JsonDocument &packetFilter() {
     filter["rev"] = true;
     filter["epoch"] = true;
     filter["utcOffsetSeconds"] = true;
+    filter["clockFormat"] = true;
     filter["t0"] = true;
     filter["t1"] = true;
     filter["t2"] = true;
-    filter["roleCues"] = true;
-    filter["timerItem"] = true;
+    pagersync::buildRoleCueFilter(filter["roleCues"][0].to<JsonObject>());
+    pagersync::buildTimerItemFilter(filter["timerItem"].to<JsonObject>());
     filter["anchor"] = true;
-    filter["nextItem"] = true;
+    pagersync::buildNextItemFilter(filter["nextItem"].to<JsonObject>());
     filter["hashes"] = true;
     filter["cueDeltas"] = true;
     filter["message"] = true;
@@ -303,6 +304,10 @@ void Engine::handlePacketJson(const char *json, size_t len) {
     }
   }
 
+  if (doc["clockFormat"].is<const char *>()) {
+    producerClockFormat_ = pagersync::parseClockFormat(doc["clockFormat"].as<const char *>());
+  }
+
   if (isSyncReply) {
     handleSyncReply(doc.as<JsonObjectConst>());
     return;
@@ -367,6 +372,7 @@ void Engine::applyRoleCues(JsonArrayConst roles) {
     v.id = r["id"] | "";
     v.name = r["name"] | "";
     v.personName = r["personName"] | "";
+    v.clockFormat = pagersync::parseClockFormat(r["clockFormat"].is<const char *>() ? r["clockFormat"].as<const char *>() : nullptr);
     v.assignedNoteCategoryCount = 0;
     if (r["assignedNoteCategories"].is<JsonArrayConst>()) {
       for (JsonVariantConst c : r["assignedNoteCategories"].as<JsonArrayConst>()) {
@@ -374,6 +380,7 @@ void Engine::applyRoleCues(JsonArrayConst roles) {
         v.assignedNoteCategories[v.assignedNoteCategoryCount++] = c.as<String>();
       }
     }
+    v.pagerFieldOrder = pagersync::parsePagerFieldOrder(r["pagerFields"]);
     v.state = cueStateFromString(String((const char *)(r["state"] | "OFF")));
   }
 
@@ -405,6 +412,9 @@ void Engine::applyTimerItem(JsonObjectConst t, bool timing) {
     anchored_ = false;
   }
 
+  pagersync::parseItemDetails(timerDetails_, t["details"]);
+  pagersync::setItemBasics(timerDetails_, timer_.itemType.c_str(), timer_.lengthInSeconds);
+
   noteCount_ = 0;
   if (t["notes"].is<JsonObjectConst>()) {
     for (JsonPairConst kv : t["notes"].as<JsonObjectConst>()) {
@@ -434,6 +444,10 @@ void Engine::applyNextItem(JsonVariantConst v) {
   pagersync::copyTruncated(next_.id, sizeof(next_.id), o["id"] | "");
   pagersync::copyTruncated(next_.title, sizeof(next_.title), o["title"] | "");
   next_.lengthInSeconds = o["lengthInSeconds"] | 0;
+  next_.hasStartsAt = o["startsAtMs"].is<int64_t>();
+  next_.startsAtMs = next_.hasStartsAt ? o["startsAtMs"].as<int64_t>() : 0;
+  pagersync::parseItemDetails(next_.details, o["details"]);
+  pagersync::setItemBasics(next_.details, o["itemType"] | "", next_.lengthInSeconds);
   next_.noteCount = 0;
   if (o["notes"].is<JsonObjectConst>()) {
     for (JsonPairConst kv : o["notes"].as<JsonObjectConst>()) {
@@ -498,13 +512,35 @@ cue::RoleView Engine::activeRole() const {
   return RoleView{};
 }
 
+static int roleOrderedNote(const cue::RoleView &role, const pagersync::NoteRef *refs, int count, int nth) {
+  const char *categories[cue::kMaxNoteCategoriesPerRole];
+  for (int i = 0; i < role.assignedNoteCategoryCount; i++) categories[i] = role.assignedNoteCategories[i].c_str();
+  return pagersync::orderedNoteIndex(categories, role.assignedNoteCategoryCount, refs, count, nth);
+}
+
+int Engine::currentNoteIndex(const RoleView &role, int nth) const {
+  pagersync::NoteRef refs[kMaxNoteCategories];
+  for (int i = 0; i < noteCount_; i++) {
+    refs[i].category = notes_[i].category.c_str();
+    refs[i].text = notes_[i].text.c_str();
+  }
+  return roleOrderedNote(role, refs, noteCount_, nth);
+}
+
+int Engine::nextNoteIndex(const RoleView &role, int nth) const {
+  pagersync::NoteRef refs[NextItemView::kMaxNotes];
+  for (int i = 0; i < next_.noteCount; i++) {
+    refs[i].category = next_.notes[i].category;
+    refs[i].text = next_.notes[i].text;
+  }
+  return roleOrderedNote(role, refs, next_.noteCount, nth);
+}
+
 String Engine::currentNote() const {
   RoleView role = activeRole();
   if (role.assignedNoteCategoryCount == 0 || !timer_.found) return "";
-  for (int i = 0; i < noteCount_; i++) {
-    if (role.hasNoteCategory(notes_[i].category)) return notes_[i].text;
-  }
-  return "";
+  int index = currentNoteIndex(role, 0);
+  return index >= 0 ? notes_[index].text : String("");
 }
 
 cue::MessageView Engine::latestRelevantMessage() const {
@@ -558,10 +594,8 @@ const cue::MessageView *Engine::latestRelevantMessageRef() const {
 const char *Engine::currentNoteText() const {
   const RoleView *role = activeRoleRef();
   if (!role || role->assignedNoteCategoryCount == 0 || !timer_.found) return "";
-  for (int i = 0; i < noteCount_; i++) {
-    if (role->hasNoteCategory(notes_[i].category)) return notes_[i].text.c_str();
-  }
-  return "";
+  int index = currentNoteIndex(*role, 0);
+  return index >= 0 ? notes_[index].text.c_str() : "";
 }
 
 int Engine::timerRemainingSeconds() const {
@@ -577,48 +611,55 @@ int Engine::timerRemainingSeconds() const {
 const char *Engine::nextNoteText() const {
   const RoleView *role = activeRoleRef();
   if (!next_.found || !role) return "";
-  for (int i = 0; i < next_.noteCount; i++) {
-    if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) return next_.notes[i].text;
-  }
-  return "";
+  int index = nextNoteIndex(*role, 0);
+  return index >= 0 ? next_.notes[index].text : "";
+}
+
+bool Engine::timerDetailsLine(char *out, size_t cap) const {
+  const RoleView *role = activeRoleRef();
+  if (cap > 0) out[0] = '\0';
+  if (!role || role->pagerFieldOrder.count == 0 || !timer_.found || timer_.isHeader()) return false;
+  int64_t now = 0;
+  int64_t start = 0;
+  bool haveStart = wallClockMs(now) && pagersync::currentStartMs(timer_.isRunning, timer_.lengthInSeconds - timerRemainingSeconds(), now, start);
+  return pagersync::formatDetailsLine(timerDetails_, role->pagerFieldOrder, haveStart, start, utcOffsetSeconds(), use24HourClock(), out, cap);
+}
+
+bool Engine::nextDetailsLine(char *out, size_t cap) const {
+  const RoleView *role = activeRoleRef();
+  if (cap > 0) out[0] = '\0';
+  if (!role || role->pagerFieldOrder.count == 0 || !next_.found) return false;
+  int64_t now = 0;
+  int64_t start = 0;
+  bool haveStart = wallClockMs(now) &&
+                   pagersync::nextStartMs(next_.hasStartsAt, next_.startsAtMs, timer_.found && timer_.isRunning && !timer_.isHeader(), timerRemainingSeconds(), now, start);
+  return pagersync::formatDetailsLine(next_.details, role->pagerFieldOrder, haveStart, start, utcOffsetSeconds(), use24HourClock(), out, cap);
 }
 
 bool Engine::nextFirstNote(const char *&category, const char *&text) const {
   const RoleView *role = activeRoleRef();
   if (!next_.found || !role) return false;
-  for (int i = 0; i < next_.noteCount; i++) {
-    if (next_.notes[i].text[0] && role->hasNoteCategory(next_.notes[i].category)) {
-      category = next_.notes[i].category;
-      text = next_.notes[i].text;
-      return true;
-    }
-  }
-  return false;
+  int index = nextNoteIndex(*role, 0);
+  if (index < 0) return false;
+  category = next_.notes[index].category;
+  text = next_.notes[index].text;
+  return true;
 }
 
 int Engine::roleNoteCount() const {
   const RoleView *role = activeRoleRef();
   if (!role || !timer_.found) return 0;
   int n = 0;
-  for (int i = 0; i < noteCount_; i++) {
-    if (notes_[i].text.length() > 0 && role->hasNoteCategory(notes_[i].category)) n++;
-  }
+  while (currentNoteIndex(*role, n) >= 0) n++;
   return n;
 }
 
 bool Engine::roleNoteAt(int index, const char *&category, const char *&text) const {
   const RoleView *role = activeRoleRef();
   if (!role || !timer_.found) return false;
-  int n = 0;
-  for (int i = 0; i < noteCount_; i++) {
-    if (notes_[i].text.length() > 0 && role->hasNoteCategory(notes_[i].category)) {
-      if (n == index) {
-        category = notes_[i].category.c_str();
-        text = notes_[i].text.c_str();
-        return true;
-      }
-      n++;
-    }
-  }
-  return false;
+  int at = currentNoteIndex(*role, index);
+  if (at < 0) return false;
+  category = notes_[at].category.c_str();
+  text = notes_[at].text.c_str();
+  return true;
 }

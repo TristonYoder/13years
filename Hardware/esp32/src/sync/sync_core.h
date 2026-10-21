@@ -345,12 +345,30 @@ inline bool utcOffsetInBounds(int64_t seconds) {
   return seconds >= -86400 && seconds <= 86400;
 }
 
-inline void formatTimeOfDay(int64_t epochMs, int64_t utcOffsetSeconds, char *out, size_t cap) {
+enum class ClockFormat : uint8_t { Unset = 0, TwelveHour = 1, TwentyFourHour = 2 };
+
+inline ClockFormat parseClockFormat(const char *s) {
+  if (!s) return ClockFormat::Unset;
+  if (strcmp(s, "twelveHour") == 0) return ClockFormat::TwelveHour;
+  if (strcmp(s, "twentyFourHour") == 0) return ClockFormat::TwentyFourHour;
+  return ClockFormat::Unset;
+}
+
+inline bool resolveUse24h(ClockFormat role, ClockFormat producer) {
+  if (role != ClockFormat::Unset) return role == ClockFormat::TwentyFourHour;
+  return producer == ClockFormat::TwentyFourHour;
+}
+
+inline void formatTimeOfDay(int64_t epochMs, int64_t utcOffsetSeconds, char *out, size_t cap, bool use24h = false) {
   int64_t local = floorDiv(epochMs, 1000) + utcOffsetSeconds;
   int64_t sod = local - floorDiv(local, 86400) * 86400;
   int h24 = (int)(sod / 3600);
   int m = (int)((sod % 3600) / 60);
   int s = (int)(sod % 60);
+  if (use24h) {
+    snprintf(out, cap, "%02d:%02d:%02d", h24, m, s);
+    return;
+  }
   int h12 = h24 % 12;
   if (h12 == 0) h12 = 12;
   snprintf(out, cap, "%d:%02d:%02d %s", h12, m, s, h24 < 12 ? "AM" : "PM");

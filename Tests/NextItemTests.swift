@@ -223,6 +223,7 @@ final class NextItemTests: XCTestCase {
             isLANConnected: true,
             connectedMasterName: nil,
             hourFormatThreshold: .over90Minutes,
+            clockFormat: .twelveHour,
             receivedNextItem: received
         )
     }

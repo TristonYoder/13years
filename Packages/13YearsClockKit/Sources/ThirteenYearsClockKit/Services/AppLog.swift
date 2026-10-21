@@ -8,9 +8,9 @@ import Foundation
 #endif
 
 public enum AppLog {
-    public static let networking = Logger(subsystem: "dev.7co.13years", category: "networking")
-    public static let cue = Logger(subsystem: "dev.7co.13years", category: "cue")
-    public static let bridge = Logger(subsystem: "dev.7co.13years", category: "bridge")
+    public static let networking = Logger(subsystem: "app.13years", category: "networking")
+    public static let cue = Logger(subsystem: "app.13years", category: "cue")
+    public static let bridge = Logger(subsystem: "app.13years", category: "bridge")
 }
 
 #if !canImport(os)

@@ -13,33 +13,62 @@
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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">
 <link rel="icon" type="image/png" sizes="48x48" href="data:image/png;base64,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">
 <link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,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">
+<style id="palette">
+:root {
+  --pal-cue-off: #141a26;
+  --pal-cue-standby: #f5b826;
+  --pal-cue-go: #26c759;
+  --pal-cue-light-text: #ffffff;
+  --pal-cue-dark-text: #1a1a1a;
+  --pal-pager-ground: #111114;
+  --pal-pager-clock: #f5f5f7;
+  --pal-pager-message: #ffd60a;
+  --pal-pager-message-text: #0b0b0d;
+  --pal-pager-panel: #1b1b20;
+  --pal-display-black: #000000;
+  --pal-display-white: #ffffff;
+  --pal-positive: #30d158;
+  --pal-warning: #ff9f0a;
+  --pal-negative: #ff453a;
+  --pal-stoplight-ink-dark: #f5f5f3;
+  --pal-stoplight-red-dark: #ff5252;
+  --pal-stoplight-yellow-dark: #ffeb3b;
+  --pal-stoplight-green-dark: #66bb6a;
+  --pal-scrim-faint: rgba(0, 0, 0, 0.2);
+  --pal-scrim-soft: rgba(0, 0, 0, 0.3);
+  --pal-scrim-medium: rgba(0, 0, 0, 0.45);
+  --pal-glass-faint: rgba(255, 255, 255, 0.08);
+  --pal-glass-soft: rgba(255, 255, 255, 0.12);
+  --pal-glass-medium: rgba(255, 255, 255, 0.2);
+}
+</style>
 <style>
   :root {
-    --cue-off-bg: #141a26;
-    --cue-off-fg: #ffffff;
-    --cue-standby-bg: #f5b826;
-    --cue-standby-fg: #1a1a1a;
-    --cue-go-bg: #26c759;
-    --cue-go-fg: #ffffff;
+    --cue-off-bg: var(--pal-cue-off);
+    --cue-off-fg: var(--pal-cue-light-text);
+    --cue-standby-bg: var(--pal-cue-standby);
+    --cue-standby-fg: var(--pal-cue-dark-text);
+    --cue-go-bg: var(--pal-cue-go);
+    --cue-go-fg: var(--pal-cue-light-text);
 
     --s: min(1.2vh, 2.2vw);
 
     --bg: var(--cue-off-bg);
     --fg: var(--cue-off-fg);
-    --ink: #f5f5f7;
-    --cuefull: #111114;
+    --ink: var(--pal-pager-clock);
+    --cuefull: var(--pal-pager-ground);
   }
 
   [data-cue="STANDBY"], [data-cue="FLASH_STANDBY"] {
     --bg: var(--cue-standby-bg);
     --fg: var(--cue-standby-fg);
-    --ink: #1a1a1a;
+    --ink: var(--pal-cue-dark-text);
     --cuefull: var(--cue-standby-bg);
   }
   [data-cue="GO"], [data-cue="FLASH_GO"] {
     --bg: var(--cue-go-bg);
     --fg: var(--cue-go-fg);
-    --ink: #ffffff;
+    --ink: var(--pal-cue-light-text);
     --cuefull: var(--cue-go-bg);
   }
 
@@ -128,7 +157,7 @@
     font-size: 1em;
     font-weight: 700;
     color: var(--fg);
-    background: rgba(0, 0, 0, 0.22);
+    background: var(--pal-scrim-faint);
     border: 0;
     border-radius: calc(0.9 * var(--s));
     padding: calc(0.7 * var(--s)) calc(3.2 * var(--s)) calc(0.7 * var(--s)) calc(1.4 * var(--s));
@@ -139,18 +168,18 @@
   }
   .fr-roleslot #role { flex: 1 1 auto; width: 100%; }
   #role:disabled { opacity: 1; }
-  #role option { color: #111; background: #fff; }
+  #role option { color: var(--pal-cue-dark-text); background: var(--pal-display-white); }
 
   .dot {
     width: calc(1 * var(--s));
     height: calc(1 * var(--s));
     border-radius: 50%;
-    background: #ff3b30;
+    background: var(--pal-negative);
   }
-  .conn-row[data-live="1"] .dot { background: #30d158; }
+  .conn-row[data-live="1"] .dot { background: var(--pal-positive); }
 
-  [data-stage="amber"] { color: #ff9f0a; color: color-mix(in srgb, var(--fg) 70%, #ff9f0a); }
-  [data-stage="red"] { color: #ff453a; color: color-mix(in srgb, var(--fg) 60%, #ff3b30); }
+  [data-stage="amber"] { color: var(--pal-warning); color: color-mix(in srgb, var(--fg) 70%, var(--pal-warning)); }
+  [data-stage="red"] { color: var(--pal-negative); color: color-mix(in srgb, var(--fg) 60%, var(--pal-negative)); }
   #iconRow {
     display: flex;
     gap: calc(var(--u) * 0.01);
@@ -165,7 +194,7 @@
     font-size: calc(1.5 * var(--s));
     font-weight: 700;
     color: var(--fg);
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--pal-scrim-soft);
     border: 0;
     border-radius: calc(1.2 * var(--s));
     padding: calc(0.9 * var(--s)) calc(1.8 * var(--s));
@@ -177,7 +206,7 @@
 
   #iconRow button:hover:not(:disabled),
   #chatHead button:hover:not(:disabled),
-  #compose button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.42); }
+  #compose button:hover:not(:disabled) { background: var(--pal-scrim-medium); }
 
   #iconRow button:disabled, #compose button:disabled { opacity: 0.4; cursor: default; }
 
@@ -189,7 +218,7 @@
     align-items: center;
     justify-content: center;
     padding: calc(2 * var(--s) + env(safe-area-inset-top)) calc(2 * var(--s) + env(safe-area-inset-right)) calc(2 * var(--s) + env(safe-area-inset-bottom)) calc(2 * var(--s) + env(safe-area-inset-left));
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--pal-scrim-medium);
   }
 
   #chatCard {
@@ -199,7 +228,7 @@
     max-height: 100%;
     background: var(--bg);
     border-radius: calc(2 * var(--s));
-    box-shadow: 0 calc(1 * var(--s)) calc(3 * var(--s)) rgba(0, 0, 0, 0.45);
+    box-shadow: 0 calc(1 * var(--s)) calc(3 * var(--s)) var(--pal-scrim-medium);
     overflow: hidden;
   }
 
@@ -208,7 +237,7 @@
     align-items: center;
     gap: calc(1 * var(--s));
     padding: calc(1.6 * var(--s)) calc(2 * var(--s));
-    border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid var(--pal-scrim-soft);
   }
 
   #chatTitle {
@@ -227,13 +256,13 @@
   }
 
   .msg {
-    background: rgba(0, 0, 0, 0.22);
+    background: var(--pal-scrim-faint);
     border-radius: calc(1.4 * var(--s));
     padding: calc(1.1 * var(--s)) calc(1.5 * var(--s));
     max-width: 85%;
   }
 
-  .msg.own { align-self: flex-end; background: rgba(0, 0, 0, 0.35); }
+  .msg.own { align-self: flex-end; background: var(--pal-scrim-soft); }
 
   .msg-meta {
     font-size: max(12px, calc(1.1 * var(--s)));
@@ -258,7 +287,7 @@
     gap: calc(1 * var(--s));
     align-items: stretch;
     padding: calc(1.6 * var(--s)) calc(2 * var(--s));
-    border-top: 1px solid rgba(0, 0, 0, 0.25);
+    border-top: 1px solid var(--pal-scrim-soft);
   }
 
   #composeText {
@@ -269,14 +298,14 @@
     font-weight: 600;
     min-height: 44px;
     color: var(--fg);
-    background: rgba(0, 0, 0, 0.22);
+    background: var(--pal-scrim-faint);
     border: 0;
     border-radius: calc(1.2 * var(--s));
     padding: calc(1 * var(--s)) calc(1.6 * var(--s));
   }
 
   #composeText::placeholder { color: var(--fg); opacity: 0.85; }
-  #composeText:focus { outline: calc(0.25 * var(--s)) solid rgba(0, 0, 0, 0.35); }
+  #composeText:focus { outline: calc(0.25 * var(--s)) solid var(--pal-scrim-soft); }
 
   #composeStatus {
     flex: 0 0 auto;
@@ -337,16 +366,34 @@
     font-weight: 900;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--pal-scrim-soft);
     border-radius: 0.2em;
   }
+
+  #ltDetails {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0.04em;
+    font-size: 0.26em;
+    font-weight: 700;
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+  }
+
+  #lowerthird.hasdetails #ltTitle { font-size: 0.72em; }
+
+  #lowerthird.message #ltDetails { display: none; }
 
   #lowerthird.message #ltClock { display: none; }
 
   #lowerthird.message #ltTitle {
-    background: #ffd60a;
-    color: #000;
-    box-shadow: 0 0.02em 0.06em rgba(0, 0, 0, 0.35);
+    background: var(--pal-pager-message);
+    color: var(--pal-pager-message-text);
+    box-shadow: 0 0.02em 0.06em var(--pal-scrim-soft);
   }
 
   #waiting {
@@ -358,8 +405,8 @@
     align-items: center;
     justify-content: center;
     gap: calc(2.6 * var(--s));
-    background: #000;
-    color: #f5f5f3;
+    background: var(--pal-display-black);
+    color: var(--pal-stoplight-ink-dark);
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   #offline {
@@ -369,8 +416,8 @@
     bottom: 0;
     z-index: 90;
     padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
-    background: #000;
-    color: #f5f5f3;
+    background: var(--pal-display-black);
+    color: var(--pal-stoplight-ink-dark);
     font-size: max(12px, calc(1.5 * var(--s)));
     font-weight: 700;
     text-align: center;
@@ -404,8 +451,8 @@
   }
   html[data-layout="landscape"], html[data-layout="landscape"] body,
   html[data-layout="standard"], html[data-layout="standard"] body {
-    background: #111114;
-    color: #f5f5f7;
+    background: var(--pal-pager-ground);
+    color: var(--pal-pager-clock);
   }
   html[data-cuedisplay="full"][data-layout="landscape"], html[data-cuedisplay="full"][data-layout="landscape"] body,
   html[data-cuedisplay="full"][data-layout="standard"], html[data-cuedisplay="full"][data-layout="standard"] body {
@@ -416,16 +463,17 @@
   .fr {
     --u: min(100vw, 100vh);
     --s: calc(var(--u) * 0.012);
-    --fg: #f5f5f7;
-    --cue: rgba(255, 255, 255, 0.1);
-    --ground: #111114;
-    --card: rgba(255, 255, 255, 0.08);
-    --chip: rgba(255, 255, 255, 0.12);
+    --fg: var(--pal-pager-clock);
+    --cue: var(--pal-glass-soft);
+    --ground: var(--pal-pager-ground);
+    --card: var(--pal-glass-faint);
+    --chip: var(--pal-glass-soft);
     --frame: max(14px, calc(var(--u) * 0.022));
     --radius: max(18px, calc(var(--u) * 0.04));
     --pad: calc(var(--u) * 0.025);
     --badge: calc(var(--u) * 0.11);
     --clock: calc(var(--u) * 0.075);
+    --pw: 100vw;
     flex: 1;
     min-height: 0;
     position: relative;
@@ -463,8 +511,8 @@
   html[data-cuedisplay="full"] .fr {
     --fg: var(--ink);
     --ground: var(--cuefull);
-    --card: rgba(0, 0, 0, 0.28);
-    --chip: rgba(0, 0, 0, 0.2);
+    --card: var(--pal-scrim-soft);
+    --chip: var(--pal-scrim-faint);
     background: var(--cuefull);
   }
   html[data-cuedisplay="full"] .fr::before { inset: 0; border-radius: 0; }
@@ -499,7 +547,7 @@
     padding: 0.08em 0.28em;
     border-radius: 0.22em;
     background: var(--cue);
-    color: #0b0b0d;
+    color: var(--pal-pager-message-text);
     visibility: hidden;
   }
   .fr-slot::before {
@@ -561,7 +609,7 @@
     gap: calc(var(--u) * 0.012 * var(--k));
     border-radius: calc(var(--u) * 0.02);
     background: var(--card);
-    color: #f5f5f7;
+    color: var(--pal-pager-clock);
     padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
   }
   #landscape .fr-card, #ptNext { max-height: calc(var(--u) * 0.28); }
@@ -587,6 +635,17 @@
   #standard .fr-next-title, #standard .fr-next-length { font-size: calc(var(--u) * 0.04 * var(--k)); }
   .fr-next-notes { display: flex; flex-direction: column; gap: calc(var(--u) * 0.01 * var(--k)); overflow: hidden; }
   .fr-next-notes:empty { display: none; }
+  .fr-details {
+    font-size: calc(var(--u) * 0.026 * var(--k, 1));
+    font-weight: 700;
+    opacity: 0.88;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  #standard .fr-details { font-size: calc(var(--u) * 0.032 * var(--k, 1)); }
+  #ptDetails { text-align: center; }
   .fr .note {
     font-size: calc(var(--u) * 0.026 * var(--k, 1));
     font-weight: 600;
@@ -611,12 +670,12 @@
     -webkit-appearance: none;
     appearance: none;
     cursor: pointer;
-    background: #ffd60a;
-    color: #0b0b0d;
+    background: var(--pal-pager-message);
+    color: var(--pal-pager-message-text);
     border-radius: calc(var(--u) * 0.02);
     padding: calc(var(--u) * 0.016) calc(var(--u) * 0.022);
   }
-  html[data-cuedisplay="full"] .fr-msg { box-shadow: 0 0 0 calc(var(--u) * 0.004) rgba(0, 0, 0, 0.45); }
+  html[data-cuedisplay="full"] .fr-msg { box-shadow: 0 0 0 calc(var(--u) * 0.004) var(--pal-scrim-medium); }
   #landscape .fr-msg { margin-top: auto; max-height: calc(var(--u) * 0.23); }
   #standard .fr-msg { max-height: calc(var(--u) * 0.34); }
   .fr-msg-text {
@@ -697,7 +756,7 @@
     text-align: left;
     margin-top: calc(var(--u) * 0.008);
     padding-top: calc(var(--u) * 0.018 * var(--k));
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-top: 1px solid var(--pal-glass-medium);
   }
   #ptNotes:empty { display: none; }
   #ptStack {
@@ -735,7 +794,7 @@
   }
   #lsCountdown {
     --em: 3.2;
-    font-size: min(calc(var(--u) * 0.32), calc(88vw / var(--em)));
+    font-size: min(calc(var(--u) * 0.32), calc(0.88 * var(--pw) / var(--em)));
     font-weight: 900;
     line-height: 0.95;
     letter-spacing: -0.02em;
@@ -760,6 +819,114 @@
   }
   #lsBottom[data-mode="left"], #lsBottom[data-mode="right"] { grid-template-columns: 1fr; }
 
+  #lsSplit { display: contents; }
+  #lsSplit.split {
+    --lsdiv: 22px;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 2fr var(--lsdiv) 1fr;
+    background: var(--pal-pager-ground);
+  }
+  #lsSplit.split #standard {
+    --pw: 66vw;
+    --u: min(var(--pw), 100vh);
+    min-width: 0;
+    grid-column: 1;
+  }
+  #lsSplit.split #landscape {
+    --pw: 66vw;
+    --u: min(var(--pw), 100vh);
+    min-width: 0;
+  }
+  #lsDivider {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    outline: none;
+  }
+  #lsDivider::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: max(36px, 12vh);
+    border-radius: 2px;
+    transform: translate(-50%, -50%);
+    background: var(--pal-glass-medium);
+    opacity: 0.6;
+  }
+  #lsDivider:hover::before, #lsDivider:focus-visible::before, #lsDivider.dragging::before { opacity: 1; }
+  #lsDetails {
+    --du: min(100vw, 100vh);
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--du) * 0.012);
+    margin: calc(var(--du) * 0.03) calc(var(--du) * 0.015) calc(var(--du) * 0.03) 0;
+    padding: calc(var(--du) * 0.024);
+    border-radius: calc(var(--du) * 0.02);
+    background: var(--pal-pager-panel);
+    color: var(--pal-pager-clock);
+    overflow: hidden;
+  }
+  #lsDetailsHeader {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .ls-details-size {
+    appearance: none;
+    border: 0;
+    background: var(--pal-glass-faint);
+    color: inherit;
+    font: inherit;
+    font-size: max(11px, calc(var(--du) * 0.022));
+    font-weight: 700;
+    padding: 0.2em 0.55em;
+    border-radius: 0.4em;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  .ls-details-size:disabled { opacity: 0.25; cursor: default; }
+  #lsDetailsTitle {
+    flex: 1 1 auto;
+    font-size: max(11px, calc(var(--du) * 0.02));
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    opacity: 0.5;
+  }
+  #lsDetailsBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    font-size: calc(max(14px, calc(var(--du) * 0.03)) * var(--details-scale, 1));
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    outline: none;
+  }
+  #lsDetailsBody p, #lsDetailsBody ul, #lsDetailsBody ol, #lsDetailsBody blockquote, #lsDetailsBody pre, #lsDetailsBody table { margin: 0 0 0.6em; }
+  #lsDetailsBody ul, #lsDetailsBody ol { padding-left: 1.4em; }
+  #lsDetailsBody h1, #lsDetailsBody h2, #lsDetailsBody h3, #lsDetailsBody h4, #lsDetailsBody h5, #lsDetailsBody h6 { margin: 0 0 0.4em; line-height: 1.2; }
+  #lsDetailsBody h1 { font-size: 1.5em; }
+  #lsDetailsBody h2 { font-size: 1.3em; }
+  #lsDetailsBody h3 { font-size: 1.15em; }
+  #lsDetailsBody h4, #lsDetailsBody h5, #lsDetailsBody h6 { font-size: 1em; }
+  #lsDetailsBody pre, #lsDetailsBody code { font-family: ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  #lsDetailsBody blockquote { padding-left: 0.8em; border-left: 3px solid var(--pal-glass-medium); }
+  #lsDetailsBody a { color: inherit; text-decoration: underline; }
+  #lsDetailsBody table { border-collapse: collapse; }
+  #lsDetailsBody td, #lsDetailsBody th { padding: 0.15em 0.5em; border: 1px solid var(--pal-glass-soft); vertical-align: top; }
+  #lsDetailsBody hr { border: 0; border-top: 1px solid var(--pal-glass-medium); margin: 0.6em 0; }
+  html[data-offline="1"] #lsDetails { filter: grayscale(1) brightness(0.8); opacity: 0.5; }
+
   #settings {
     position: fixed;
     inset: 0;
@@ -768,7 +935,7 @@
     align-items: center;
     justify-content: center;
     padding: calc(2 * var(--s) + env(safe-area-inset-top)) calc(2 * var(--s) + env(safe-area-inset-right)) calc(2 * var(--s) + env(safe-area-inset-bottom)) calc(2 * var(--s) + env(safe-area-inset-left));
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--pal-scrim-medium);
   }
   #settingsCard {
     width: min(100%, calc(50 * var(--s)));
@@ -776,10 +943,10 @@
     flex-direction: column;
     gap: calc(1.6 * var(--s));
     padding: calc(2 * var(--s));
-    background: #1b1b20;
-    color: #f5f5f7;
+    background: var(--pal-pager-panel);
+    color: var(--pal-pager-clock);
     border-radius: calc(2 * var(--s));
-    box-shadow: 0 calc(1 * var(--s)) calc(3 * var(--s)) rgba(0, 0, 0, 0.45);
+    box-shadow: 0 calc(1 * var(--s)) calc(3 * var(--s)) var(--pal-scrim-medium);
   }
   #settingsHead { display: flex; align-items: center; gap: calc(1 * var(--s)); }
   #settingsTitle { flex: 1 1 auto; font-size: calc(2.2 * var(--s)); font-weight: 900; }
@@ -805,8 +972,8 @@
     font: inherit;
     font-size: max(15px, calc(1.7 * var(--s)));
     font-weight: 700;
-    color: #f5f5f7;
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--pal-pager-clock);
+    background: var(--pal-glass-soft);
     border: 0;
     border-radius: calc(1.2 * var(--s));
     min-height: 44px;
@@ -815,7 +982,7 @@
     cursor: pointer;
   }
   .seg button { flex: 1 1 0; }
-  #settings .seg button[aria-pressed="true"] { background: #f5f5f7; color: #111114; }
+  #settings .seg button[aria-pressed="true"] { background: var(--pal-pager-clock); color: var(--pal-pager-ground); }
 </style>
 </head>
 <body>
@@ -840,6 +1007,7 @@
           <div id="ptTitle"></div>
           <div id="ptCountdown" class="tnum"></div>
           <div id="ptTag"></div>
+          <div id="ptDetails" class="fr-details hidden"></div>
           <div id="ptNotes"></div>
         </div>
       </div>
@@ -850,6 +1018,7 @@
             <div id="ptNextTitle" class="fr-next-title"></div>
             <div id="ptNextLength" class="fr-next-length tnum"></div>
           </div>
+          <div id="ptNextDetails" class="fr-details hidden"></div>
           <div id="ptNextNotes" class="fr-next-notes"></div>
         </div>
         <button id="ptMessage" type="button" class="fr-msg hidden" aria-live="polite" title="Clear this notification everywhere (the message stays in the thread)">
@@ -905,12 +1074,14 @@
         <span id="ltClockLabel" class="lt-tag">LOCAL TIME</span>
       </span>
       <span id="ltTitle">—</span>
+      <span id="ltDetails" class="hidden"></span>
       <span id="ltCountdown" class="tnum">
         <span id="ltCountdownValue">--:--</span>
         <span id="ltDuration" class="lt-tag">PROJECTED</span>
       </span>
     </div>
 
+    <div id="lsSplit">
     <div id="landscape" class="fr hidden">
       <div id="lsTop" class="fr-top">
         <div id="lsSlot" class="fr-slot">
@@ -933,6 +1104,7 @@
             <div id="lsNextTitle" class="fr-next-title"></div>
             <div id="lsNextLength" class="fr-next-length tnum"></div>
           </div>
+          <div id="lsNextDetails" class="fr-details hidden"></div>
           <div id="lsNextNotes" class="fr-next-notes"></div>
         </div>
       </div>
@@ -940,6 +1112,16 @@
         <div id="lsMessageText" class="fr-msg-text"></div>
         <div id="lsMessageFrom" class="fr-msg-from"></div>
       </button>
+    </div>
+    <div id="lsDivider" class="hidden" role="separator" aria-orientation="vertical" aria-label="Item details divider" aria-valuemin="40" aria-valuemax="80" aria-valuenow="67" tabindex="0" title="Drag to resize. Double-click or press and hold to reset."></div>
+    <aside id="lsDetails" class="hidden" aria-label="Item details">
+      <div id="lsDetailsHeader">
+        <div id="lsDetailsTitle">ITEM DETAILS</div>
+        <button type="button" id="lsDetailsSmaller" class="ls-details-size" aria-label="Smaller text" title="Smaller text">A&#8722;</button>
+        <button type="button" id="lsDetailsLarger" class="ls-details-size" aria-label="Larger text" title="Larger text">A+</button>
+      </div>
+      <div id="lsDetailsBody" tabindex="0"></div>
+    </aside>
     </div>
 
   </div>
@@ -1015,9 +1197,9 @@
             50%, 65.99% { opacity: 1; }
             66%, 100% { opacity: 0; }
           }
-          .wait-glow-red { opacity: 0; fill: #FF5252; }
-          .wait-glow-yellow { opacity: 0; fill: #FFEB3B; }
-          .wait-glow-green { opacity: 0; fill: #66BB6A; }
+          .wait-glow-red { opacity: 0; fill: var(--pal-stoplight-red-dark); }
+          .wait-glow-yellow { opacity: 0; fill: var(--pal-stoplight-yellow-dark); }
+          .wait-glow-green { opacity: 0; fill: var(--pal-stoplight-green-dark); }
           @media (prefers-reduced-motion: no-preference) {
             .wait-cycle-red { animation: wait-rotate-red 6s ease-in-out infinite; }
             .wait-cycle-yellow { animation: wait-rotate-yellow 6s ease-in-out infinite; }
@@ -1028,8 +1210,8 @@
           }
           .wait-num-3 {
             font-size: 220px;
-            fill: #F5F5F3;
-            stroke: #F5F5F3;
+            fill: var(--pal-stoplight-ink-dark);
+            stroke: var(--pal-stoplight-ink-dark);
             stroke-width: 12;
             letter-spacing: -0.12em;
             font-stretch: condensed;
@@ -1039,11 +1221,11 @@
 
       <text x="90" y="122" dominant-baseline="middle" class="wait-number wait-num-3">3</text>
 
-      <rect x="20" y="15" width="60" height="170" fill="#F5F5F3"/>
+      <rect x="20" y="15" width="60" height="170" style="fill: var(--pal-stoplight-ink-dark)"/>
 
-      <circle cx="50" cy="50" r="18" fill="#FF5252" class="wait-cycle-red"/>
-      <circle cx="50" cy="100" r="18" fill="#FFEB3B" class="wait-cycle-yellow"/>
-      <circle cx="50" cy="150" r="18" fill="#66BB6A" class="wait-cycle-green"/>
+      <circle cx="50" cy="50" r="18" style="fill: var(--pal-stoplight-red-dark)" class="wait-cycle-red"/>
+      <circle cx="50" cy="100" r="18" style="fill: var(--pal-stoplight-yellow-dark)" class="wait-cycle-yellow"/>
+      <circle cx="50" cy="150" r="18" style="fill: var(--pal-stoplight-green-dark)" class="wait-cycle-green"/>
 
       <circle cx="50" cy="50" r="18" class="wait-glow-red"/>
       <circle cx="50" cy="100" r="18" class="wait-glow-yellow"/>
@@ -1285,12 +1467,151 @@ function nextItemFor(snap) {
   return null;
 }
 
+function roleItemTokens(role, prefix) {
+  if (!role || !Array.isArray(role.pagerItems)) return null;
+  const seen = {};
+  const out = [];
+  for (const token of role.pagerItems) {
+    if (typeof token !== "string" || token.indexOf(prefix) !== 0) continue;
+    const name = token.slice(prefix.length);
+    if (!name || seen[name]) continue;
+    seen[name] = true;
+    out.push(name);
+  }
+  return out;
+}
+
+function noteCategoriesForRole(role) {
+  const ordered = roleItemTokens(role, "note:");
+  if (ordered) return ordered;
+  return (role && Array.isArray(role.assignedNoteCategories)) ? role.assignedNoteCategories : [];
+}
+
 function notesForRole(item, role) {
-  const categories = (role && role.assignedNoteCategories) || [];
+  const categories = noteCategoriesForRole(role);
   if (!item || !item.notes) return [];
   return categories
     .map((category) => ({ category, text: item.notes[category] }))
     .filter((note) => note.text);
+}
+
+const PAGER_FIELD_NAMES = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime", "leader", "type", "length", "itemDetails"];
+const PAGER_DETAILS_SEPARATOR = " \u00b7 ";
+
+function pagerFieldsForRole(role) {
+  const chosen = roleItemTokens(role, "field:") || (role && Array.isArray(role.pagerFields) ? role.pagerFields : []);
+  const seen = {};
+  return chosen.filter((field) => {
+    if (PAGER_FIELD_NAMES.indexOf(field) === -1 || seen[field]) return false;
+    seen[field] = true;
+    return true;
+  });
+}
+
+function detailText(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function detailBpmText(bpm) {
+  if (typeof bpm !== "number" || !isFinite(bpm) || bpm <= 0) return null;
+  return bpm === Math.round(bpm) ? String(Math.round(bpm)) : bpm.toFixed(1);
+}
+
+function titleCaseWords(text) {
+  return String(text).replace(/_/g, " ").toLowerCase().replace(/(^|\s)(\S)/g, (match, lead, letter) => lead + letter.toUpperCase());
+}
+
+function leaderBylineText(leaders) {
+  if (!Array.isArray(leaders)) return null;
+  const names = leaders
+    .map((leader) => (leader && (detailText(leader.firstName) || detailText(leader.name))) || "")
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names[0] + " & " + names[1];
+  return names[0] + " + " + (names.length - 1);
+}
+
+function lengthText(seconds) {
+  if (typeof seconds !== "number" || !isFinite(seconds) || seconds <= 0) return null;
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const pad = (n) => (n < 10 ? "0" + n : String(n));
+  return h > 0 ? h + ":" + pad(m) + ":" + pad(sec) : m + ":" + pad(sec);
+}
+
+function itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat) {
+  if (!item || isHeaderItem(item) || !fields || fields.length === 0) return [];
+  const details = item.details || {};
+  const arrangement = details.arrangement || {};
+  const key = details.key || {};
+  const segments = [];
+  for (const field of fields) {
+    if (field === "key") {
+      const value = detailText(key.startingKey) || detailText(details.keyName) || detailText(key.name);
+      if (value) segments.push(value);
+    } else if (field === "bpm") {
+      const bpm = detailBpmText(arrangement.bpm);
+      if (bpm) segments.push(bpm + " BPM");
+    } else if (field === "meter") {
+      const meter = detailText(arrangement.meter);
+      if (meter) segments.push(meter);
+    } else if (field === "arrangement") {
+      const name = detailText(arrangement.name);
+      if (name) segments.push(name);
+    } else if (field === "sequence") {
+      const custom = Array.isArray(details.customSequenceShort) ? details.customSequenceShort : [];
+      const base = Array.isArray(arrangement.sequenceShort) ? arrangement.sequenceShort : [];
+      const sequence = custom.length > 0 ? custom : base;
+      if (sequence.length > 0) segments.push(sequence.join(" "));
+    } else if (field === "description") {
+      const flat = String(details.description || "").split(/\s+/).filter(Boolean).join(" ");
+      if (flat) segments.push(flat);
+    } else if (field === "mediaType") {
+      const mediaType = detailText(details.media && details.media.mediaType);
+      if (mediaType) segments.push(titleCaseWords(mediaType));
+    } else if (field === "servicePosition") {
+      if (details.servicePosition === "pre") segments.push("Pre-service");
+      else if (details.servicePosition === "post") segments.push("Post-service");
+    } else if (field === "leader") {
+      const leader = leaderBylineText(details.leaders);
+      if (leader) segments.push(leader);
+    } else if (field === "type") {
+      const type = detailText(item.itemType);
+      if (type) segments.push(titleCaseWords(type));
+    } else if (field === "length") {
+      const length = lengthText(item.lengthInSeconds);
+      if (length) segments.push(length);
+    } else if (field === "startTime") {
+      if (typeof startMs === "number" && isFinite(startMs)) {
+        const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);
+        const shifted = new Date(hasUtc ? startMs + utcOffsetSeconds * 1000 : startMs);
+        segments.push("@ " + formatLocalTime(shifted, undefined, hasUtc ? "UTC" : undefined, clockFormat));
+      }
+    }
+  }
+  return segments;
+}
+
+function itemDetailsLine(item, fields, startMs, utcOffsetSeconds, clockFormat) {
+  const segments = itemDetailSegments(item, fields, startMs, utcOffsetSeconds, clockFormat);
+  return segments.length > 0 ? segments.join(PAGER_DETAILS_SEPARATOR) : "";
+}
+
+function currentStartMs(item, remaining, running, nowMs) {
+  if (!item || isHeaderItem(item) || typeof remaining !== "number" || typeof item.lengthInSeconds !== "number") return null;
+  const elapsed = item.lengthInSeconds - remaining;
+  if (!running && elapsed <= 0) return null;
+  return nowMs - elapsed * 1000;
+}
+
+function nextStartMs(projectedMs, remaining, running, nowMs) {
+  const candidates = [];
+  if (typeof projectedMs === "number" && isFinite(projectedMs)) candidates.push(projectedMs);
+  if (running && typeof remaining === "number") candidates.push(nowMs + Math.max(0, remaining) * 1000);
+  return candidates.length > 0 ? Math.max.apply(null, candidates) : null;
 }
 
 function escapeHtml(value) {
@@ -1395,19 +1716,29 @@ function syncQualityText(ready, offsetMs, rttMs) {
 
 const localTimeFormats = new Map();
 
-function formatLocalTime(date, locale, timeZone) {
-  const key = String(locale) + "|" + String(timeZone);
+function applyClockFormat(options, clockFormat) {
+  if (clockFormat === "twentyFourHour") {
+    options.hour = "2-digit";
+    options.hourCycle = "h23";
+  } else if (clockFormat === "twelveHour") {
+    options.hour12 = true;
+  }
+  return options;
+}
+
+function formatLocalTime(date, locale, timeZone, clockFormat) {
+  const key = String(locale) + "|" + String(timeZone) + "|" + String(clockFormat);
   try {
     let format = localTimeFormats.get(key);
     if (!format) {
-      const options = { hour: "numeric", minute: "2-digit" };
+      const options = applyClockFormat({ hour: "numeric", minute: "2-digit" }, clockFormat);
       if (timeZone) options.timeZone = timeZone;
       format = new Intl.DateTimeFormat(locale, options);
       localTimeFormats.set(key, format);
     }
     return format.format(date);
   } catch (_) {
-    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return date.toLocaleTimeString([], applyClockFormat({ hour: "numeric", minute: "2-digit" }, clockFormat));
   }
 }
 
@@ -1423,14 +1754,14 @@ function msUntilNextProducerSecond(nowMs, offsetMs) {
 
 const producerClockFormats = new Map();
 
-function formatProducerClock(nowMs, offsetMs, utcOffsetSeconds, locale) {
+function formatProducerClock(nowMs, offsetMs, utcOffsetSeconds, locale, clockFormat) {
   const hasOffset = typeof offsetMs === "number" && isFinite(offsetMs);
   const hasUtc = typeof utcOffsetSeconds === "number" && isFinite(utcOffsetSeconds);
   const producerMs = nowMs + (hasOffset ? offsetMs : 0);
-  const options = { hour: "numeric", minute: "2-digit", second: "2-digit" };
+  const options = applyClockFormat({ hour: "numeric", minute: "2-digit", second: "2-digit" }, clockFormat);
   const shifted = hasUtc ? producerMs + utcOffsetSeconds * 1000 : producerMs;
   if (hasUtc) options.timeZone = "UTC";
-  const key = String(locale) + "|" + (hasUtc ? "utc" : "local");
+  const key = String(locale) + "|" + (hasUtc ? "utc" : "local") + "|" + String(clockFormat);
   try {
     let format = producerClockFormats.get(key);
     if (!format) {
@@ -1858,6 +2189,319 @@ function createLink(env) {
     get lastContactAt() { return Math.max(lastFrameAt, snapshotAt); },
   };
 }
+
+const DETAILS_MAX_CHARS = 64000;
+const DETAILS_MAX_NODES = 6000;
+const DETAILS_MAX_DEPTH = 24;
+const DETAILS_MIN_CONTRAST = 2.5;
+const SPLIT_DEFAULT = 2 / 3;
+const DETAILS_SCALE_MIN = 0.25;
+const DETAILS_SCALE_MAX = 2.5;
+const DETAILS_SCALE_STEP = 0.15;
+const SPLIT_MIN = 0.4;
+const SPLIT_MAX = 0.8;
+const SPLIT_NUDGE = 0.05;
+const SPLIT_MIN_ASPECT = 1.15;
+const DETAILS_VOID_TAGS = { br: 1, hr: 1, img: 1, input: 1, meta: 1, link: 1, col: 1, wbr: 1, area: 1, base: 1, embed: 1, source: 1, track: 1, param: 1 };
+const DETAILS_SKIP_TAGS = { script: 1, style: 1, iframe: 1, object: 1, embed: 1, noscript: 1, template: 1, svg: 1, math: 1, head: 1, title: 1, textarea: 1, select: 1, button: 1, canvas: 1, audio: 1, video: 1, applet: 1, frameset: 1 };
+const DETAILS_RAW_TEXT_TAGS = { script: 1, style: 1, textarea: 1, title: 1, noscript: 1, template: 1 };
+const DETAILS_ALLOWED_TAGS = {
+  p: 1, div: 1, br: 1, hr: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, ul: 1, ol: 1, li: 1,
+  strong: 1, b: 1, em: 1, i: 1, u: 1, s: 1, strike: 1, del: 1, span: 1, font: 1, a: 1, blockquote: 1, pre: 1, code: 1,
+  sub: 1, sup: 1, table: 1, thead: 1, tbody: 1, tr: 1, td: 1, th: 1,
+};
+const DETAILS_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: String.fromCharCode(160), ndash: String.fromCharCode(8211), mdash: String.fromCharCode(8212), hellip: String.fromCharCode(8230), lsquo: String.fromCharCode(8216), rsquo: String.fromCharCode(8217), ldquo: String.fromCharCode(8220), rdquo: String.fromCharCode(8221), bull: String.fromCharCode(8226), middot: String.fromCharCode(183), copy: String.fromCharCode(169), reg: String.fromCharCode(174), deg: String.fromCharCode(176) };
+
+function decodeDetailsEntities(text) {
+  return String(text).replace(/&(#x[0-9a-f]{1,6}|#[0-9]{1,7}|[a-z]{2,8});/gi, (match, body) => {
+    if (body.charAt(0) === "#") {
+      const code = body.charAt(1).toLowerCase() === "x" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      if (!isFinite(code) || code < 1 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return "";
+      return String.fromCodePoint(code);
+    }
+    const named = DETAILS_ENTITIES[body.toLowerCase()];
+    return named === undefined ? match : named;
+  });
+}
+
+function parseDetailsAttributes(source) {
+  const attrs = {};
+  const pattern = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match;
+  while ((match = pattern.exec(source)) !== null) {
+    const name = match[1].toLowerCase();
+    const value = match[2] !== undefined ? match[2] : match[3] !== undefined ? match[3] : match[4] !== undefined ? match[4] : "";
+    if (!(name in attrs)) attrs[name] = decodeDetailsEntities(value);
+  }
+  return attrs;
+}
+
+function safeDetailsLink(value) {
+  const cleaned = String(value || "").replace(/[\x00-\x20\x7f-\x9f\u200b-\u200f\u2028\u2029\ufeff]/g, "");
+  return /^https?:\/\/[^\/?#]+/i.test(cleaned) ? cleaned : null;
+}
+
+function parseDetailsColor(value) {
+  const text = String(value || "").trim().toLowerCase();
+  let match = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(text);
+  if (match) {
+    let hex = match[1];
+    if (hex.length <= 4) hex = hex.split("").map((c) => c + c).join("");
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+    return { r, g, b, a };
+  }
+  match = /^rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,\/]\s*([0-9.]+%?)\s*)?\)$/.exec(text);
+  if (match) {
+    const channels = [match[1], match[2], match[3]].map((n) => Number(n));
+    if (channels.some((n) => n > 255)) return null;
+    let a = 1;
+    if (match[4] !== undefined) {
+      a = match[4].slice(-1) === "%" ? Number(match[4].slice(0, -1)) / 100 : Number(match[4]);
+      if (!isFinite(a)) return null;
+    }
+    return { r: channels[0], g: channels[1], b: channels[2], a: Math.min(1, Math.max(0, a)) };
+  }
+  return null;
+}
+
+function detailsLuminance(color) {
+  const channel = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+}
+
+function detailsContrast(a, b) {
+  const la = detailsLuminance(a);
+  const lb = detailsLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function detailsStyleColors(style) {
+  const result = {};
+  for (const part of String(style || "").split(";")) {
+    const index = part.indexOf(":");
+    if (index < 0) continue;
+    const name = part.slice(0, index).trim().toLowerCase();
+    const color = parseDetailsColor(part.slice(index + 1).replace(/!important/i, ""));
+    if (!color) continue;
+    if (name === "color") result.color = color;
+    else if (name === "background-color" || name === "background") result.background = color;
+  }
+  return result;
+}
+
+function resolveDetailsColors(colors, ground) {
+  const out = {};
+  const base = ground || { r: 27, g: 27, b: 32, a: 1 };
+  const background = colors.background && colors.background.a >= 0.5 ? colors.background : null;
+  const surface = background || base;
+  if (background) out.background = "rgb(" + background.r + ", " + background.g + ", " + background.b + ")";
+  if (colors.color && detailsContrast(colors.color, surface) >= DETAILS_MIN_CONTRAST) {
+    out.color = "rgb(" + colors.color.r + ", " + colors.color.g + ", " + colors.color.b + ")";
+  } else if (background) {
+    out.color = detailsLuminance(background) > 0.18 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
+  }
+  return out;
+}
+
+function parseDetailsHTML(html) {
+  const source = String(html === null || html === undefined ? "" : html).slice(0, DETAILS_MAX_CHARS);
+  const root = { t: "el", tag: "#root", attrs: {}, children: [] };
+  const stack = [root];
+  let nodes = 0;
+  let skipDepth = 0;
+  let index = 0;
+
+  function addText(text) {
+    if (skipDepth > 0 || text === "" || nodes >= DETAILS_MAX_NODES) return;
+    const decoded = decodeDetailsEntities(text);
+    if (decoded === "") return;
+    nodes++;
+    stack[stack.length - 1].children.push({ t: "text", v: decoded });
+  }
+
+  function openTag(tag, attrs, selfClosed) {
+    if (DETAILS_SKIP_TAGS[tag]) {
+      if (!DETAILS_VOID_TAGS[tag] && !selfClosed) skipDepth++;
+      return;
+    }
+    if (skipDepth > 0 || nodes >= DETAILS_MAX_NODES) return;
+    if (DETAILS_VOID_TAGS[tag]) {
+      if (DETAILS_ALLOWED_TAGS[tag]) {
+        nodes++;
+        stack[stack.length - 1].children.push({ t: "el", tag, attrs: {}, children: [], source: tag });
+      }
+      return;
+    }
+    if (stack.length >= DETAILS_MAX_DEPTH) return;
+    const cleanAttrs = {};
+    if (DETAILS_ALLOWED_TAGS[tag]) {
+      if (tag === "a") {
+        const href = safeDetailsLink(attrs.href);
+        if (href) cleanAttrs.href = href;
+      }
+      const colors = detailsStyleColors(attrs.style);
+      if (colors.color) cleanAttrs.color = colors.color;
+      if (colors.background) cleanAttrs.background = colors.background;
+      if (tag === "font" && !cleanAttrs.color) {
+        const legacy = parseDetailsColor(attrs.color);
+        if (legacy) cleanAttrs.color = legacy;
+      }
+    }
+    nodes++;
+    const node = { t: "el", tag: DETAILS_ALLOWED_TAGS[tag] ? tag : "#unwrap", attrs: cleanAttrs, children: [], source: tag };
+    stack[stack.length - 1].children.push(node);
+    if (!selfClosed) stack.push(node);
+  }
+
+  function closeTag(tag) {
+    if (DETAILS_SKIP_TAGS[tag]) {
+      if (skipDepth > 0) skipDepth--;
+      return;
+    }
+    if (skipDepth > 0) return;
+    for (let i = stack.length - 1; i > 0; i--) {
+      if (stack[i].source === tag) {
+        stack.length = i;
+        return;
+      }
+    }
+  }
+
+  while (index < source.length) {
+    const lt = source.indexOf("<", index);
+    if (lt < 0) {
+      addText(source.slice(index));
+      break;
+    }
+    if (lt > index) addText(source.slice(index, lt));
+    if (source.startsWith("<!--", lt)) {
+      const end = source.indexOf("-->", lt + 4);
+      index = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    const next = source.charAt(lt + 1);
+    if (next === "!" || next === "?") {
+      const end = source.indexOf(">", lt + 2);
+      index = end < 0 ? source.length : end + 1;
+      continue;
+    }
+    const closing = next === "/";
+    const nameStart = lt + (closing ? 2 : 1);
+    const nameMatch = /^[a-zA-Z][a-zA-Z0-9:-]*/.exec(source.slice(nameStart, nameStart + 40));
+    if (!nameMatch) {
+      addText("<");
+      index = lt + 1;
+      continue;
+    }
+    let end = nameStart + nameMatch[0].length;
+    let quote = "";
+    while (end < source.length) {
+      const c = source.charAt(end);
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === ">") {
+        break;
+      }
+      end++;
+    }
+    const tag = nameMatch[0].toLowerCase();
+    const inner = source.slice(nameStart + nameMatch[0].length, end);
+    index = end + 1;
+    if (closing) {
+      closeTag(tag);
+      continue;
+    }
+    const selfClosed = /\/\s*$/.test(inner);
+    openTag(tag, parseDetailsAttributes(inner.replace(/\/\s*$/, "")), selfClosed);
+    if (DETAILS_RAW_TEXT_TAGS[tag] && !selfClosed) {
+      const closer = new RegExp("</" + tag + "\\s*>", "i");
+      const found = closer.exec(source.slice(index));
+      index = found ? index + found.index + found[0].length : source.length;
+      if (skipDepth > 0) skipDepth--;
+    }
+  }
+  return root.children;
+}
+
+function appendDetailsNodes(parent, nodes, doc, ground) {
+  for (const node of nodes) {
+    if (node.t === "text") {
+      parent.appendChild(doc.createTextNode(node.v));
+      continue;
+    }
+    if (node.tag === "#unwrap") {
+      appendDetailsNodes(parent, node.children, doc, ground);
+      continue;
+    }
+    const element = doc.createElement(node.tag === "font" ? "span" : node.tag);
+    if (node.tag === "a" && node.attrs.href) {
+      element.setAttribute("href", node.attrs.href);
+      element.setAttribute("rel", "noopener noreferrer");
+      element.setAttribute("target", "_blank");
+    }
+    const colors = resolveDetailsColors({ color: node.attrs.color, background: node.attrs.background }, ground);
+    if (colors.color) element.style.color = colors.color;
+    if (colors.background) element.style.backgroundColor = colors.background;
+    appendDetailsNodes(element, node.children, doc, ground);
+    parent.appendChild(element);
+  }
+}
+
+function renderDetailsInto(container, html, doc, ground) {
+  while (container.firstChild) container.removeChild(container.firstChild);
+  appendDetailsNodes(container, parseDetailsHTML(html), doc, ground);
+  return container;
+}
+
+function detailsSourceFor(item, fields) {
+  if (!item || !fields || fields.indexOf("itemDetails") === -1) return "";
+  if ((item.itemType || "").toLowerCase() === "header") return "";
+  const details = item.details || {};
+  if (typeof details.htmlDetails === "string" && details.htmlDetails.length > 0) return details.htmlDetails;
+  return typeof details.description === "string" ? details.description : "";
+}
+
+function clampDetailsScale(value) {
+  const number = Number(value);
+  if (!isFinite(number) || number <= 0) return 1;
+  return Math.round(Math.min(DETAILS_SCALE_MAX, Math.max(DETAILS_SCALE_MIN, number)) * 100) / 100;
+}
+
+function clampSplit(value) {
+  const number = Number(value);
+  if (!isFinite(number)) return SPLIT_DEFAULT;
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, number));
+}
+
+function splitFractionForX(x, containerWidth, dividerWidth) {
+  const usable = containerWidth - dividerWidth;
+  if (!(usable > 0)) return SPLIT_DEFAULT;
+  return clampSplit((x - dividerWidth / 2) / usable);
+}
+
+function splitAllowedFor(width, height) {
+  return height > 0 && width / height >= SPLIT_MIN_ASPECT;
+}
+
+function splitPagerWidth(containerWidth, dividerWidth, fraction) {
+  return Math.max(0, (containerWidth - dividerWidth) * clampSplit(fraction));
+}
+
+function splitPagerLayout(pagerWidth, height, param) {
+  const value = String(param || "auto").toLowerCase().replace(/[^a-z]/g, "");
+  if (value === "lowerthird" || value === "third") return "lowerthird";
+  if (value === "landscape") return "landscape";
+  if (value === "standard" || value === "full" || value === "portrait") return "standard";
+  return height > 0 && pagerWidth > height ? "landscape" : "standard";
+}
 </script>
 
 <script>
@@ -1915,6 +2559,12 @@ const el = {
   lsNextTitle: document.getElementById("lsNextTitle"),
   lsNextNotes: document.getElementById("lsNextNotes"),
   lsBottom: document.getElementById("lsBottom"),
+  lsSplit: document.getElementById("lsSplit"),
+  lsDivider: document.getElementById("lsDivider"),
+  lsDetails: document.getElementById("lsDetails"),
+  lsDetailsBody: document.getElementById("lsDetailsBody"),
+  lsDetailsSmaller: document.getElementById("lsDetailsSmaller"),
+  lsDetailsLarger: document.getElementById("lsDetailsLarger"),
   lsMessage: document.getElementById("lsMessage"),
   lsMessageText: document.getElementById("lsMessageText"),
   lsMessageFrom: document.getElementById("lsMessageFrom"),
@@ -1961,6 +2611,10 @@ const el = {
   ltCountdown: document.getElementById("ltCountdown"),
   ltCountdownValue: document.getElementById("ltCountdownValue"),
   ltDuration: document.getElementById("ltDuration"),
+  ltDetails: document.getElementById("ltDetails"),
+  ptDetails: document.getElementById("ptDetails"),
+  ptNextDetails: document.getElementById("ptNextDetails"),
+  lsNextDetails: document.getElementById("lsNextDetails"),
   waiting: document.getElementById("waiting"),
   offline: document.getElementById("offline"),
   waitingText: document.getElementById("waitingText"),
@@ -1982,6 +2636,195 @@ function readStoredCueDisplay() {
 function storeCueDisplay(value) {
   try { localStorage.setItem(CUE_DISPLAY_KEY, value); } catch (_) {  }
 }
+
+const SPLIT_STORAGE_KEY = "pagerDetailsSplit";
+const SPLIT_DIVIDER_PX = 22;
+const SPLIT_HOLD_MS = 800;
+let splitFraction = SPLIT_DEFAULT;
+let splitActive = false;
+let splitPagerPx = 0;
+let lastDetailsSignature = "";
+let lastDetailsItemId = "";
+
+function readStoredSplit() {
+  try {
+    const raw = localStorage.getItem(SPLIT_STORAGE_KEY);
+    return raw === null ? SPLIT_DEFAULT : Number(raw);
+  } catch (_) { return SPLIT_DEFAULT; }
+}
+
+function storeSplit(value) {
+  try { localStorage.setItem(SPLIT_STORAGE_KEY, String(value)); } catch (_) {  }
+}
+
+splitFraction = clampSplit(readStoredSplit());
+
+const DETAILS_SCALE_KEY = "pagerDetailsTextScale";
+let detailsScale = 1;
+
+function applyDetailsScale(value, persist) {
+  detailsScale = clampDetailsScale(value);
+  const style = el.lsDetailsBody.style;
+  if (style && typeof style.setProperty === "function") style.setProperty("--details-scale", String(detailsScale));
+  el.lsDetailsSmaller.disabled = detailsScale <= DETAILS_SCALE_MIN;
+  el.lsDetailsLarger.disabled = detailsScale >= DETAILS_SCALE_MAX;
+  if (persist) {
+    try { localStorage.setItem(DETAILS_SCALE_KEY, String(detailsScale)); } catch (_) {  }
+  }
+}
+
+(function setupDetailsScale() {
+  let stored = 1;
+  try { stored = Number(localStorage.getItem(DETAILS_SCALE_KEY) || 1); } catch (_) {  }
+  applyDetailsScale(stored, false);
+  el.lsDetailsSmaller.addEventListener("click", () => applyDetailsScale(detailsScale - DETAILS_SCALE_STEP, true));
+  el.lsDetailsLarger.addEventListener("click", () => applyDetailsScale(detailsScale + DETAILS_SCALE_STEP, true));
+})();
+
+function pagerWidthPx() {
+  return splitActive && splitPagerPx > 0 ? splitPagerPx : window.innerWidth;
+}
+
+function landscapeUnit() {
+  return Math.min(pagerWidthPx(), window.innerHeight);
+}
+
+function windowLayout() {
+  return layoutFor(window.innerWidth, window.innerHeight, LAYOUT_PARAM);
+}
+
+function effectiveLayout() {
+  const base = windowLayout();
+  if (base === "landscape" && splitActive && splitPagerPx > 0) {
+    const inner = splitPagerLayout(splitPagerPx, window.innerHeight, LAYOUT_PARAM);
+    if (inner !== "lowerthird") return inner;
+  }
+  return base;
+}
+
+function refitPager() {
+  if (root.dataset.layout === "standard") {
+    lastPortraitKey = "";
+    fitPortrait(!el.ptMessage.classList.contains("hidden"));
+  } else {
+    lastFitKey = "";
+    fitLandscapeBottom(el.lsBottom.dataset.mode);
+  }
+}
+
+function applySplitGeometry() {
+  if (!splitActive) return;
+  splitPagerPx = splitPagerWidth(el.lsSplit.clientWidth, SPLIT_DIVIDER_PX, splitFraction);
+  el.lsSplit.style.gridTemplateColumns = splitPagerPx + "px " + SPLIT_DIVIDER_PX + "px minmax(0, 1fr)";
+  el.landscape.style.setProperty("--pw", splitPagerPx + "px");
+  el.standard.style.setProperty("--pw", splitPagerPx + "px");
+  el.lsDivider.setAttribute("aria-valuenow", String(Math.round(splitFraction * 100)));
+}
+
+function setSplitActive(on) {
+  if (splitActive !== on) {
+    splitActive = on;
+    el.lsSplit.classList.toggle("split", on);
+    setHidden(el.lsDivider, !on);
+    setHidden(el.lsDetails, !on);
+    if (!on) {
+      el.lsSplit.style.gridTemplateColumns = "";
+      el.landscape.style.removeProperty("--pw");
+      el.standard.style.removeProperty("--pw");
+      splitPagerPx = 0;
+      lastDetailsSignature = "";
+    }
+    lastFitKey = "";
+    lastPortraitKey = "";
+  }
+  applySplitGeometry();
+}
+
+function setSplitFraction(value, persist) {
+  splitFraction = clampSplit(value);
+  applySplitGeometry();
+  if (effectiveLayout() !== root.dataset.layout) applyLayout();
+  else refitPager();
+  if (persist) storeSplit(splitFraction);
+}
+
+function detailsGround() {
+  return parseDetailsColor(getComputedStyle(root).getPropertyValue("--pal-pager-panel"));
+}
+
+function renderDetailsPane() {
+  const item = activeItem();
+  const eligible = windowLayout() === "landscape" && splitAllowedFor(window.innerWidth, window.innerHeight);
+  const source = eligible ? detailsSourceFor(item, pagerFieldsForRole(activeRole())) : "";
+  setSplitActive(source !== "");
+  if (effectiveLayout() !== root.dataset.layout) {
+    applyLayout();
+    return true;
+  }
+  if (source === "") return false;
+  const itemId = item ? String(item.id) : "";
+  const signature = itemId + "\u0001" + source;
+  if (signature === lastDetailsSignature) return false;
+  lastDetailsSignature = signature;
+  renderDetailsInto(el.lsDetailsBody, source, document, detailsGround());
+  if (itemId !== lastDetailsItemId) {
+    lastDetailsItemId = itemId;
+    el.lsDetailsBody.scrollTop = 0;
+  }
+  return false;
+}
+
+(function wireDivider() {
+  let drag = null;
+  let holdTimer = null;
+  function clearHold() {
+    if (holdTimer !== null) clearTimeout(holdTimer);
+    holdTimer = null;
+  }
+  el.lsDivider.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    drag = { x: event.clientX, y: event.clientY, start: splitFraction, moved: false };
+    try { el.lsDivider.setPointerCapture(event.pointerId); } catch (_) {  }
+    el.lsDivider.classList.add("dragging");
+    clearHold();
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      if (drag && !drag.moved) {
+        drag = null;
+        el.lsDivider.classList.remove("dragging");
+        setSplitFraction(SPLIT_DEFAULT, true);
+      }
+    }, SPLIT_HOLD_MS);
+    event.preventDefault();
+  });
+  el.lsDivider.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.hypot(dx, event.clientY - drag.y) < 6) return;
+    drag.moved = true;
+    clearHold();
+    const usable = el.lsSplit.clientWidth - SPLIT_DIVIDER_PX;
+    if (usable > 0) setSplitFraction(drag.start + dx / usable, false);
+  });
+  function finish() {
+    clearHold();
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    el.lsDivider.classList.remove("dragging");
+    if (moved) storeSplit(splitFraction);
+  }
+  el.lsDivider.addEventListener("pointerup", finish);
+  el.lsDivider.addEventListener("pointercancel", finish);
+  el.lsDivider.addEventListener("dblclick", () => setSplitFraction(SPLIT_DEFAULT, true));
+  el.lsDivider.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") setSplitFraction(splitFraction - SPLIT_NUDGE, true);
+    else if (event.key === "ArrowRight") setSplitFraction(splitFraction + SPLIT_NUDGE, true);
+    else if (event.key === "Home") setSplitFraction(SPLIT_DEFAULT, true);
+    else return;
+    event.preventDefault();
+  });
+})();
 
 function renderCueButtons() {
   for (const button of document.querySelectorAll("[data-cue-display]")) {
@@ -2014,9 +2857,22 @@ function placeShared(layout) {
   if (root.dataset.icons !== "none" && el.iconRow.parentNode !== home) home.append(el.iconRow);
 }
 
+const standardHome = el.standard.parentNode;
+const standardAnchor = el.standard.nextSibling;
+
 function applyLayout() {
-  const layout = layoutFor(window.innerWidth, window.innerHeight, LAYOUT_PARAM);
-  if (root.dataset.layout !== layout) lastLtKey = "";
+  if (windowLayout() !== "landscape") setSplitActive(false);
+  else if (splitActive) applySplitGeometry();
+  const layout = effectiveLayout();
+  const standardParent = layout === "standard" && splitActive ? el.lsSplit : standardHome;
+  if (el.standard.parentNode !== standardParent) {
+    standardParent.insertBefore(el.standard, standardParent === el.lsSplit ? el.landscape : standardAnchor);
+  }
+  if (root.dataset.layout !== layout) {
+    lastLtKey = "";
+    lastFitKey = "";
+    lastPortraitKey = "";
+  }
   root.dataset.layout = layout;
   placeShared(layout);
   el.standard.classList.toggle("hidden", layout !== "standard");
@@ -2102,8 +2958,14 @@ function clockOffsetMs() {
   }
 }
 
+function effectiveClockFormat() {
+  const valid = (v) => (v === "twelveHour" || v === "twentyFourHour" ? v : null);
+  const role = activeRole();
+  return valid(role && role.clockFormat) || valid(snapshot && snapshot.settings && snapshot.settings.clockFormat);
+}
+
 function formatClock() {
-  return formatProducerClock(Date.now(), clockOffsetMs(), producerUtcOffsetSeconds);
+  return formatProducerClock(Date.now(), clockOffsetMs(), producerUtcOffsetSeconds, undefined, effectiveClockFormat());
 }
 
 function roles() { return (snapshot && snapshot.roles) || []; }
@@ -2127,6 +2989,40 @@ function activeItem() {
 function nextItem() { return nextItemFor(snapshot); }
 
 function notesFor(item) { return notesForRole(item, activeRole()); }
+
+function pagerNowMs() {
+  return link.clockReady ? link.producerNow() : Date.now();
+}
+
+function timerRunning() {
+  const timer = snapshot && snapshot.timer;
+  if (!timer) return false;
+  return timer.anchor ? Boolean(timer.anchor.isRunning) : Boolean(timer.isRunning);
+}
+
+function currentDetails() {
+  const fields = pagerFieldsForRole(activeRole());
+  if (fields.length === 0) return "";
+  const item = activeItem();
+  const start = fields.indexOf("startTime") !== -1 ? currentStartMs(item, remainingSeconds(), timerRunning(), pagerNowMs()) : null;
+  return itemDetailsLine(item, fields, start, producerUtcOffsetSeconds, effectiveClockFormat());
+}
+
+function nextDetails() {
+  const fields = pagerFieldsForRole(activeRole());
+  if (fields.length === 0) return "";
+  const upcoming = nextItem();
+  const timer = snapshot && snapshot.timer;
+  const start = fields.indexOf("startTime") !== -1
+    ? nextStartMs(timer && timer.nextStartsAtMs, remainingSeconds(), timerRunning(), pagerNowMs())
+    : null;
+  return itemDetailsLine(upcoming, fields, start, producerUtcOffsetSeconds, effectiveClockFormat());
+}
+
+function setDetails(node, text) {
+  setText(node, text);
+  setHidden(node, !text);
+}
 
 function buildNote(category, text, current) {
   const node = document.createElement("div");
@@ -2200,10 +3096,16 @@ function renderCountdown(view, hideEmpty) {
   if (hideEmpty) setHidden(view.countdown, !hasCountdown);
 }
 
-function fillNotes(container, signature, notes) {
+function fillNotes(container, signature, notes, details) {
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   container.innerHTML = "";
+  if (details) {
+    const line = document.createElement("div");
+    line.className = "fr-details";
+    line.textContent = details;
+    container.appendChild(line);
+  }
   notes.forEach((n, index) => container.appendChild(buildNote(n.category, n.text, index === 0)));
 }
 
@@ -2228,8 +3130,9 @@ function renderLandscape() {
   const current = notesFor(item);
   const upcoming = nextItem();
   const message = activeNotification();
-  const mode = bottomRowMode(Boolean(message), current.length > 0, Boolean(upcoming));
-  fillNotes(el.lsNotes, current.map((n) => n.category + n.text).join("|"), current);
+  const currentLine = currentDetails();
+  const mode = bottomRowMode(Boolean(message), current.length > 0 || Boolean(currentLine), Boolean(upcoming));
+  fillNotes(el.lsNotes, currentLine + "\u0002" + current.map((n) => n.category + n.text).join("|"), current, currentLine);
   setHidden(el.lsBottom, mode === "message" || mode === "none");
   setHidden(el.lsMessage, mode !== "message");
   setHidden(el.lsNotes, mode === "right");
@@ -2239,6 +3142,7 @@ function renderLandscape() {
     setText(el.lsNextTitle, (upcoming.title || "").toUpperCase());
     const length = upcoming.lengthInSeconds;
     setText(el.lsNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
+    setDetails(el.lsNextDetails, nextDetails());
     const nextNotes = notesFor(upcoming);
     fillNotes(
       el.lsNextNotes,
@@ -2266,6 +3170,7 @@ function renderPortrait() {
 
   const current = isHeader ? [] : notesFor(item);
   fillNotes(el.ptNotes, current.map((n) => n.category + n.text).join("|"), current);
+  setDetails(el.ptDetails, isHeader ? "" : currentDetails());
   setHidden(el.ptCard, !title && el.ptCountdown.classList.contains("hidden") && current.length === 0);
 
   const upcoming = nextItem();
@@ -2274,6 +3179,7 @@ function renderPortrait() {
     setText(el.ptNextTitle, (upcoming.title || "").toUpperCase());
     const length = upcoming.lengthInSeconds;
     setText(el.ptNextLength, typeof length === "number" ? formatProjectedLength(length, thresholdSeconds()) : "");
+    setDetails(el.ptNextDetails, nextDetails());
     const nextNotes = notesFor(upcoming);
     fillNotes(
       el.ptNextNotes,
@@ -2292,10 +3198,11 @@ function renderPortrait() {
 }
 
 function fitPortrait(hasMessage) {
-  const u = Math.min(window.innerWidth, window.innerHeight);
+  const pagerWidth = pagerWidthPx();
+  const u = Math.min(pagerWidth, window.innerHeight);
   const key = [
-    u, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
-    el.ptNotes.dataset.signature, el.ptNext.classList.contains("hidden") ? 0 : 1,
+    u, pagerWidth, window.innerHeight, hasMessage ? 1 : 0, el.ptTitle.textContent, el.ptCountdown.__em,
+    el.ptNotes.dataset.signature, el.ptDetails.textContent, el.ptNextDetails.textContent, el.ptNext.classList.contains("hidden") ? 0 : 1,
     el.ptNextNotes.dataset.signature, el.ptNextTitle.textContent, el.ptNextLength.textContent,
     el.ptMessageText.textContent, el.ptMessageFrom.textContent,
     el.ptCard.classList.contains("hidden") ? 0 : 1, el.ptTag.textContent,
@@ -2341,8 +3248,8 @@ function fitPortrait(hasMessage) {
 }
 
 function fitLandscapeBottom(mode) {
-  const u = Math.min(window.innerWidth, window.innerHeight);
-  const key = [mode, u, el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
+  const u = landscapeUnit();
+  const key = [mode, u, pagerWidthPx(), el.lsNotes.dataset.signature, el.lsNextNotes.dataset.signature, el.lsNextDetails.textContent, el.lsNextTitle.textContent, el.lsNextLength.textContent, el.lsMessageText.textContent, el.lsMessageFrom.textContent].join("\u0001");
   if (key === lastFitKey) return;
   lastFitKey = key;
   if (mode === "message") {
@@ -2388,6 +3295,9 @@ function renderLowerThird() {
     ? message.text
     : item ? item.title : (snapshot && snapshot.plan && snapshot.plan.title) || "—";
   setText(el.ltTitle, title);
+  const detailsText = message ? "" : currentDetails();
+  setDetails(el.ltDetails, detailsText);
+  el.lowerthird.classList.toggle("hasdetails", Boolean(detailsText));
 
   const isHeader = item && (item.itemType || "").toLowerCase() === "header";
   const remaining = remainingSeconds();
@@ -2404,7 +3314,7 @@ function renderLowerThird() {
 
   const key = [
     title, isMessage ? 1 : 0, window.innerWidth, window.innerHeight,
-    clockText.length, countdownText.length, durationText,
+    clockText.length, effectiveClockFormat(), countdownText.length, durationText, detailsText,
   ].join("|");
   if (key === lastLtKey) return;
   lastLtKey = key;
@@ -2498,6 +3408,7 @@ function render() {
   renderRoles();
   updateSendEnabled();
   renderChat();
+  if (root.dataset.layout !== "lowerthird" && renderDetailsPane()) return;
   if (root.dataset.layout === "lowerthird") {
     renderLowerThird();
   } else if (root.dataset.layout === "landscape") {
@@ -2555,7 +3466,7 @@ function renderChat() {
 
 function formatTime(timestamp) {
   const date = new Date(timestamp);
-  return isNaN(date) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return isNaN(date) ? "" : date.toLocaleTimeString([], applyClockFormat({ hour: "numeric", minute: "2-digit" }, effectiveClockFormat()));
 }
 
 function offlineText() {

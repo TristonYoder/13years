@@ -11,8 +11,9 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
-  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
+  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
+  "pagerFieldsForRole", "noteCategoriesForRole", "leaderBylineText", "lengthText", "itemDetailSegments", "itemDetailsLine", "currentStartMs", "nextStartMs", "detailBpmText", "titleCaseWords",
 ];
 const core = vm.runInNewContext(`${source}\n({${names.join(",")}})`, { TextEncoder, JSON, Math, Map, String, Number, Intl });
 
@@ -1163,8 +1164,135 @@ test("formatProducerClock shifts by offset and renders in the producer UTC offse
   assert.match(core.formatProducerClock(base, 0, 0, "en-US"), /^3:07:08\s?PM$/);
 });
 
+test("formatProducerClock honours the clock format", () => {
+  const base = Date.UTC(2026, 4, 3, 15, 7, 8);
+  assert.equal(core.formatProducerClock(base, 0, 0, "en-US", "twentyFourHour"), "15:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-US", "twentyFourHour"), "00:07:08");
+  assert.equal(core.formatProducerClock(base, 0, 9 * 3600, "en-GB", "twentyFourHour"), "00:07:08");
+  assert.match(core.formatProducerClock(base, 0, 0, "en-GB", "twelveHour"), /^3:07:08\s?pm$/i);
+  assert.match(core.formatProducerClock(base, 0, 9 * 3600, "en-US", "twelveHour"), /^12:07:08\s?AM$/);
+  assert.match(core.formatProducerClock(base, 0, 0, "en-US", null), /^3:07:08\s?PM$/);
+  assert.equal(core.formatProducerClock(base, 0, 0, "en-GB", undefined), "15:07:08");
+});
+
+test("formatLocalTime honours the clock format", () => {
+  const date = new Date(Date.UTC(2026, 4, 3, 15, 7));
+  assert.equal(core.formatLocalTime(date, "en-US", "UTC", "twentyFourHour"), "15:07");
+  assert.match(core.formatLocalTime(date, "en-GB", "UTC", "twelveHour"), /^3:07\s?pm$/i);
+});
+
 test("formatProducerClock tolerates a missing offset", () => {
   const base = Date.UTC(2026, 0, 4, 15, 7, 8, 0);
   assert.equal(core.formatProducerClock(base, null, 0, "en-GB"), "15:07:08");
   assert.equal(typeof core.formatProducerClock(base, null, null, "en-GB"), "string");
+});
+
+const richItem = {
+  id: "s1", title: "Song", itemType: "song", lengthInSeconds: 300,
+  details: {
+    description: "  Walk on\n  slowly  ",
+    servicePosition: "pre",
+    keyName: "Ab",
+    key: { id: "k", name: "Ab", startingKey: "G" },
+    arrangement: { id: "a", name: "Default", bpm: 72, meter: "4/4", sequenceShort: ["V1", "C", "V2", "C"] },
+    customSequenceShort: [],
+    media: { id: "m", mediaType: "background_video" },
+  },
+};
+const allFields = ["startTime", "servicePosition", "mediaType", "description", "sequence", "arrangement", "meter", "bpm", "key"];
+const lineOrder = ["key", "bpm", "meter", "arrangement", "sequence", "description", "mediaType", "servicePosition", "startTime"];
+
+test("pagerFieldsForRole keeps the role's order and drops unknown and repeated values", () => {
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: ["bpm", "key", "bogus", "sequence", "bpm"] })), ["bpm", "key", "sequence"]);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({})), []);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(null)), []);
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerFields: "key" })), []);
+});
+
+test("details line matches the native formatter", () => {
+  assert.equal(core.itemDetailsLine(richItem, ["key", "bpm", "meter", "sequence"]), "G \u00b7 72 BPM \u00b7 4/4 \u00b7 V1 C V2 C");
+  assert.equal(
+    core.itemDetailsLine(richItem, core.pagerFieldsForRole({ pagerFields: lineOrder }), 1760000000000, 0, "twentyFourHour"),
+    "G \u00b7 72 BPM \u00b7 4/4 \u00b7 Default \u00b7 V1 C V2 C \u00b7 Walk on slowly \u00b7 Background Video \u00b7 Pre-service \u00b7 @ 08:53"
+  );
+});
+
+test("details line honours custom sequence, key fallbacks and BPM rounding", () => {
+  const item = { id: "s", itemType: "song", details: { keyName: "Bb", customSequenceShort: ["C", "B"], arrangement: { bpm: 90.5, sequenceShort: ["V1"] } } };
+  assert.equal(core.itemDetailsLine(item, ["key", "bpm", "sequence"]), "Bb \u00b7 90.5 BPM \u00b7 C B");
+  assert.equal(core.itemDetailsLine({ details: { key: { name: "E" } } }, ["key"]), "E");
+  assert.equal(core.detailBpmText(0), null);
+  assert.equal(core.detailBpmText(72), "72");
+});
+
+test("details line skips headers, empty data and during-service position", () => {
+  assert.equal(core.itemDetailsLine({ itemType: "header", details: richItem.details }, ["key"]), "");
+  assert.equal(core.itemDetailsLine({ itemType: "item" }, ["key", "bpm"]), "");
+  assert.equal(core.itemDetailsLine(null, ["key"]), "");
+  assert.equal(core.itemDetailsLine({ itemType: "item", details: { servicePosition: "during" } }, ["servicePosition"]), "");
+  assert.equal(core.itemDetailsLine(richItem, []), "");
+  assert.equal(core.itemDetailsLine(richItem, ["startTime"], null, 0, "twelveHour"), "");
+});
+
+test("start time renders in the producer UTC offset and clock format", () => {
+  assert.equal(core.itemDetailsLine(richItem, ["startTime"], 1760000000000, -4 * 3600, "twentyFourHour"), "@ 04:53");
+  assert.match(core.itemDetailsLine(richItem, ["startTime"], 1760000000000, 9 * 3600, "twelveHour"), /^@ 5:53\s?PM$/);
+});
+
+test("current and next start times", () => {
+  assert.equal(core.currentStartMs(richItem, 200, true, 1000000), 1000000 - 100000);
+  assert.equal(core.currentStartMs(richItem, 300, false, 1000000), null);
+  assert.equal(core.currentStartMs({ itemType: "header", lengthInSeconds: 0 }, 0, true, 5), null);
+  assert.equal(core.nextStartMs(null, 60, true, 1000), 61000);
+  assert.equal(core.nextStartMs(500000, 60, true, 1000), 500000);
+  assert.equal(core.nextStartMs(500, 60, true, 1000), 61000);
+  assert.equal(core.nextStartMs(500, -30, true, 1000), 1000);
+  assert.equal(core.nextStartMs(500, 60, false, 1000), 500);
+  assert.equal(core.nextStartMs(null, 60, false, 1000), null);
+});
+
+test("pagerItems drive the field order and win over the legacy keys", () => {
+  const role = {
+    pagerFields: ["key"],
+    assignedNoteCategories: ["Old"],
+    pagerItems: ["note:Zeta", "field:sequence", "field:bogus", "note:Alpha", "field:key", "field:sequence", "bogus", "note:"],
+  };
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(role)), ["sequence", "key"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(role)), ["Zeta", "Alpha"]);
+  assert.equal(core.itemDetailsLine(richItem, core.pagerFieldsForRole(role)), "V1 C V2 C \u00b7 G");
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerItems: [] })), []);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole({ pagerItems: [], assignedNoteCategories: ["x"] })), []);
+});
+
+test("a role without pagerItems falls back to the ordered legacy keys", () => {
+  const role = { pagerFields: ["sequence", "key"], assignedNoteCategories: ["Zeta", "Alpha"] };
+  assert.deepEqual(Array.from(core.pagerFieldsForRole(role)), ["sequence", "key"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(role)), ["Zeta", "Alpha"]);
+  assert.deepEqual(Array.from(core.noteCategoriesForRole(null)), []);
+});
+
+test("notes appear in the role's custom order, not alphabetical or item order", () => {
+  const item = { notes: { Alpha: "a", Beta: "b", Mid: "m", Zeta: "z" } };
+  const role = { pagerItems: ["note:Zeta", "field:key", "note:Alpha", "note:Mid"] };
+  assert.equal(core.notesForRole(item, role).map((n) => n.category).join(","), "Zeta,Alpha,Mid");
+  const moved = { pagerItems: ["note:Mid", "note:Zeta", "note:Alpha"] };
+  assert.equal(core.notesForRole(item, moved).map((n) => n.category).join(","), "Mid,Zeta,Alpha");
+  const sparse = { notes: { Zeta: "z", Alpha: "" } };
+  assert.equal(core.notesForRole(sparse, role).map((n) => n.category).join(","), "Zeta");
+});
+
+test("leader, type and length fields match the native formatter", () => {
+  const item = {
+    id: "s", title: "Song", itemType: "song", lengthInSeconds: 300,
+    details: { leaders: [{ firstName: "Sam" }, { firstName: "Pat" }] },
+  };
+  assert.equal(core.itemDetailsLine(item, ["leader", "type", "length"]), "Sam & Pat \u00b7 Song \u00b7 5:00");
+  assert.equal(core.itemDetailsLine(item, ["length", "leader"]), "5:00 \u00b7 Sam & Pat");
+  assert.equal(core.leaderBylineText([{ firstName: "A" }]), "A");
+  assert.equal(core.leaderBylineText([{ firstName: "A" }, { firstName: "B" }, { firstName: "C" }]), "A + 2");
+  assert.equal(core.leaderBylineText([]), null);
+  assert.equal(core.lengthText(3725), "1:02:05");
+  assert.equal(core.lengthText(0), null);
+  assert.equal(core.itemDetailsLine({ itemType: "background_video", lengthInSeconds: 0 }, ["type", "length", "leader"]), "Background Video");
+  assert.deepEqual(Array.from(core.pagerFieldsForRole({ pagerItems: ["field:length", "field:leader", "field:type"] })), ["length", "leader", "type"]);
 });

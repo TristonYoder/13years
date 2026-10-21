@@ -214,6 +214,7 @@ final class SyncV2ProducerTests: SyncV2TestCase {
         engine.toggleTimerRunning()
         XCTAssertEqual(outbox.packets(.timerAnchor).first?.utcOffsetSeconds, -14400)
         XCTAssertEqual(outbox.packets(.timerUpdate).first?.utcOffsetSeconds, -14400)
+        XCTAssertNotNil(outbox.packets(.timerAnchor).first?.clockFormat)
         offset = 19800
         outbox.clear()
         engine.handlePacket(ping(version: 2), origin: .lanServer(connection))
@@ -690,6 +691,19 @@ final class SyncV2ClientTests: SyncV2TestCase {
         mono += 3_000
         engine.tickTimer()
         XCTAssertEqual(engine.producerSignal, .stale)
+    }
+
+    func testLocallyReceivedLegacyPacketSyncsAClient() {
+        let engine = makeClient()
+        let role = RoleCue(id: "host", name: "Host", state: .standby)
+        var packet = CuePacket(type: .cueUpdate, senderId: "tour", roleCues: [role], timerItem: PCOTimerItem(id: "a", title: "Welcome", itemType: "item", lengthInSeconds: 90))
+        packet.nextItem = CueNextItem(id: "b", title: "Greet", itemType: "item", lengthInSeconds: 15, notes: [:])
+        engine.receiveLocalPacket(packet)
+        XCTAssertTrue(engine.hasSyncedWithProducer)
+        XCTAssertTrue(engine.isProducerLive)
+        XCTAssertEqual(engine.roles.first?.state, .standby)
+        XCTAssertEqual(engine.activeTimerItem?.title, "Welcome")
+        XCTAssertEqual(engine.nextItem?.title, "Greet")
     }
 
     func testDigestHeartbeatEveryTwoTicks() {

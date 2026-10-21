@@ -60,7 +60,7 @@ struct ConnectToView: View {
             if let errorText {
                 Label(errorText, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppPalette.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -101,7 +101,7 @@ struct ConnectToView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(issue.message, systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(AppPalette.warning)
                         .fixedSize(horizontal: false, vertical: true)
                     permissionHelp(for: issue)
                 }
@@ -155,7 +155,7 @@ struct ConnectToView: View {
                     Text(producer.displayName).font(.body.weight(.medium))
                     Text(subtitle(for: producer))
                         .font(.caption)
-                        .foregroundStyle(reachable == false ? Color.orange : Color.secondary)
+                        .foregroundStyle(reachable == false ? AppPalette.warning : Color.secondary)
                 }
                 Spacer()
                 if reachable == nil { ProgressView().compactControlSize() }
@@ -233,7 +233,7 @@ struct RemoteProducerContainerView: View {
                 .disabled(!session.isLive)
                 .overlay {
                     if !session.isLive {
-                        Color.black.opacity(0.18).allowsHitTesting(false)
+                        AppPalette.scrimFaint.allowsHitTesting(false)
                     }
                 }
         }
@@ -254,9 +254,9 @@ struct RemoteProducerContainerView: View {
 
     private var background: Color {
         switch session.connection {
-        case .reconnecting, .stalled: return Color(red: 1.0, green: 0.78, blue: 0.2)
-        case .failed: return Color(red: 0.7, green: 0.15, blue: 0.15)
-        default: return .purple
+        case .reconnecting, .stalled: return AppPalette.cueStandby
+        case .failed: return AppPalette.timerOvertime
+        default: return AppPalette.remote
         }
     }
 
@@ -307,7 +307,7 @@ struct RemoteProducerContainerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(AppPalette.scrimSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .foregroundStyle(.white)
                     }
                 }
@@ -382,7 +382,7 @@ struct RemoteLANModePicker: View {
             if let status = lan.statusText {
                 Text(status)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(lan.isError ? Color.red : Color.secondary)
+                    .foregroundStyle(lan.isError ? AppPalette.negative : Color.secondary)
             }
         }
     }
@@ -396,7 +396,7 @@ struct RemoteConnectingOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.25).ignoresSafeArea()
+            AppPalette.scrimSoft.ignoresSafeArea()
             VStack(spacing: 14) {
                 ProgressView()
                 Text("Connecting to \(name)…")

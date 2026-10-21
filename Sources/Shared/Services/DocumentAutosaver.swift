@@ -41,7 +41,7 @@ public final class DocumentAutosaver: ObservableObject {
     private let writeDocument: @Sendable (ProducerDocument, URL) throws -> Void
     private let onFailure: (Error, URL) -> Void
     private let indexThrottle: TimeInterval
-    private let queue = DispatchQueue(label: "dev.7co.13years.autosave")
+    private let queue = DispatchQueue(label: "app.13years.autosave")
     private var baseline: ProducerDocument
     private var manualBaseline: ProducerDocument?
     private var isSuspended = false
@@ -69,8 +69,13 @@ public final class DocumentAutosaver: ObservableObject {
             engine.$waypoints.map { _ in }.eraseToAnyPublisher(),
             engine.$serviceSchedules.map { _ in }.eraseToAnyPublisher(),
             engine.$planItems.map { _ in }.eraseToAnyPublisher(),
+            engine.$skippedItemIds.map { _ in }.eraseToAnyPublisher(),
+            engine.$itemActuals.map { _ in }.eraseToAnyPublisher(),
+            engine.$pcoPlanContext.map { _ in }.eraseToAnyPublisher(),
             engine.$activeItemIndex.map { _ in }.eraseToAnyPublisher(),
             engine.$hourFormatThreshold.map { _ in }.eraseToAnyPublisher(),
+            engine.$clockFormat.map { _ in }.eraseToAnyPublisher(),
+            engine.$runSheetLayout.map { _ in }.eraseToAnyPublisher(),
             engine.$pcoDefaultServiceTypeId.map { _ in }.eraseToAnyPublisher(),
             engine.$plotipharRelayHost.map { _ in }.eraseToAnyPublisher()
         ]
@@ -136,6 +141,7 @@ public final class DocumentAutosaver: ObservableObject {
         let remaining = indexThrottle - Date().timeIntervalSince(last)
         guard remaining > 0, var probe = current else { return false }
         probe.activeItemIndex = baseline.activeItemIndex
+        probe.itemActuals = baseline.itemActuals
         guard probe == baseline else { return false }
         throttleItem?.cancel()
         let item = DispatchWorkItem { [weak self] in

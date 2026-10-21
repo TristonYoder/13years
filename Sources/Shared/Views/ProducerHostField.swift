@@ -40,11 +40,11 @@ struct ProducerHostField: View {
                     .frame(height: rowHeight)
                     .background(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(Color.white.opacity(0.1))
+                            .fill(AppPalette.glassSoft)
                     )
                     .overlay(
                         Text("IP or hostname, optional :port")
-                            .font(fieldFont)
+                            .font(.system(size: Self.isTV ? 33 : 15, weight: .semibold))
                             .foregroundColor(.white.opacity(0.58))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -54,7 +54,7 @@ struct ProducerHostField: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .stroke(Color.white.opacity(focused ? 0.6 : 0.3), lineWidth: 1)
+                            .stroke(focused ? AppPalette.glassBorderFocus : AppPalette.glassBorder, lineWidth: 1)
                     )
                     #if os(macOS)
                     .focusEffectDisabled()
@@ -71,7 +71,7 @@ struct ProducerHostField: View {
 
                 Button(action: connect) {
                     Text("Connect")
-                        .font(.inter(size: Self.isTV ? 33 : 15, weight: .bold))
+                        .font(.system(size: Self.isTV ? 33 : 15, weight: .bold))
                         .foregroundColor(.black)
                         .padding(.horizontal, Self.isTV ? 28 : 14)
                         .frame(height: rowHeight)
@@ -89,15 +89,15 @@ struct ProducerHostField: View {
 
             if let error {
                 Text(error)
-                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
-                    .foregroundColor(.red)
+                    .font(.system(size: Self.isTV ? 29 : 13, weight: .semibold))
+                    .foregroundColor(AppPalette.negative)
                     .multilineTextAlignment(.center)
             }
 
             if let message = engine.producerLinkStatus.message {
                 Text(message)
-                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
-                    .foregroundColor(engine.producerLinkStatus.isProblem ? .red : secondary)
+                    .font(.system(size: Self.isTV ? 29 : 13, weight: .semibold))
+                    .foregroundColor(engine.producerLinkStatus.isProblem ? AppPalette.negative : secondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -107,7 +107,7 @@ struct ProducerHostField: View {
                     text = ""
                     error = nil
                 }
-                .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
+                .font(.system(size: Self.isTV ? 29 : 13, weight: .semibold))
             }
         }
         .onAppear { text = engine.manualProducerHost ?? text }

@@ -22,7 +22,7 @@ public struct PagerWaitingView: View {
 
     public var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            AppPalette.displayBlack.ignoresSafeArea()
 
             SkeletonLoaderView(ink: ink, layout: .pager)
 
@@ -38,8 +38,8 @@ public struct PagerWaitingView: View {
                     stops: [
                         .init(color: .black, location: 0.0),
                         .init(color: .black, location: 0.55),
-                        .init(color: .black.opacity(0.85), location: 0.75),
-                        .init(color: .black.opacity(0), location: 1.0),
+                        .init(color: AppPalette.displayBlack.opacity(0.85), location: 0.75),
+                        .init(color: AppPalette.displayBlack.opacity(0), location: 1.0),
                     ],
                     center: .center,
                     startRadius: 0,
@@ -59,21 +59,21 @@ public struct PagerWaitingView: View {
     private var diagnostics: some View {
         VStack(spacing: Self.isTV ? 28 : 14) {
             Text("Waiting for Producer…")
-                .font(.inter(size: Self.isTV ? 40 : 17, weight: .bold))
+                .font(.system(size: Self.isTV ? 40 : 17, weight: .bold))
                 .foregroundColor(ink)
 
             ProducerHostField(ink: ink)
 
             if !engine.isLANConnected {
                 Text("Not connected to the LAN cue network")
-                    .font(.inter(size: Self.isTV ? 29 : 13, weight: .semibold))
-                    .foregroundColor(.red)
+                    .font(.system(size: Self.isTV ? 29 : 13, weight: .semibold))
+                    .foregroundColor(AppPalette.negative)
                     .multilineTextAlignment(.center)
             } else {
                 VStack(spacing: Self.isTV ? 12 : 6) {
                     if addresses.isEmpty {
                         Text("IP unavailable")
-                            .font(.inter(size: Self.isTV ? 33 : 15, weight: .semibold))
+                            .font(.system(size: Self.isTV ? 33 : 15, weight: .semibold))
                             .foregroundColor(ink.opacity(0.85))
                     } else {
                         VStack(spacing: Self.isTV ? 6 : 3) {

@@ -5,11 +5,12 @@ import SwiftUI
 
 @main
 struct PagerMacApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: false)
+    @StateObject private var cueEngine = CueEngine(isMasterServer: false, startsNetworking: !ScreenshotTourOptions.isActive)
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("keepOnTop") private var keepOnTop = false
 
     init() {
+        ScreenshotTour.prepareProcess()
         AppFonts.registerIfNeeded()
     }
 
@@ -21,7 +22,10 @@ struct PagerMacApp: App {
                 .ignoresSafeArea()
                 .background(EdgelessWindow(keepOnTop: keepOnTop))
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { cueEngine.deviceDidBecomeActive() }
+                    if phase == .active && !ScreenshotTourOptions.isActive { cueEngine.deviceDidBecomeActive() }
+                }
+                .task {
+                    PagerScreenshotTour.start(engine: cueEngine)
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -107,7 +111,7 @@ private struct EdgelessWindow: NSViewRepresentable {
 
         private func setButtons(visible: Bool, in window: NSWindow) {
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                window.standardWindowButton(button)?.isHidden = !visible
+                window.standardWindowButton(button)?.isHidden = !visible || ScreenshotTourOptions.isActive
             }
         }
 

@@ -42,6 +42,10 @@ public struct TimeOfDay: Codable, Equatable, Hashable, Comparable, Sendable {
         return formatter.string(from: date(on: Date()))
     }
 
+    public func formatted(_ format: ClockFormat) -> String {
+        format.string(self)
+    }
+
     public static func < (lhs: TimeOfDay, rhs: TimeOfDay) -> Bool {
         lhs.minutesSinceMidnight < rhs.minutesSinceMidnight
     }
@@ -157,7 +161,15 @@ public struct EventTime: Identifiable, Codable, Equatable, Hashable, Sendable {
     }
 
     public var displayName: String {
-        let when = [day?.formatted, startTime?.formatted].compactMap { $0 }.joined(separator: " ")
+        displayName(startTime: startTime?.formatted)
+    }
+
+    public func displayName(_ format: ClockFormat) -> String {
+        displayName(startTime: startTime?.formatted(format))
+    }
+
+    private func displayName(startTime formattedStart: String?) -> String {
+        let when = [day?.formatted, formattedStart].compactMap { $0 }.joined(separator: " ")
         switch (when.isEmpty ? nil : when, name) {
         case let (when?, name?): return "\(when) · \(name)"
         case let (when?, nil): return when

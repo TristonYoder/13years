@@ -6,10 +6,11 @@ import UIKit
 
 @main
 struct PagerTVApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: false)
+    @StateObject private var cueEngine = CueEngine(isMasterServer: false, startsNetworking: !ScreenshotTourOptions.isActive)
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        ScreenshotTour.prepareProcess()
         AppFonts.registerIfNeeded()
     }
 
@@ -19,10 +20,11 @@ struct PagerTVApp: App {
                 .environmentObject(cueEngine)
                 .onChange(of: scenePhase) { _, phase in
                     UIApplication.shared.isIdleTimerDisabled = phase == .active
-                    if phase == .active { cueEngine.deviceDidBecomeActive() }
+                    if phase == .active && !ScreenshotTourOptions.isActive { cueEngine.deviceDidBecomeActive() }
                 }
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
+                    PagerScreenshotTour.start(engine: cueEngine)
                 }
         }
     }

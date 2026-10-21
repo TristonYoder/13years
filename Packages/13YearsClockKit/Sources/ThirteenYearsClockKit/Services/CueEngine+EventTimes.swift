@@ -89,9 +89,11 @@ extension CueEngine {
             remoteCommands?.send(.eventTimeNext)
             return
         }
-        guard let next = nextEventTime,
-              let firstIndex = planItems.firstIndex(where: { !$0.isHeader }) else { return }
+        guard let next = nextEventTime, planItems.contains(where: { !$0.isHeader }) else { return }
+        markPlanStarted()
         liveEventTimeId = next.id
+        guard let firstIndex = planItems.firstIndex(where: { !$0.isHeader && !isOmittedFromNavigation($0) })
+            ?? planItems.firstIndex(where: { !$0.isHeader }) else { return }
         activeItemIndex = firstIndex
         var item = planItems[firstIndex]
         item.servicePlanTitle = activeTimerItem?.servicePlanTitle

@@ -114,6 +114,15 @@ struct WatchCueView: View {
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
                         .padding(.horizontal, 8)
+                    if let details = presentation?.currentDetailsLine(now: model.lastSuccessfulPollAt ?? Date()) {
+                        Text(details)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(contentTextColor.opacity(0.85))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
                 }
                 .foregroundStyle(contentTextColor)
                 .frame(width: geo.size.width)
@@ -153,7 +162,7 @@ struct WatchCueView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.black.opacity(0.18))
+                .background(AppPalette.scrimFaint)
                 .clipShape(Capsule())
             }
 
@@ -161,7 +170,7 @@ struct WatchCueView: View {
 
             HStack(spacing: 3) {
                 Circle()
-                    .fill(model.signal == .live ? Color.green : (model.signal == .stale ? Color.orange : Color.red))
+                    .fill(model.signal == .live ? AppPalette.positive : (model.signal == .stale ? AppPalette.warning : AppPalette.negative))
                     .frame(width: 6, height: 6)
                 Text(model.signal == .live ? "Live" : (model.signal == .stale ? "Reconnecting…" : "Offline"))
                     .font(.system(size: 10, weight: .semibold))
@@ -182,7 +191,7 @@ struct WatchCueView: View {
     private var stateBlock: some View {
         VStack(spacing: 2) {
             Text(currentState.displayName.uppercased())
-                .font(.system(size: 40, weight: .black, design: .rounded))
+                .font(.system(size: 40, weight: .black))
                 .foregroundStyle(contentTextColor)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
@@ -207,7 +216,8 @@ struct WatchCueView: View {
 
             if !item.isHeader, let threshold = presentation?.hourFormatThreshold {
                 Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: threshold))
-                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .font(.inter(size: 26, weight: .black))
+                    .monospacedDigit()
                     .foregroundStyle(contentTextColor)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
@@ -220,7 +230,7 @@ struct WatchCueView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.22))
+        .background(AppPalette.scrimFaint)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
@@ -257,7 +267,7 @@ struct WatchCueView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.black.opacity(emphasized ? 0.3 : 0.16))
+        .background(emphasized ? AppPalette.scrimSoft : AppPalette.scrimFaint)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 

@@ -24,7 +24,7 @@ public final class LANRelayService: @unchecked Sendable {
 
     private let listenPort: UInt16
     private let advertise: Bool
-    private let queue = DispatchQueue(label: "dev.7co.13years.lanrelay", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "app.13years.lanrelay", qos: .userInteractive)
     private var listener: NWListener?
     private var generation = 0
     private var bindAttempt = 0

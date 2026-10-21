@@ -24,7 +24,7 @@ The Pager app is named `13 Years`, the same as the iPhone, iPad and Apple TV app
 ## Steps
 
 1. Branch work lands through a pull request into `main`; the version bump is part of that pull request.
-2. Run the full test suites (Mac, web pager, ESP32 host test, Companion unit and contract) and build every scheme: ProducerMac, ProducerIOS, Pager, PagerTV, PagerWatch, PagerMac.
+2. Run `python3 scripts/generate-palette.py --check`; a non-zero exit means a generated color file drifted from `Design/palette.json`, so rerun the script without `--check` and commit the result. Then run the full test suites (Mac, web pager, ESP32 host test, Companion unit and contract) and build every scheme: ProducerMac, ProducerIOS, Pager, PagerTV, PagerWatch, PagerMac.
 3. Regenerate the bundled pager firmware (`Hardware/esp32/tools/build-firmware.py --out Sources/ProducerMac/Resources/13years-pager-merged.bin`) if anything under `Hardware/esp32/src` changed.
 4. Merge the pull request, then tag `v<version>` on the merge commit.
 5. Companion module: merge its pull request and push the matching `v<version>` tag. Its release workflow builds the package and attaches the `.tgz`.
@@ -32,4 +32,4 @@ The Pager app is named `13 Years`, the same as the iPhone, iPad and Apple TV app
 7. Delete the branches that fed the release, locally and on GitHub, once they are merged.
 8. Share the release page.
 
-The Pager for iPhone, iPad, Apple TV and Mac ships through TestFlight as one App Store record (`dev.7co.13years.pager`): archive each platform in Xcode and upload it from the Organizer. These builds are not attached to the GitHub release. Archives sign automatically with the 7 and Co LLC team (`DEVELOPMENT_TEAM` in `Config/Local.xcconfig`); the Organizer re-signs for distribution on upload.
+The Pager for iPhone, iPad, Apple TV and Mac ships through TestFlight as one App Store record (`app.13years.pager`): archive each platform in Xcode and upload it from the Organizer. These builds are not attached to the GitHub release. Archives sign automatically with the 7 and Co LLC team (`DEVELOPMENT_TEAM` in `Config/Local.xcconfig`); the Organizer re-signs for distribution on upload.

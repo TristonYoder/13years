@@ -35,6 +35,7 @@ public struct ControlAPIState: Codable, Sendable {
     public var waypoints: [WaypointStatus]
     public var schedules: ScheduleStatus
     public var eventTimes: EventTimeStatus? = nil
+    public var liveOps: LiveOpsStatus? = nil
     public var epoch: Int? = nil
     public var utcOffsetSeconds: Int? = nil
 
@@ -59,6 +60,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var isDurationActualForDisplay: Bool
         public var anchor: TimerAnchor?
         public var nextItem: PCOTimerItem? = nil
+        public var nextStartsAtMs: Int? = nil
     }
 
     public struct PlanStatus: Codable, Sendable {
@@ -84,6 +86,7 @@ public struct ControlAPIState: Codable, Sendable {
         public var plans: [PlanInfo]
         public var noteCategories: [IdentifiedName]
         public var pendingChanges: PCOPendingChanges? = nil
+        public var planContext: PCOPlanContext? = nil
 
         public struct PlanInfo: Codable, Sendable {
             public var id: String
@@ -105,8 +108,24 @@ public struct ControlAPIState: Codable, Sendable {
 
     public struct SettingsStatus: Codable, Sendable {
         public var hourFormatThreshold: String
+        public var clockFormat: String
         public var controlAPIPort: Int
         public var connectedAPIClients: Int
+
+        public init(hourFormatThreshold: String, clockFormat: String, controlAPIPort: Int, connectedAPIClients: Int) {
+            self.hourFormatThreshold = hourFormatThreshold
+            self.clockFormat = clockFormat
+            self.controlAPIPort = controlAPIPort
+            self.connectedAPIClients = connectedAPIClients
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            hourFormatThreshold = try container.decode(String.self, forKey: .hourFormatThreshold)
+            clockFormat = try container.decodeIfPresent(String.self, forKey: .clockFormat) ?? ""
+            controlAPIPort = try container.decode(Int.self, forKey: .controlAPIPort)
+            connectedAPIClients = try container.decode(Int.self, forKey: .connectedAPIClients)
+        }
     }
 
     public struct IdentifiedName: Codable, Sendable {
@@ -121,6 +140,14 @@ public struct ControlAPIState: Codable, Sendable {
         public var itemId: String?
         public var itemTitle: String?
         public var itemIndex: Int?
+    }
+
+    public struct LiveOpsStatus: Codable, Sendable {
+        public var isRehearsalMode: Bool
+        public var rehearsalPlanTimeId: String?
+        public var actualsEventTimeId: String?
+        public var actuals: [ItemActual]
+        public var skippedItemIds: [String: [String]]
     }
 
     public struct EventTimeStatus: Codable, Sendable {
@@ -268,8 +295,12 @@ public enum ControlAPIRequests {
     public struct RoleUpdateBody: Decodable, Sendable {
         public var name: String?
         public var personName: String?
+        public var clockFormat: String?
         public var plotipharRoleId: String?
+        public var pcoTeamPosition: String?
         public var assignedNoteCategories: [String]?
+        public var pagerFields: [String]?
+        public var pagerItems: [String]?
         public var state: String?
     }
 
@@ -309,6 +340,35 @@ public enum ControlAPIRequests {
         public var lengthInSeconds: Int?
         public var notes: [String: String]?
         public var isDurationActual: Bool?
+        public var description: String?
+        public var servicePosition: PCOServicePosition?
+    }
+
+    public struct SkipBody: Decodable, Sendable {
+        public var skipped: Bool?
+    }
+
+    public struct RehearsalBody: Decodable, Sendable {
+        public var enabled: Bool
+        public var planTimeId: String?
+    }
+
+    public struct ActualsStatus: Encodable, Sendable {
+        public var eventTimeId: String?
+        public var isLogging: Bool
+        public var actuals: [ItemActual]
+    }
+
+    public struct SkipsStatus: Encodable, Sendable {
+        public var eventTimeId: String?
+        public var skippedItemIds: [String]
+        public var all: [String: [String]]
+    }
+
+    public struct RehearsalStatus: Encodable, Sendable {
+        public var enabled: Bool
+        public var planTimeId: String?
+        public var availableTimes: [PCOPlanTimeInfo]
     }
 
     public struct PlanReorderBody: Decodable, Sendable {
@@ -323,9 +383,11 @@ public enum ControlAPIRequests {
     public struct DocumentLoadBody: Codable, Equatable, Sendable {
         public struct Settings: Codable, Equatable, Sendable {
             public var hourFormatThreshold: String?
+            public var clockFormat: String?
 
-            public init(hourFormatThreshold: String? = nil) {
+            public init(hourFormatThreshold: String? = nil, clockFormat: String? = nil) {
                 self.hourFormatThreshold = hourFormatThreshold
+                self.clockFormat = clockFormat
             }
         }
 
@@ -379,7 +441,7 @@ public enum ControlAPIRequests {
                 schedules: document.serviceSchedules,
                 eventTimes: document.eventTimes,
                 liveEventTimeId: document.liveEventTimeId,
-                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue)
+                settings: Settings(hourFormatThreshold: document.settings.hourFormatThreshold.rawValue, clockFormat: document.settings.clockFormat?.rawValue)
             )
         }
     }
@@ -460,6 +522,7 @@ public enum ControlAPIRequests {
 
     public struct SettingsBody: Decodable, Sendable {
         public var hourFormatThreshold: String?
+        public var clockFormat: String?
     }
 
     public struct ModeBody: Decodable, Sendable {

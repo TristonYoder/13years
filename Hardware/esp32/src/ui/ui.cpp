@@ -4,6 +4,7 @@
 #include "ui.h"
 #include "ui/fonts/fonts.h"
 #include "ui/icons/icons.h"
+#include "ui/palette.h"
 #include "ui/logo/logo.h"
 #include "cue/default_roles.h"
 #include "storage/nvs_store.h"
@@ -100,7 +101,7 @@ static constexpr lv_coord_t kLogoTextY = kLogoTopY + 118 + 14;
 static void ensureMessageScreen() {
   if (messageScreen) return;
   messageScreen = lv_obj_create(NULL);
-  lv_obj_set_style_bg_color(messageScreen, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_color(messageScreen, lv_color_hex(kDisplayBlackHex), 0);
   lv_obj_set_style_bg_opa(messageScreen, LV_OPA_COVER, 0);
   lv_obj_clear_flag(messageScreen, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -121,7 +122,7 @@ static void ensureMessageScreen() {
   lv_label_set_long_mode(messageDetail, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(messageDetail, 220);
   lv_obj_set_style_text_align(messageDetail, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(messageDetail, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_color(messageDetail, lv_color_hex(kPagerSecondaryTextHex), 0);
   lv_obj_set_style_text_font(messageDetail, &inter_regular_14, 0);
   lv_obj_add_flag(messageDetail, LV_OBJ_FLAG_HIDDEN);
 }
@@ -191,10 +192,6 @@ static constexpr lv_coord_t kRightColW = 100;
 static constexpr lv_coord_t kStackBottom = 13;
 static constexpr lv_coord_t kGap = 6;
 static constexpr lv_coord_t kDividerGap = 5;
-static constexpr uint32_t kGroundHex = 0x111114;
-static constexpr uint32_t kNeutralFrameHex = 0x24242A;
-static constexpr uint32_t kInkHex = 0xF2F2F5;
-static constexpr uint32_t kMessageHex = 0xFFD400;
 static constexpr int kMessageMaxLines = 3;
 
 static lv_obj_t *pagerScreen = nullptr, *groundBox = nullptr;
@@ -203,6 +200,7 @@ static lv_obj_t *cuePill = nullptr, *cueLabel = nullptr;
 static lv_obj_t *roleBtn = nullptr, *roleBtnLabel = nullptr, *roleBtnChevron = nullptr;
 static lv_obj_t *noConnLabel = nullptr;
 static lv_obj_t *itemCard = nullptr, *itemTitleLabel = nullptr, *timerLabel = nullptr, *projActualLabel = nullptr;
+static lv_obj_t *itemDetailsLabel = nullptr, *nextDetailsLabel = nullptr;
 static lv_obj_t *itemDivider = nullptr, *itemDividerLine = nullptr, *itemNotes = nullptr;
 static lv_obj_t *bottomStack = nullptr;
 static lv_obj_t *nextCard = nullptr, *nextRow = nullptr, *nextTitleLabel = nullptr, *nextLenLabel = nullptr, *nextNote = nullptr;
@@ -266,7 +264,7 @@ static void buildPagerScreen() {
   lv_obj_set_pos(groundBox, kBorder, kBorder);
   lv_obj_set_style_radius(groundBox, 14, 0);
   lv_obj_set_style_bg_opa(groundBox, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_color(groundBox, lv_color_hex(kGroundHex), 0);
+  lv_obj_set_style_bg_color(groundBox, lv_color_hex(kPagerGroundHex), 0);
   lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_CLICKABLE);
 
@@ -299,7 +297,7 @@ static void buildPagerScreen() {
 
   cueLabel = lv_label_create(cuePill);
   lv_obj_set_style_text_font(cueLabel, cueFont, 0);
-  lv_obj_set_style_text_color(cueLabel, lv_color_hex(kGroundHex), 0);
+  lv_obj_set_style_text_color(cueLabel, lv_color_hex(kPagerGroundHex), 0);
   lv_obj_center(cueLabel);
 
   noConnLabel = lv_label_create(pagerScreen);
@@ -349,6 +347,14 @@ static void buildPagerScreen() {
   lv_obj_set_style_text_letter_space(projActualLabel, 1, 0);
   lv_obj_set_style_text_opa(projActualLabel, LV_OPA_70, 0);
 
+  itemDetailsLabel = lv_label_create(itemCard);
+  lv_obj_set_style_text_font(itemDetailsLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_opa(itemDetailsLabel, LV_OPA_90, 0);
+  lv_label_set_long_mode(itemDetailsLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(itemDetailsLabel, kInnerW, lv_font_get_line_height(&inter_regular_14));
+  lv_obj_set_style_text_align(itemDetailsLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_add_flag(itemDetailsLabel, LV_OBJ_FLAG_HIDDEN);
+
   itemDivider = lv_obj_create(itemCard);
   lv_obj_remove_style_all(itemDivider);
   lv_obj_set_size(itemDivider, kInnerW, 2 * kDividerGap + 1);
@@ -396,12 +402,19 @@ static void buildPagerScreen() {
   lv_obj_set_width(nextTitleLabel, kInnerW - lenW - 6);
   lv_obj_move_to_index(nextTitleLabel, 0);
 
+  nextDetailsLabel = lv_label_create(nextCard);
+  lv_obj_set_style_text_font(nextDetailsLabel, &inter_regular_14, 0);
+  lv_obj_set_style_text_opa(nextDetailsLabel, LV_OPA_80, 0);
+  lv_label_set_long_mode(nextDetailsLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(nextDetailsLabel, kInnerW, lv_font_get_line_height(&inter_regular_14));
+  lv_obj_add_flag(nextDetailsLabel, LV_OBJ_FLAG_HIDDEN);
+
   nextNote = makeNoteGroup(nextCard);
 
   msgPanel = lv_obj_create(bottomStack);
   lv_obj_remove_style_all(msgPanel);
   lv_obj_set_size(msgPanel, kContentW, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(msgPanel, lv_color_hex(kMessageHex), 0);
+  lv_obj_set_style_bg_color(msgPanel, lv_color_hex(kPagerMessageHex), 0);
   lv_obj_set_style_bg_opa(msgPanel, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(msgPanel, 10, 0);
   lv_obj_set_style_pad_all(msgPanel, 8, 0);
@@ -410,7 +423,7 @@ static void buildPagerScreen() {
   lv_obj_add_event_cb(msgPanel, onMsgPanelClicked, LV_EVENT_CLICKED, nullptr);
 
   msgLabel = lv_label_create(msgPanel);
-  lv_obj_set_style_text_color(msgLabel, lv_color_hex(kGroundHex), 0);
+  lv_obj_set_style_text_color(msgLabel, lv_color_hex(kPagerGroundHex), 0);
   lv_label_set_long_mode(msgLabel, LV_LABEL_LONG_DOT);
   lv_obj_set_width(msgLabel, kContentW - 16);
 }
@@ -431,6 +444,8 @@ struct PagerCache {
   bool actual = false;
   bool actualValid = false;
   String notesSig = "\1";
+  String details = "\1";
+  String nextDetails = "\1";
   bool nextShown = false;
   String nextTitle = "\1";
   int nextLen = -1;
@@ -452,17 +467,17 @@ static bool gStaleLook = false;
 static lv_color_t staleTint(uint32_t hex) {
   lv_color_t c = lv_color_hex(hex);
   if (!gStaleLook) return c;
-  return lv_color_mix(lv_color_hex(0x7A7A7A), c, 160);
+  return lv_color_mix(lv_color_hex(kPagerStaleTintHex), c, 160);
 }
 
 static void applyTheme(CueState state, pagersync::CueDisplay display) {
   bool cue = state != CueState::Off;
   bool full = display == pagersync::CueDisplay::Fullscreen;
   lv_color_t cueColor = staleTint(cueStateBgColor(state));
-  lv_color_t ground = staleTint(kGroundHex);
-  lv_color_t ink = (full && cue) ? ground : staleTint(kInkHex);
+  lv_color_t ground = staleTint(kPagerGroundHex);
+  lv_color_t ink = (full && cue) ? ground : staleTint(kPagerClockHex);
 
-  lv_color_t screenBg = cue ? cueColor : (full ? ground : staleTint(kNeutralFrameHex));
+  lv_color_t screenBg = cue ? cueColor : (full ? ground : staleTint(kPagerFrameNeutralHex));
   lv_obj_set_style_bg_color(pagerScreen, screenBg, 0);
   if (full) lv_obj_add_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
   else lv_obj_clear_flag(groundBox, LV_OBJ_FLAG_HIDDEN);
@@ -474,7 +489,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
     lv_obj_set_style_bg_color(c, cardColor, 0);
     lv_obj_set_style_bg_opa(c, cardOpa, 0);
   }
-  lv_obj_set_style_bg_color(msgPanel, staleTint(kMessageHex), 0);
+  lv_obj_set_style_bg_color(msgPanel, staleTint(kPagerMessageHex), 0);
   lv_obj_set_style_border_width(msgPanel, full && cue ? 2 : 0, 0);
   lv_obj_set_style_border_color(msgPanel, ground, 0);
 
@@ -484,7 +499,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
   lv_obj_center(cueLabel);
 
   lv_obj_t *labels[] = {clockLabel, clockCaption, noConnLabel, roleBtnLabel, itemTitleLabel, timerLabel,
-                        projActualLabel, nextTitleLabel, nextLenLabel};
+                        projActualLabel, nextTitleLabel, nextLenLabel, itemDetailsLabel, nextDetailsLabel};
   for (lv_obj_t *l : labels) lv_obj_set_style_text_color(l, ink, 0);
   lv_obj_set_style_bg_color(itemDividerLine, ink, 0);
   lv_obj_set_style_img_recolor(roleBtnChevron, ink, 0);
@@ -502,6 +517,8 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
 
   pc.notesSig = "\1";
   pc.nextNoteSig = "\1";
+  pc.details = "\1";
+  pc.nextDetails = "\1";
   pc.layoutDirty = true;
 }
 
@@ -531,7 +548,7 @@ static void addNoteSpans(lv_obj_t *sg, const char *category, const char *text, b
 static lv_color_t currentInk() {
   bool cue = pc.state != CueState::Off;
   bool full = pc.display == pagersync::CueDisplay::Fullscreen;
-  return (full && cue) ? staleTint(kGroundHex) : staleTint(kInkHex);
+  return (full && cue) ? staleTint(kPagerGroundHex) : staleTint(kPagerClockHex);
 }
 
 static void relayoutPager(bool timerShown, bool header, bool stackShown) {
@@ -595,7 +612,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
   int64_t wallMs = 0;
   char clockBuf[24];
   if (engine.wallClockMs(wallMs)) {
-    pagersync::formatTimeOfDay(wallMs, engine.utcOffsetSeconds(), clockBuf, sizeof(clockBuf));
+    pagersync::formatTimeOfDay(wallMs, engine.utcOffsetSeconds(), clockBuf, sizeof(clockBuf), engine.use24HourClock());
   } else {
     snprintf(clockBuf, sizeof(clockBuf), "--:--:--");
   }
@@ -652,6 +669,15 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
       }
     }
 
+    char detailsBuf[160];
+    engine.timerDetailsLine(detailsBuf, sizeof(detailsBuf));
+    if (!pc.details.equals(detailsBuf)) {
+      pc.details = detailsBuf;
+      lv_label_set_text(itemDetailsLabel, detailsBuf);
+      setHidden(itemDetailsLabel, detailsBuf[0] == '\0');
+      pc.layoutDirty = true;
+    }
+
     String sig;
     int noteCount = header ? 0 : engine.roleNoteCount();
     for (int i = 0; i < noteCount; i++) {
@@ -684,9 +710,18 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
     pc.nextTitle = "\1";
     pc.nextLen = -1;
     pc.nextNoteSig = "\1";
+    pc.nextDetails = "\1";
     pc.layoutDirty = true;
   }
   if (nextShown) {
+    char nextDetailsBuf[160];
+    engine.nextDetailsLine(nextDetailsBuf, sizeof(nextDetailsBuf));
+    if (!pc.nextDetails.equals(nextDetailsBuf)) {
+      pc.nextDetails = nextDetailsBuf;
+      lv_label_set_text(nextDetailsLabel, nextDetailsBuf);
+      setHidden(nextDetailsLabel, nextDetailsBuf[0] == '\0');
+      pc.layoutDirty = true;
+    }
     const char *nextTitleSrc = engine.nextTitle();
     if (!pc.nextTitle.equals(nextTitleSrc)) {
       pc.nextTitle = nextTitleSrc;
@@ -799,7 +834,7 @@ static void onRolePickerCancelClicked(lv_event_t *e) {
 static void addRoleRow(lv_obj_t *parent, const char *roleId, const char *displayName) {
   lv_obj_t *row = lv_obj_create(parent);
   lv_obj_set_size(row, 210, 30);
-  lv_obj_set_style_bg_color(row, lv_color_hex(0x2A3244), 0);
+  lv_obj_set_style_bg_color(row, lv_color_hex(kPagerRowHex), 0);
   lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(row, 6, 0);
   lv_obj_set_style_border_width(row, 0, 0);
@@ -828,7 +863,7 @@ static void updatePickerStatus(cue::Engine &engine, bool wifiConnected, bool lan
     text += "\nClock not synced";
   }
   if (pickerStatusDot) {
-    lv_obj_set_style_bg_color(pickerStatusDot, lv_color_hex(live ? 0x34C759 : 0xFF3B30), 0);
+    lv_obj_set_style_bg_color(pickerStatusDot, lv_color_hex(live ? kPositiveHex : kNegativeHex), 0);
   }
   if (!pickerStatusShown.equals(text.c_str())) {
     pickerStatusShown = text;
@@ -842,7 +877,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
     rolePickerScreen = nullptr;
   }
   rolePickerScreen = lv_obj_create(NULL);
-  lv_obj_set_style_bg_color(rolePickerScreen, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_color(rolePickerScreen, lv_color_hex(kDisplayBlackHex), 0);
   lv_obj_set_style_bg_opa(rolePickerScreen, LV_OPA_COVER, 0);
   lv_obj_set_flex_flow(rolePickerScreen, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(rolePickerScreen, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -878,7 +913,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
 
   lv_obj_t *cueRow = lv_obj_create(rolePickerScreen);
   lv_obj_set_size(cueRow, 210, 30);
-  lv_obj_set_style_bg_color(cueRow, lv_color_hex(0x2A3244), 0);
+  lv_obj_set_style_bg_color(cueRow, lv_color_hex(kPagerRowHex), 0);
   lv_obj_set_style_bg_opa(cueRow, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(cueRow, 6, 0);
   lv_obj_set_style_border_width(cueRow, 0, 0);
@@ -923,7 +958,7 @@ static void buildRolePickerScreen(cue::Engine &engine) {
   pickerStatusLabel = lv_label_create(statusRow);
   lv_label_set_long_mode(pickerStatusLabel, LV_LABEL_LONG_DOT);
   lv_obj_set_width(pickerStatusLabel, 200);
-  lv_obj_set_style_text_color(pickerStatusLabel, lv_color_hex(0x8A8A90), 0);
+  lv_obj_set_style_text_color(pickerStatusLabel, lv_color_hex(kPagerMutedTextHex), 0);
   lv_obj_set_style_text_font(pickerStatusLabel, &inter_regular_14, 0);
   pickerStatusShown = "";
 }

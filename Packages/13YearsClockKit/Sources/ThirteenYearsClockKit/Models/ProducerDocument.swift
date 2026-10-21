@@ -12,15 +12,58 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var hourFormatThreshold: HourFormatThreshold
         public var pcoDefaultServiceTypeId: String?
         public var plotipharRelayHost: String
+        public var clockFormat: ClockFormat?
+        public var runSheetLayout: RunSheetLayoutSettings?
+
+        public var runSheetColumnWidths: [String: Double]? {
+            get { runSheetLayout?.columnWidths }
+            set {
+                var layout = runSheetLayout ?? RunSheetLayoutSettings()
+                layout.columnWidths = newValue
+                runSheetLayout = layout.isDefault ? nil : layout
+            }
+        }
 
         public init(
             hourFormatThreshold: HourFormatThreshold,
             pcoDefaultServiceTypeId: String?,
-            plotipharRelayHost: String
+            plotipharRelayHost: String,
+            clockFormat: ClockFormat? = nil,
+            runSheetLayout: RunSheetLayoutSettings? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
+            self.clockFormat = clockFormat
+            self.runSheetLayout = runSheetLayout
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            hourFormatThreshold = try container.decode(HourFormatThreshold.self, forKey: .hourFormatThreshold)
+            pcoDefaultServiceTypeId = try container.decodeIfPresent(String.self, forKey: .pcoDefaultServiceTypeId)
+            plotipharRelayHost = try container.decode(String.self, forKey: .plotipharRelayHost)
+            clockFormat = try container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
+            if let layout = try container.decodeIfPresent(RunSheetLayoutSettings.self, forKey: .runSheetLayout) {
+                runSheetLayout = layout
+            } else if let widths = try container.decodeIfPresent([String: Double].self, forKey: .runSheetColumnWidths) {
+                runSheetLayout = RunSheetLayoutSettings(columnWidths: widths)
+            } else {
+                runSheetLayout = nil
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(hourFormatThreshold, forKey: .hourFormatThreshold)
+            try container.encodeIfPresent(pcoDefaultServiceTypeId, forKey: .pcoDefaultServiceTypeId)
+            try container.encode(plotipharRelayHost, forKey: .plotipharRelayHost)
+            try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
+            try container.encodeIfPresent(runSheetLayout, forKey: .runSheetLayout)
         }
     }
 
@@ -34,6 +77,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var activeItemIndex: Int
     public var eventTimes: [EventTime]
     public var liveEventTimeId: String?
+    public var pcoPlanContext: PCOPlanContext?
+    public var itemActuals: [ItemActual]?
+    public var skippedItemIds: [String: [String]]?
     public var settings: Settings
 
     public init(
@@ -47,6 +93,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         activeItemIndex: Int,
         eventTimes: [EventTime] = [],
         liveEventTimeId: String? = nil,
+        pcoPlanContext: PCOPlanContext? = nil,
+        itemActuals: [ItemActual]? = nil,
+        skippedItemIds: [String: [String]]? = nil,
         settings: Settings
     ) {
         self.version = version
@@ -59,6 +108,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.activeItemIndex = activeItemIndex
         self.eventTimes = eventTimes
         self.liveEventTimeId = liveEventTimeId
+        self.pcoPlanContext = pcoPlanContext
+        self.itemActuals = itemActuals
+        self.skippedItemIds = skippedItemIds
         self.settings = settings
     }
 
@@ -77,6 +129,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             return item
         }
         template.liveEventTimeId = nil
+        template.itemActuals = nil
         return template
     }
 
@@ -90,6 +143,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             return role
         }
         copy.selectedRoleIds = selectedRoleIds?.sorted()
+        copy.pcoPlanContext?.fetchedAt = .distantPast
         copy.planItems = planItems.map { item in
             var item = item
             item.elapsedSeconds = 0
@@ -100,7 +154,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -115,8 +169,11 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
+        pcoPlanContext = try container.decodeIfPresent(PCOPlanContext.self, forKey: .pcoPlanContext)
+        itemActuals = try container.decodeIfPresent([ItemActual].self, forKey: .itemActuals)
+        skippedItemIds = try container.decodeIfPresent([String: [String]].self, forKey: .skippedItemIds)
         settings = try container.decodeIfPresent(Settings.self, forKey: .settings)
-            ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "")
+            ?? Settings(hourFormatThreshold: .never, pcoDefaultServiceTypeId: nil, plotipharRelayHost: "", clockFormat: nil)
     }
 
     public enum LoadError: LocalizedError {

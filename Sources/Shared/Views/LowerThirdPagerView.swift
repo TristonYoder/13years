@@ -3,8 +3,16 @@
 
 import SwiftUI
 
+public enum PagerResolvedLayout: Equatable, Sendable {
+    case landscape
+    case portrait
+    case lowerThird
+}
+
 public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     case automatic
+    case landscape
+    case portrait
     case lowerThird
 
     public static let storageKey = "pagerLayout"
@@ -16,6 +24,8 @@ public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .automatic: return "Automatic"
+        case .landscape: return "Landscape"
+        case .portrait: return "Portrait"
         case .lowerThird: return "Lower third"
         }
     }
@@ -25,9 +35,25 @@ public enum PagerLayoutChoice: String, CaseIterable, Identifiable, Sendable {
     }
 
     public func usesLowerThird(for size: CGSize) -> Bool {
+        layout(for: size) == .lowerThird
+    }
+
+    public func splitPagerLayout(for size: CGSize) -> PagerResolvedLayout {
         switch self {
-        case .lowerThird: return true
-        case .automatic: return size.height > 0 && size.width / size.height >= Self.lowerThirdAspect
+        case .landscape, .lowerThird: return .landscape
+        case .portrait: return .portrait
+        case .automatic: return PortraitMetrics.isPortrait(size) ? .portrait : .landscape
+        }
+    }
+
+    public func layout(for size: CGSize) -> PagerResolvedLayout {
+        switch self {
+        case .lowerThird: return .lowerThird
+        case .landscape: return .landscape
+        case .portrait: return .portrait
+        case .automatic:
+            if size.height > 0, size.width / size.height >= Self.lowerThirdAspect { return .lowerThird }
+            return PortraitMetrics.isPortrait(size) ? .portrait : .landscape
         }
     }
 }
@@ -107,14 +133,12 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             }
 
             if let frame = style.frameColor(for: state) {
-                FrameShape(thickness: m.frameThickness, radius: m.frameCornerRadius)
-                    .fill(frame, style: FillStyle(eoFill: true))
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                PagerCueFrame(color: frame, thickness: m.frameThickness, radius: m.frameCornerRadius)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture { showsControls.toggle() }
+        .onScreenshotTourSignal("pager.lower-third-controls") { _ in showsControls = true }
         .task(id: showsControls) {
             guard showsControls else { return }
             try? await Task.sleep(nanoseconds: 6_000_000_000)
@@ -133,19 +157,33 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             if let message = standingMessage {
                 messageCard(message, m)
             } else {
-                Text((item?.title ?? presentation.connectedMasterName ?? "—").uppercased())
-                    .font(.inter(size: m.fontSize * 0.6, weight: .black))
-                    .foregroundColor(primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.3)
-                    .padding(.horizontal, m.fontSize * 0.22)
-                    .padding(.vertical, m.fontSize * 0.12)
-                    .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
-                    .frame(maxWidth: .infinity)
+                titleBlock(m, item: item, primary: primary)
             }
 
             countdownBlock(m, item: item, primary: primary)
         }
+    }
+
+    private func titleBlock(_ m: LowerThirdMetrics, item: PCOTimerItem?, primary: Color) -> some View {
+        VStack(spacing: m.tagFontSize * 0.3) {
+            Text((item?.title ?? presentation.connectedMasterName ?? "—").uppercased())
+                .font(.system(size: m.fontSize * 0.6, weight: .black))
+                .foregroundColor(primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.3)
+                .padding(.horizontal, m.fontSize * 0.22)
+                .padding(.vertical, m.fontSize * 0.12)
+                .background(AppPalette.scrimSoft, in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+            if let details = presentation.currentDetailsLine() {
+                Text(details)
+                    .font(.system(size: m.fontSize * 0.28, weight: .semibold))
+                    .foregroundColor(style.secondaryText(for: state, opacity: 0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .truncationMode(.tail)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func clockBlock(_ m: LowerThirdMetrics, primary: Color) -> some View {
@@ -153,6 +191,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             ZStack(alignment: .leading) {
                 ProducerClockText(
                     info: presentation.producerClock,
+                    format: presentation.clockFormat,
                     font: .inter(size: m.fontSize, weight: .black),
                     color: primary
                 )
@@ -160,7 +199,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
 
                 if !cueWord.isEmpty {
                     Text(cueWord)
-                        .font(.inter(size: m.fontSize, weight: .black))
+                        .font(.system(size: m.fontSize, weight: .black))
                         .foregroundColor(CueDisplayStyle.darkText)
                         .lineLimit(1)
                         .padding(.horizontal, style.showsBadgePill ? m.fontSize * 0.2 : 0)
@@ -168,7 +207,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 }
             }
             Text("LOCAL TIME")
-                .font(.inter(size: m.tagFontSize, weight: .bold))
+                .font(.system(size: m.tagFontSize, weight: .bold))
                 .tracking(m.tagFontSize * 0.15)
                 .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
                 .opacity(cueWord.isEmpty ? 1 : 0)
@@ -189,7 +228,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
             Text((item?.isDurationActual ?? false) ? "ACTUAL" : "PROJECTED")
-                .font(.inter(size: m.tagFontSize, weight: .bold))
+                .font(.system(size: m.tagFontSize, weight: .bold))
                 .tracking(m.tagFontSize * 0.15)
                 .foregroundColor(style.secondaryText(for: state, opacity: 0.85))
                 .opacity(hasCountdown ? 1 : 0)
@@ -200,7 +239,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
     private func messageCard(_ message: InterTeamMessage, _ m: LowerThirdMetrics) -> some View {
         Button(action: openMessage) {
             Text(message.text)
-                .font(.inter(size: m.fontSize * 0.55, weight: .black))
+                .font(.system(size: m.fontSize * 0.55, weight: .black))
                 .foregroundColor(.black)
                 .lineLimit(2)
                 .minimumScaleFactor(0.3)
@@ -208,7 +247,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 .padding(.horizontal, m.fontSize * 0.25)
                 .padding(.vertical, m.fontSize * 0.12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(red: 1, green: 0.84, blue: 0.04), in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
+                .background(AppPalette.pagerMessage, in: RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -226,7 +265,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 } label: {
                     HStack(spacing: m.controlFontSize * 0.35) {
                         Text(presentation.activeRole?.name ?? "Host Pager")
-                            .font(.inter(size: m.controlFontSize, weight: .bold))
+                            .font(.system(size: m.controlFontSize, weight: .bold))
                             .lineLimit(1)
                         Image(systemName: "chevron.down")
                             .font(.system(size: m.controlFontSize * 0.6, weight: .bold))
@@ -234,7 +273,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, m.controlFontSize * 0.6)
                     .padding(.vertical, m.controlFontSize * 0.3)
-                    .background(Color.black.opacity(0.7), in: Capsule())
+                    .background(AppPalette.scrimStrong, in: Capsule())
                 }
                 .buttonStyle(.plain)
 
@@ -252,7 +291,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 .font(.system(size: m.controlFontSize))
                 .foregroundColor(.white)
                 .padding(m.controlFontSize * 0.4)
-                .background(Color.black.opacity(0.7), in: Circle())
+                .background(AppPalette.scrimStrong, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

@@ -46,22 +46,22 @@ public enum CueState: String, Codable, CaseIterable, Sendable {
     public var color: Color {
         switch self {
         case .off:
-            return Color(red: 0.08, green: 0.10, blue: 0.15)
+            return AppPalette.cueOff
         case .standby:
-            return Color(red: 0.96, green: 0.72, blue: 0.15)
+            return AppPalette.cueStandby
         case .go:
-            return Color(red: 0.15, green: 0.78, blue: 0.35)
+            return AppPalette.cueGo
         }
     }
 
     public var textColor: Color {
         switch self {
         case .off:
-            return Color.white
+            return AppPalette.cueLightText
         case .standby:
-            return Color(red: 0.1, green: 0.1, blue: 0.1)
+            return AppPalette.cueDarkText
         case .go:
-            return Color.white
+            return AppPalette.cueLightText
         }
     }
 #endif
