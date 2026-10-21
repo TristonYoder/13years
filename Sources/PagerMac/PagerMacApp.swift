@@ -111,7 +111,7 @@ private struct EdgelessWindow: NSViewRepresentable {
 
         private func setButtons(visible: Bool, in window: NSWindow) {
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                window.standardWindowButton(button)?.isHidden = !visible
+                window.standardWindowButton(button)?.isHidden = !visible || ScreenshotTourOptions.isActive
             }
         }
 

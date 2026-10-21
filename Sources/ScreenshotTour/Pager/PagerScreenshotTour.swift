@@ -22,6 +22,7 @@ final class PagerScreenshotTour: ScreenshotTourClient {
     private var clockFormat: ClockFormat?
     private var heartbeat: Task<Void, Never>?
     private let senderId = "screenshot-tour-producer"
+    var windowSizeOverride: CGSize?
 
     static var current: PagerScreenshotTour?
 

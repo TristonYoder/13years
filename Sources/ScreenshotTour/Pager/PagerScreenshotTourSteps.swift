@@ -189,12 +189,14 @@ extension PagerScreenshotTour {
         switch layout {
         case .portrait: return CGSize(width: 540, height: 900)
         case .landscape: return CGSize(width: 1080, height: 680)
-        case .lowerThird: return CGSize(width: 1440, height: 240)
+        case .lowerThird: return CGSize(width: 1920, height: 360)
         }
     }
 
+    static let esp32Size = CGSize(width: 240, height: 320)
+
     func arrange(_ layout: PagerResolvedLayout) async throws {
-        runner.configureWindow(size: Self.windowSize(for: layout))
+        runner.configureWindow(size: windowSizeOverride ?? Self.windowSize(for: layout))
         await pause(0.4)
     }
 
@@ -279,8 +281,26 @@ extension PagerScreenshotTour {
         menu.performActionForItem(at: index)
     }
 
+    private func esp32SizeSteps() -> [Step] {
+        let variants: [(CueState, CueDisplayStyle, Bool, String, String)] = [
+            (.off, .outline, false, "", "no cue"),
+            (.standby, .outline, false, "-standby", "STANDBY"),
+            (.go, .outline, false, "-go", "GO"),
+            (.standby, .outline, true, "-message", "with a producer message"),
+            (.go, .fullscreen, false, "-go-fullscreen", "GO with the full screen cue display")
+        ]
+        return variants.map { state, display, messages, suffix, title in
+            Step(id: "pager.esp32-size\(suffix)", title: "Mac pager at the ESP32 pager's 240×320 size, \(title)", prepare: { [unowned self] in
+                windowSizeOverride = Self.esp32Size
+                try await show(Scene(state: state, layout: .portrait, cueDisplay: display, messages: messages))
+            }, cleanup: { [unowned self] in
+                windowSizeOverride = nil
+            })
+        }
+    }
+
     private func platformSteps() -> [Step] {
-        var list: [Step] = []
+        var list: [Step] = esp32SizeSteps()
         list.append(Step(id: "settings-window", title: "Settings window", capture: .window({ Self.settingsWindow() }), prepare: { [unowned self] in
             try await show(Scene(state: .off, layout: .landscape))
             openSettingsWindow()
