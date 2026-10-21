@@ -189,7 +189,7 @@ extension PagerScreenshotTour {
         switch layout {
         case .portrait: return CGSize(width: 540, height: 900)
         case .landscape: return CGSize(width: 1080, height: 680)
-        case .lowerThird: return CGSize(width: 1920, height: 360)
+        case .lowerThird: return CGSize(width: 1920, height: 240)
         }
     }
 
