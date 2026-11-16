@@ -325,10 +325,46 @@ extension PagerScreenshotTour {
             Self.settingsWindow()?.close()
         }))
         list.append(contentsOf: runner.menuSteps())
-        list.append(Step(id: "menu.menu-bar-extra", title: "Menu bar extra", prepare: {
-            throw TourUIError.skipped("the Mac Pager has no menu bar extra")
-        }))
+        list.append(contentsOf: menuBarSteps())
         return list
+    }
+
+    private func menuBarSteps() -> [Step] {
+        let variants: [(String, String, CueState, Bool, Bool)] = [
+            ("menu.menu-bar-extra", "Menu bar item, STANDBY", .standby, false, false),
+            ("pager.menu-bar-go", "Menu bar item, GO", .go, false, false),
+            ("pager.menu-bar-panel", "Menu bar panel, STANDBY with a producer message", .standby, true, true),
+            ("pager.menu-bar-panel-go", "Menu bar panel, GO", .go, false, true)
+        ]
+        return variants.map { id, title, state, messages, isPanel in
+            Step(id: id, title: title, capture: .window({ [unowned self] in menuBarTourWindow }), prepare: { [unowned self] in
+                try await show(Scene(state: state, layout: .landscape, messages: messages))
+                menuBarTourWindow = Self.makeMenuBarTourWindow(engine: engine, panel: isPanel, near: TourUI.mainWindow)
+                await pause(0.6)
+            }, cleanup: { [unowned self] in
+                menuBarTourWindow?.close()
+                menuBarTourWindow = nil
+            })
+        }
+    }
+
+    private static func makeMenuBarTourWindow(engine: CueEngine, panel: Bool, near main: NSWindow?) -> NSWindow {
+        let readState = PagerMenuBarReadState()
+        let content: AnyView = panel
+            ? AnyView(PagerMenuBarPanel(openPager: {}, openSettings: {}))
+            : AnyView(PagerMenuBarLabel().padding(.horizontal, 10).background(Color(white: 0.14)))
+        let host = NSHostingView(rootView: content.environmentObject(engine).environmentObject(readState))
+        host.frame.size = host.fittingSize
+        let window = NSPanel(contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = host
+        window.isReleasedWhenClosed = false
+        window.hasShadow = panel
+        if let main {
+            window.setFrameTopLeftPoint(NSPoint(x: main.frame.minX + 60, y: main.frame.maxY - 40))
+        }
+        window.orderFrontRegardless()
+        return window
     }
     #endif
 }

@@ -5,17 +5,26 @@ import SwiftUI
 
 @main
 struct PagerMacApp: App {
-    @StateObject private var cueEngine = CueEngine(isMasterServer: false, startsNetworking: !ScreenshotTourOptions.isActive)
+    static let pagerWindowId = "pager"
+
+    @StateObject private var cueEngine: CueEngine
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("keepOnTop") private var keepOnTop = false
+    private let menuBar: PagerMenuBarController?
+    private let roleByName: PagerRoleByName?
 
     init() {
         ScreenshotTour.prepareProcess()
         AppFonts.registerIfNeeded()
+        let engine = CueEngine(isMasterServer: false, startsNetworking: !ScreenshotTourOptions.isActive)
+        _cueEngine = StateObject(wrappedValue: engine)
+        menuBar = ScreenshotTourOptions.isActive ? nil : PagerMenuBarController(engine: engine)
+        roleByName = ScreenshotTourOptions.isActive ? nil : PagerRoleByName(engine: engine)
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: Self.pagerWindowId) {
             PagerRootView()
                 .environmentObject(cueEngine)
                 .frame(minWidth: 240, minHeight: 64)
@@ -25,6 +34,7 @@ struct PagerMacApp: App {
                     if phase == .active && !ScreenshotTourOptions.isActive { cueEngine.deviceDidBecomeActive() }
                 }
                 .task {
+                    menuBar?.openPagerWindow = { [openWindow] in openWindow(id: Self.pagerWindowId) }
                     PagerScreenshotTour.start(engine: cueEngine)
                 }
         }
