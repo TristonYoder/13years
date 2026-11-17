@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Triston Yoder
 
 import Foundation
+#if PAGER_MAC
+import AppKit
+#endif
 
 @MainActor
 final class PagerScreenshotTour: ScreenshotTourClient {
@@ -23,6 +26,9 @@ final class PagerScreenshotTour: ScreenshotTourClient {
     private var heartbeat: Task<Void, Never>?
     private let senderId = "screenshot-tour-producer"
     var windowSizeOverride: CGSize?
+    #if PAGER_MAC
+    var menuBarTourWindow: NSWindow?
+    #endif
 
     static var current: PagerScreenshotTour?
 

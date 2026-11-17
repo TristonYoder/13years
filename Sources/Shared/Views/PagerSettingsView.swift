@@ -11,6 +11,11 @@ public struct PagerSettingsView: View {
     @AppStorage(PagerLayoutChoice.storageKey) private var layoutRaw: String = PagerLayoutChoice.defaultChoice.rawValue
     #if PAGER_MAC
     @AppStorage("keepOnTop") private var keepOnTop = false
+    @AppStorage(PagerMenuBarPreferences.showKey) private var menuBarShowItem = true
+    @AppStorage(PagerMenuBarPreferences.showItemNameKey) private var menuBarShowItemName = true
+    @AppStorage(PagerMenuBarPreferences.showUnreadBadgeKey) private var menuBarShowUnreadBadge = true
+    @AppStorage(PagerMenuBarPreferences.priorityTakeoverKey) private var menuBarPriorityTakeover = true
+    @AppStorage(PagerMenuBarPreferences.hideDockIconKey) private var menuBarHideDockIcon = false
     #endif
 
     public init() {}
@@ -92,6 +97,21 @@ public struct PagerSettingsView: View {
                     Text("Window")
                 } footer: {
                     Text("Keeps this window above other windows.")
+                }
+
+                Section {
+                    Toggle("Show in menu bar", isOn: $menuBarShowItem)
+                    Group {
+                        Toggle("Show item name", isOn: $menuBarShowItemName)
+                        Toggle("Show unread message count", isOn: $menuBarShowUnreadBadge)
+                        Toggle("High-priority messages take over", isOn: $menuBarPriorityTakeover)
+                        Toggle("Hide Dock icon", isOn: $menuBarHideDockIcon)
+                    }
+                    .disabled(!menuBarShowItem)
+                } header: {
+                    Text("Menu Bar")
+                } footer: {
+                    Text("Shows your cue, the current item and its countdown in the menu bar. Click it for a compact pager. An unread high-priority message replaces the countdown until you open it. With the Dock icon hidden, use the menu bar item to open the pager, settings or quit.")
                 }
                 #endif
 
