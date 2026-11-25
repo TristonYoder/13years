@@ -23,6 +23,12 @@ public struct PlanItemEditorView: View {
         }
     }
 
+    enum EditorTab: String, CaseIterable, Identifiable {
+        case quick = "Quick add"
+        case form = "Form"
+        var id: String { rawValue }
+    }
+
     private static let commonTypes = ["Item", "Song", "Header", "Media"]
 
     let mode: Mode
@@ -42,6 +48,8 @@ public struct PlanItemEditorView: View {
     @State private var commandResult = ItemCommandParser.parse("")
     @State private var placement = NewItemPlacement.atEnd
     @FocusState private var commandFocused: Bool
+    @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.quick.rawValue
+    @State private var tab: EditorTab = .form
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -141,8 +149,37 @@ public struct PlanItemEditorView: View {
     private var editorForm: some View {
             Form {
                 if isAdding {
-                    commandSection
+                    Picker("Editor", selection: $tab) {
+                        ForEach(EditorTab.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
                 }
+                if isAdding && tab == .quick {
+                    commandSection
+                    resultSection
+                } else {
+                formSections
+                }
+            }
+            .formStyle(.grouped)
+            .onAppear {
+                if isAdding { tab = EditorTab(rawValue: lastTabRaw) ?? .quick }
+            }
+    }
+
+    @ViewBuilder
+    private var resultSection: some View {
+        Section("Result") {
+            Text(commandText.trimmingCharacters(in: .whitespaces).isEmpty ? "Type a command above to see the item it makes." : commandSummary)
+                .font(.callout)
+                .foregroundStyle(commandResult.isValid ? Color.primary : AppPalette.warning)
+        }
+    }
+
+    @ViewBuilder
+    private var formSections: some View {
                 Section("Item") {
                     TextField("Title", text: $title)
 
@@ -190,8 +227,6 @@ public struct PlanItemEditorView: View {
                 if case .edit(let item) = mode {
                     waypointsSection(itemId: item.id)
                 }
-            }
-            .formStyle(.grouped)
     }
 
     private var commandSection: some View {
@@ -206,11 +241,6 @@ public struct PlanItemEditorView: View {
                 .onSubmit { if canSave { save() } }
                 .onChange(of: commandText) { _, text in applyCommand(text) }
                 .onAppear { commandFocused = true }
-            if !commandText.trimmingCharacters(in: .whitespaces).isEmpty {
-                Text(commandSummary)
-                    .font(.footnote)
-                    .foregroundStyle(commandResult.isValid ? Color.secondary : AppPalette.warning)
-            }
         } header: {
             Text("Quick add")
         } footer: {
