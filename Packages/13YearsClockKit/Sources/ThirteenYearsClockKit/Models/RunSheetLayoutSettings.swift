@@ -13,6 +13,9 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
     public var sidePaneTab: String?
     public var detailsTextScale: Double?
     public var detailsUnpinned: Bool?
+    public var showsEndTimes: Bool?
+
+    public var displaysEndTimes: Bool { showsEndTimes == true }
 
     public static let detailsTabId = "details"
     public static let detailsTextScaleRange: ClosedRange<Double> = 0.8...2.0
@@ -35,7 +38,8 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
         highlightedColumns: [String]? = nil,
         sidePaneTab: String? = nil,
         detailsTextScale: Double? = nil,
-        detailsUnpinned: Bool? = nil
+        detailsUnpinned: Bool? = nil,
+        showsEndTimes: Bool? = nil
     ) {
         self.columnOrder = columnOrder
         self.hiddenColumns = hiddenColumns
@@ -46,6 +50,7 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
         self.sidePaneTab = sidePaneTab
         self.detailsTextScale = detailsTextScale
         self.detailsUnpinned = detailsUnpinned
+        self.showsEndTimes = showsEndTimes
     }
 
     public static func noteColumnId(_ category: String) -> String { "note-\(category)" }

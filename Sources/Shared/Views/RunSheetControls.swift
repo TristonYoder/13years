@@ -64,3 +64,25 @@ struct StartNextEventButton: View {
         }
     }
 }
+
+struct RunSheetTimingToggles: View {
+    @EnvironmentObject var engine: CueEngine
+
+    static var explanation: String {
+        "Auto-advance starts the next item when the current one reaches zero; items can override this. Showing end times swaps each item's start time for the time it ends."
+    }
+
+    var body: some View {
+        Toggle(isOn: $engine.autoAdvanceByDefault) {
+            Label("Auto-advance", systemImage: "forward.end")
+        }
+        .help("Default for every item. Each item can override it in its editor.")
+        Toggle(isOn: Binding(
+            get: { engine.runSheetLayout.displaysEndTimes },
+            set: { engine.runSheetLayout.showsEndTimes = $0 ? true : nil }
+        )) {
+            Label("End times", systemImage: "clock.badge.checkmark")
+        }
+        .help("Show when each item ends instead of when it starts")
+    }
+}

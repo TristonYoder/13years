@@ -164,7 +164,7 @@ struct RunSheetTableView: View {
     private func columnHeader(_ widths: [String: CGFloat]) -> some View {
         HStack(spacing: Self.columnSpacing) {
             ForEach(columns) { column in
-                Text(column.title)
+                Text(column.id == "start" && engine.runSheetLayout.displaysEndTimes ? "End" : column.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -466,12 +466,12 @@ struct RunSheetTableView: View {
         let entry = schedule.entry(forItemId: item.id)
         return styled(item) {
             VStack(alignment: .leading, spacing: 1) {
-                if let entry, !entry.isOmitted, let planned = entry.plannedStart {
+                if let entry, !entry.isOmitted, let planned = engine.runSheetLayout.displaysEndTimes ? (item.isHeader ? nil : entry.plannedEnd) : entry.plannedStart {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.clock(.body))
                         .foregroundStyle(item.isHeader ? .secondary : .primary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
-                       let projected = entry.projectedStart {
+                       let projected = engine.runSheetLayout.displaysEndTimes ? entry.projectedEnd : entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.caption.weight(.semibold))
                             .font(.clock(.body))

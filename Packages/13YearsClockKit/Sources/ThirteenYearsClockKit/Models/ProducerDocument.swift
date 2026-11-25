@@ -14,6 +14,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var plotipharRelayHost: String
         public var clockFormat: ClockFormat?
         public var runSheetLayout: RunSheetLayoutSettings?
+        public var autoAdvanceByDefault: Bool?
 
         public var runSheetColumnWidths: [String: Double]? {
             get { runSheetLayout?.columnWidths }
@@ -29,17 +30,19 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             pcoDefaultServiceTypeId: String?,
             plotipharRelayHost: String,
             clockFormat: ClockFormat? = nil,
-            runSheetLayout: RunSheetLayoutSettings? = nil
+            runSheetLayout: RunSheetLayoutSettings? = nil,
+            autoAdvanceByDefault: Bool? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
             self.clockFormat = clockFormat
             self.runSheetLayout = runSheetLayout
+            self.autoAdvanceByDefault = autoAdvanceByDefault
         }
 
         private enum CodingKeys: String, CodingKey {
-            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths
+            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths, autoAdvanceByDefault
         }
 
         public init(from decoder: Decoder) throws {
@@ -48,6 +51,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             pcoDefaultServiceTypeId = try container.decodeIfPresent(String.self, forKey: .pcoDefaultServiceTypeId)
             plotipharRelayHost = try container.decode(String.self, forKey: .plotipharRelayHost)
             clockFormat = try container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
+            autoAdvanceByDefault = try container.decodeIfPresent(Bool.self, forKey: .autoAdvanceByDefault)
             if let layout = try container.decodeIfPresent(RunSheetLayoutSettings.self, forKey: .runSheetLayout) {
                 runSheetLayout = layout
             } else if let widths = try container.decodeIfPresent([String: Double].self, forKey: .runSheetColumnWidths) {
@@ -64,6 +68,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             try container.encode(plotipharRelayHost, forKey: .plotipharRelayHost)
             try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
             try container.encodeIfPresent(runSheetLayout, forKey: .runSheetLayout)
+            try container.encodeIfPresent(autoAdvanceByDefault, forKey: .autoAdvanceByDefault)
         }
     }
 

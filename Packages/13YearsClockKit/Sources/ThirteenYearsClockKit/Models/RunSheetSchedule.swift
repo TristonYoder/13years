@@ -33,6 +33,9 @@ public struct RunSheetSchedule: Equatable, Sendable {
 
         public var isOmitted: Bool { isExcluded || isSkipped }
 
+        public var plannedEnd: Date? { plannedStart?.addingTimeInterval(TimeInterval(length)) }
+        public var projectedEnd: Date? { projectedStart?.addingTimeInterval(TimeInterval(length)) }
+
         public var actualDeltaSeconds: Int? {
             guard isActualComplete, let actualLength else { return nil }
             return actualLength - length

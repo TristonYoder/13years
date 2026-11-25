@@ -20,7 +20,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
-    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
+    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?) -> Void
 
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -29,6 +29,7 @@ public struct PlanItemEditorView: View {
     @State private var lengthInSeconds: Int
     @State private var isDurationActual: Bool
     @State private var isEditingDuration = false
+    @State private var autoAdvance: Bool?
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -39,7 +40,7 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
+        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
@@ -51,6 +52,7 @@ public struct PlanItemEditorView: View {
             _itemType = State(initialValue: "Item")
             _lengthInSeconds = State(initialValue: 5 * 60)
             _isDurationActual = State(initialValue: false)
+            _autoAdvance = State(initialValue: nil)
             _notes = State(initialValue: [:])
             _itemDescription = State(initialValue: "")
             _servicePosition = State(initialValue: .during)
@@ -60,6 +62,7 @@ public struct PlanItemEditorView: View {
             _itemType = State(initialValue: item.itemType)
             _lengthInSeconds = State(initialValue: item.lengthInSeconds)
             _isDurationActual = State(initialValue: item.isDurationActual)
+            _autoAdvance = State(initialValue: item.autoAdvance)
             _notes = State(initialValue: item.notes)
             _itemDescription = State(initialValue: item.details?.description ?? "")
             _servicePosition = State(initialValue: item.details?.servicePosition ?? .during)
@@ -113,7 +116,8 @@ public struct PlanItemEditorView: View {
         onSave(
             id, title, itemType, lengthInSeconds, notes, isDurationActual,
             isManual && !isHeader ? itemDescription : nil,
-            isManual ? servicePosition : nil
+            isManual ? servicePosition : nil,
+            isHeader ? nil : autoAdvance
         )
         dismiss()
     }
@@ -135,10 +139,21 @@ public struct PlanItemEditorView: View {
                     Section {
                         durationRow
                         Toggle("Actual duration (not projected)", isOn: $isDurationActual)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("When time runs out")
+                            Picker("When time runs out", selection: $autoAdvance) {
+                                Text("Plan default").tag(Bool?.none)
+                                Text("Start next").tag(Bool?.some(true))
+                                Text("Wait").tag(Bool?.some(false))
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                        }
+                        .padding(.vertical, 2)
                     } header: {
                         Text("Duration")
                     } footer: {
-                        Text("Most items are projected. Mark a duration as actual for a fixed, known length — a song's recorded runtime, a video clip.")
+                        Text("Most items are projected. Mark a duration as actual for a fixed, known length — a song's recorded runtime, a video clip. Start next begins the following item when this one's countdown reaches zero.")
                     }
                 }
 

@@ -152,15 +152,17 @@ public struct ServiceFlowView: View {
         .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition in
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, autoAdvance in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
+                    engine.setItemAutoAdvance(id: id, autoAdvance)
                 } else {
                     let newId = engine.addPlanItem(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual)
                     let hasDetails = !(description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (servicePosition ?? .during) != .during
                     if let newId, hasDetails {
                         engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
                     }
+                    if let newId { engine.setItemAutoAdvance(id: newId, autoAdvance) }
                 }
             }
         }
@@ -273,32 +275,30 @@ public struct ServiceFlowView: View {
     private var tableControls: some View {
         let hasLiveToggle = engine.planItems.first?.pcoPlanId != nil
         let hasTimes = engine.eventTimes.count > 1
-        let hasRehearsal = engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty
-        if engine.pcoLastError != nil || hasLiveToggle || hasTimes || hasRehearsal || engine.isAtEndOfPlan {
-            VStack(alignment: .leading, spacing: 6) {
-                if let error = engine.pcoLastError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(AppPalette.warning)
-                        .font(.footnote)
-                }
-                HStack(spacing: 16) {
-                    if hasLiveToggle {
-                        PCOLiveSyncToggle()
-                            .help(PCOLiveSyncToggle.explanation)
-                    }
-                    if hasTimes {
-                        LiveEventTimePicker()
-                            .fixedSize()
-                    }
-                    RehearsalControl()
-                    Spacer(minLength: 0)
-                    StartNextEventButton()
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            if let error = engine.pcoLastError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(AppPalette.warning)
+                    .font(.footnote)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            Divider()
+            HStack(spacing: 16) {
+                if hasLiveToggle {
+                    PCOLiveSyncToggle()
+                        .help(PCOLiveSyncToggle.explanation)
+                }
+                if hasTimes {
+                    LiveEventTimePicker()
+                        .fixedSize()
+                }
+                RunSheetTimingToggles()
+                RehearsalControl()
+                Spacer(minLength: 0)
+                StartNextEventButton()
+            }
         }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        Divider()
     }
     #endif
 
@@ -404,6 +404,12 @@ public struct ServiceFlowView: View {
                     .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
+        }
+
+        Section {
+            RunSheetTimingToggles()
+        } footer: {
+            Text(RunSheetTimingToggles.explanation)
         }
 
         if engine.planItems.first?.pcoPlanId != nil {

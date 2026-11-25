@@ -553,13 +553,13 @@ struct RunSheetRow: View {
 
     private var startColumn: some View {
         Group {
-            if let entry, !entry.isOmitted, let planned = entry.plannedStart {
+            if let entry, !entry.isOmitted, let planned = engine.runSheetLayout.displaysEndTimes ? (item.isHeader ? nil : entry.plannedEnd) : entry.plannedStart {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.clock(.caption))
                         .foregroundStyle(item.isHeader ? .tertiary : .secondary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
-                       let projected = entry.projectedStart {
+                       let projected = engine.runSheetLayout.displaysEndTimes ? entry.projectedEnd : entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.clock(.caption2, weight: .semibold))
                             .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
