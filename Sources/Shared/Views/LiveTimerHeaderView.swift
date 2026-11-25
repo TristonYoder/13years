@@ -40,20 +40,31 @@ public struct LiveTimerHeaderView: View {
 
     public init() {}
 
+    /// Errors sit in their own tinted banner. On macOS the leading inset keeps them clear of the window controls.
+    private func headerError(_ text: String, systemImage: String, color: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.vertical, 6)
+            #if os(macOS)
+            .padding(.leading, 84)
+            #else
+            .padding(.leading, 12)
+            #endif
+            .padding(.trailing, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityElement(children: .combine)
+    }
+
     public var body: some View {
         VStack(spacing: 10) {
             if !engine.isLANConnected {
-                Label("Not connected to the LAN cue network — retrying in the background", systemImage: "wifi.exclamationmark")
-                    .foregroundStyle(AppPalette.negative)
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                headerError("Not connected to the LAN cue network \u{2014} retrying in the background", systemImage: "wifi.exclamationmark", color: AppPalette.negative)
             }
 
             if let error = engine.pcoLastError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                headerError(error, systemImage: "exclamationmark.triangle.fill", color: AppPalette.warning)
             }
 
             HStack {
