@@ -778,6 +778,7 @@ struct RunSheetRow: View {
                 EmptyView()
             } else if isActive {
                 HStack(spacing: 8) {
+                    ItemCueButtons(item: item)
                     Image(systemName: "play.circle.fill")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(AppPalette.timerOnTime)
@@ -797,18 +798,21 @@ struct RunSheetRow: View {
                     .help("Reset this item's clock back to its full length \u{2014} if Planning Center Live sync is on, also steps back and immediately forward there so PCO's own clock restarts too")
                 }
             } else {
-                Button {
-                    engine.setActivePlanItem(id: item.id)
-                } label: {
-                    Image(systemName: "play.fill")
-                        .font(.title2.weight(.bold))
-                        .frame(width: 52, height: 52)
+                HStack(spacing: 8) {
+                    ItemCueButtons(item: item)
+                    Button {
+                        engine.setActivePlanItem(id: item.id)
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.title2.weight(.bold))
+                            .frame(width: 52, height: 52)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 10))
+                    .tint(AppPalette.positive)
+                    .accessibilityLabel("Play")
+                    .help("Jump to this item and start its clock, without calling any roles")
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 10))
-                .tint(AppPalette.positive)
-                .accessibilityLabel("Go")
-                .help("Jump to this item and make it active")
             }
         }
         .frame(maxHeight: .infinity, alignment: .center)

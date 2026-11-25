@@ -1977,6 +1977,7 @@ public final class CueEngine: ObservableObject {
         guard let index = roles.firstIndex(where: { $0.id == id }) else { return }
         roles.remove(at: index)
         selectedRoleIds.remove(id)
+        for itemIndex in planItems.indices { planItems[itemIndex].cueRoleIds.removeAll { $0 == id } }
         broadcastState()
     }
 

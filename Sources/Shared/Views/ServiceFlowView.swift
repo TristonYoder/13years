@@ -152,10 +152,11 @@ public struct ServiceFlowView: View {
         .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, placement in
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, cueRoleIds, placement in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
                     engine.setItemTrigger(id: id, trigger)
+                    engine.setItemCueRoles(id: id, cueRoleIds)
                 } else {
                     let countBefore = engine.planItems.count
                     let hasDetails = !(description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (servicePosition ?? .during) != .during
@@ -166,6 +167,7 @@ public struct ServiceFlowView: View {
                             engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
                         }
                         engine.setItemTrigger(id: newId, trigger)
+                        engine.setItemCueRoles(id: newId, cueRoleIds)
                     }
                     let added = engine.planItems.count - countBefore
                     if let position = placement.position, added > 0 {

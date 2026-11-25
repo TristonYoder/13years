@@ -27,7 +27,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
-    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ placement: NewItemPlacement) -> Void
+    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
 
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -37,6 +37,7 @@ public struct PlanItemEditorView: View {
     @State private var isDurationActual: Bool
     @State private var isEditingDuration = false
     @State private var trigger: ItemTrigger?
+    @State private var cueRoleIds: [String]
     @State private var commandText = ""
     @State private var commandResult = ItemCommandParser.parse("")
     @State private var placement = NewItemPlacement.atEnd
@@ -51,7 +52,7 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ placement: NewItemPlacement) -> Void
+        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
@@ -64,6 +65,7 @@ public struct PlanItemEditorView: View {
             _lengthInSeconds = State(initialValue: 5 * 60)
             _isDurationActual = State(initialValue: false)
             _trigger = State(initialValue: nil)
+            _cueRoleIds = State(initialValue: [])
             _notes = State(initialValue: [:])
             _itemDescription = State(initialValue: "")
             _servicePosition = State(initialValue: .during)
@@ -74,6 +76,7 @@ public struct PlanItemEditorView: View {
             _lengthInSeconds = State(initialValue: item.lengthInSeconds)
             _isDurationActual = State(initialValue: item.isDurationActual)
             _trigger = State(initialValue: item.trigger)
+            _cueRoleIds = State(initialValue: item.cueRoleIds)
             _notes = State(initialValue: item.notes)
             _itemDescription = State(initialValue: item.details?.description ?? "")
             _servicePosition = State(initialValue: item.details?.servicePosition ?? .during)
@@ -129,6 +132,7 @@ public struct PlanItemEditorView: View {
             isManual && !isHeader ? itemDescription : nil,
             isManual ? servicePosition : nil,
             isHeader ? nil : trigger,
+            isHeader ? [] : cueRoleIds,
             isAdding ? placement : .atEnd
         )
         dismiss()
@@ -171,6 +175,10 @@ public struct PlanItemEditorView: View {
                     } footer: {
                         Text("Most items are projected. Mark a duration as actual for a fixed, known length — a song's recorded runtime, a video clip. Follow starts this item when the one before it reaches zero. Go waits for the producer.")
                     }
+                }
+
+                if itemType.caseInsensitiveCompare("header") != .orderedSame {
+                    cueRolesSection
                 }
 
                 if isManual {
@@ -389,6 +397,36 @@ public struct PlanItemEditorView: View {
             Text("Waypoints")
         } footer: {
             Text("A checked waypoint (e.g. \u{201C}Song 1\u{201D}) is how a Stream Deck or Companion button finds this item without knowing its title. Create, rename, and delete waypoints in Settings › Waypoints.")
+        }
+    }
+
+    private var cueRolesSection: some View {
+        Section {
+            ForEach(engine.roles) { role in
+                Toggle(isOn: Binding(
+                    get: { cueRoleIds.contains(role.id) },
+                    set: { isOn in
+                        if isOn {
+                            if !cueRoleIds.contains(role.id) { cueRoleIds.append(role.id) }
+                        } else {
+                            cueRoleIds.removeAll { $0 == role.id }
+                        }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(role.name)
+                        if let person = role.personName, !person.isEmpty {
+                            Text(person)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Cue")
+        } footer: {
+            Text("Standby and GO on this item's row call these roles. With none chosen, the row shows only play, which starts the clock without a light.")
         }
     }
 

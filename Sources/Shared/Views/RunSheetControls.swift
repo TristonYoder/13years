@@ -86,3 +86,39 @@ struct RunSheetTimingToggles: View {
         .help("Show when each item ends instead of when it starts")
     }
 }
+
+struct ItemCueButtons: View {
+    @EnvironmentObject var engine: CueEngine
+    let item: PCOTimerItem
+    var compact = false
+
+    var body: some View {
+        if engine.hasCueRoles(item) {
+            let names = engine.cueRoles(for: item).map(\.name).joined(separator: ", ")
+            HStack(spacing: compact ? 4 : 8) {
+                Button { engine.standbyItem(id: item.id) } label: {
+                    Text("Standby")
+                        .font(compact ? .caption.weight(.semibold) : .callout.weight(.semibold))
+                        .frame(height: compact ? nil : 52)
+                        .padding(.horizontal, compact ? 2 : 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.cueStandby)
+                .foregroundStyle(.black)
+                .buttonBorderShape(.roundedRectangle(radius: compact ? 6 : 10))
+                .help("Standby \(names)")
+
+                Button { engine.goItem(id: item.id) } label: {
+                    Text("GO")
+                        .font(compact ? .caption.weight(.bold) : .callout.weight(.bold))
+                        .frame(height: compact ? nil : 52)
+                        .padding(.horizontal, compact ? 6 : 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.cueGo)
+                .buttonBorderShape(.roundedRectangle(radius: compact ? 6 : 10))
+                .help("Make this item active, start its clock, and call GO to \(names)")
+            }
+        }
+    }
+}

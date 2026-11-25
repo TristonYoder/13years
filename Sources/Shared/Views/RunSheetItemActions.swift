@@ -27,6 +27,22 @@ struct RunSheetItemActions: View {
             }
             .tint(AppPalette.positive)
 
+            if engine.hasCueRoles(item) {
+                Button {
+                    engine.standbyItem(id: item.id)
+                } label: {
+                    Label("Standby", systemImage: "exclamationmark.circle")
+                }
+                .tint(AppPalette.cueStandby)
+
+                Button {
+                    engine.goItem(id: item.id)
+                } label: {
+                    Label("GO", systemImage: "play.circle.fill")
+                }
+                .tint(AppPalette.cueGo)
+            }
+
             Button {
                 engine.setDurationIsActual(id: item.id, isActual: !item.isDurationActual)
             } label: {

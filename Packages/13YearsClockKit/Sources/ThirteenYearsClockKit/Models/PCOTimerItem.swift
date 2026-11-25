@@ -28,6 +28,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public var trigger: ItemTrigger?
 
+    public var cueRoleIds: [String]
+
     public init(
         id: String = UUID().uuidString,
         title: String,
@@ -44,7 +46,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         isDurationActual: Bool = false,
         waypointIds: [String] = [],
         details: PCOItemDetails? = nil,
-        trigger: ItemTrigger? = nil
+        trigger: ItemTrigger? = nil,
+        cueRoleIds: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -62,6 +65,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         self.waypointIds = waypointIds
         self.details = details
         self.trigger = trigger
+        self.cueRoleIds = cueRoleIds
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -69,7 +73,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         case servicePlanTitle, notes, noteIds, pcoServiceTypeId, pcoPlanId, isDurationActual, waypointIds
         case tagIds
         case details
-        case trigger
+        case trigger, cueRoleIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,6 +96,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
             ?? []
         details = try container.decodeIfPresent(PCOItemDetails.self, forKey: .details)
         trigger = try container.decodeIfPresent(ItemTrigger.self, forKey: .trigger)
+        cueRoleIds = try container.decodeIfPresent([String].self, forKey: .cueRoleIds) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -112,6 +117,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         try container.encode(waypointIds, forKey: .waypointIds)
         try container.encodeIfPresent(details, forKey: .details)
         try container.encodeIfPresent(trigger, forKey: .trigger)
+        if !cueRoleIds.isEmpty { try container.encode(cueRoleIds, forKey: .cueRoleIds) }
     }
 
     public var broadcastTrimmed: PCOTimerItem {
