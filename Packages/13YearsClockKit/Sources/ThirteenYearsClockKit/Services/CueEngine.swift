@@ -106,6 +106,8 @@ public final class CueEngine: ObservableObject {
     }
     private static let clockFormatDefaultsKey = "clockFormat"
     @Published public var followByDefault = false
+    @Published public var sharedPhrases: [String] = CueEngine.defaultSharedPhrases
+    public static let defaultSharedPhrases = ["Standby", "Copy", "Hold please", "Go ahead", "Need 30 seconds", "Say again"]
     @Published public var runSheetLayout = RunSheetLayoutSettings()
     private var legacyRunSheetHiddenColumns: [String]?
 
@@ -791,7 +793,8 @@ public final class CueEngine: ObservableObject {
                 plotipharRelayHost: plotipharRelayHost,
                 clockFormat: clockFormat,
                 runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout,
-                followByDefault: followByDefault ? true : nil
+                followByDefault: followByDefault ? true : nil,
+                sharedPhrases: sharedPhrases == Self.defaultSharedPhrases ? nil : sharedPhrases
             )
         )
     }
@@ -842,6 +845,7 @@ public final class CueEngine: ObservableObject {
             ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
         followByDefault = document.settings.followByDefault ?? false
+        sharedPhrases = document.settings.sharedPhrases ?? Self.defaultSharedPhrases
     }
 
     func applyPlan(of document: ProducerDocument) {
@@ -1979,6 +1983,44 @@ public final class CueEngine: ObservableObject {
         selectedRoleIds.remove(id)
         for itemIndex in planItems.indices { planItems[itemIndex].cueRoleIds.removeAll { $0 == id } }
         broadcastState()
+    }
+
+    // MARK: Canned phrases
+
+    /// Phrases offered above the composer for a role: its own, then the shared list unless the role opts out.
+    public func phrases(forRoleId roleId: String?) -> [String] {
+        let role = roleId.flatMap { id in roles.first(where: { $0.id == id }) }
+        var result = role?.cannedPhrases ?? []
+        if role?.usesSharedPhrases ?? true {
+            for phrase in sharedPhrases where !result.contains(phrase) { result.append(phrase) }
+        }
+        return result
+    }
+
+    public func setPhrases(forRoleId roleId: String, phrases: [String], usesShared: Bool) {
+        guard !isRemoteMirror, let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        let cleaned = Self.cleanedPhrases(phrases)
+        roles[index].cannedPhrases = cleaned.isEmpty ? nil : cleaned
+        roles[index].usesSharedPhrases = usesShared ? nil : false
+        broadcastState()
+    }
+
+    /// Stores an in-progress edit without trimming or deduplicating, so a field being typed in keeps its row.
+    public func roleCannedPhrasesRaw(forRoleId roleId: String, _ phrases: [String]) {
+        guard !isRemoteMirror, let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        roles[index].cannedPhrases = phrases
+    }
+
+    public func setSharedPhrases(_ phrases: [String]) {
+        guard !isRemoteMirror else { return }
+        sharedPhrases = Self.cleanedPhrases(phrases)
+    }
+
+    static func cleanedPhrases(_ phrases: [String]) -> [String] {
+        var seen = Set<String>()
+        return phrases
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     public func setPlotipharRoleId(forRoleId roleId: String, plotipharRoleId: String?) {

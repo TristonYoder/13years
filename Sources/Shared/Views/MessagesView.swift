@@ -8,6 +8,7 @@ public struct MessagesView: View {
     @State private var messageText: String = ""
     @State private var isHighPriority = false
     @State private var showingClearConfirmation = false
+    @State private var showingPhrases = false
 
     public init() {}
 
@@ -172,6 +173,8 @@ public struct MessagesView: View {
                 .help("Mark as high priority")
             }
 
+            phraseChips
+
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Message…", text: $messageText, axis: .vertical)
                     #if os(macOS)
@@ -187,6 +190,34 @@ public struct MessagesView: View {
         }
         .padding()
         .background(.regularMaterial)
+    }
+
+    private var phraseChips: some View {
+        let phrases = engine.phrases(forRoleId: targetRoleId)
+        return HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(phrases, id: \.self) { phrase in
+                        Button(phrase) {
+                            messageText = messageText.isEmpty ? phrase : messageText + " " + phrase
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+            Button {
+                showingPhrases = true
+            } label: {
+                Label("Edit Phrases", systemImage: "slider.horizontal.3")
+            }
+            .controlSize(.small)
+            .help("Edit the quick phrases, shared and per role")
+        }
+        .sheet(isPresented: $showingPhrases) {
+            CannedPhrasesView()
+                .environmentObject(engine)
+        }
     }
 
     private var threadName: String {

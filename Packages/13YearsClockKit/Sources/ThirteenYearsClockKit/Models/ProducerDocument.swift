@@ -15,6 +15,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var clockFormat: ClockFormat?
         public var runSheetLayout: RunSheetLayoutSettings?
         public var followByDefault: Bool?
+        public var sharedPhrases: [String]?
 
         public var runSheetColumnWidths: [String: Double]? {
             get { runSheetLayout?.columnWidths }
@@ -31,7 +32,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             plotipharRelayHost: String,
             clockFormat: ClockFormat? = nil,
             runSheetLayout: RunSheetLayoutSettings? = nil,
-            followByDefault: Bool? = nil
+            followByDefault: Bool? = nil,
+            sharedPhrases: [String]? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
@@ -39,10 +41,11 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             self.clockFormat = clockFormat
             self.runSheetLayout = runSheetLayout
             self.followByDefault = followByDefault
+            self.sharedPhrases = sharedPhrases
         }
 
         private enum CodingKeys: String, CodingKey {
-            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths, followByDefault
+            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths, followByDefault, sharedPhrases
         }
 
         public init(from decoder: Decoder) throws {
@@ -52,6 +55,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             plotipharRelayHost = try container.decode(String.self, forKey: .plotipharRelayHost)
             clockFormat = try container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
             followByDefault = try container.decodeIfPresent(Bool.self, forKey: .followByDefault)
+            sharedPhrases = try? container.decodeIfPresent([String].self, forKey: .sharedPhrases)
             if let layout = try container.decodeIfPresent(RunSheetLayoutSettings.self, forKey: .runSheetLayout) {
                 runSheetLayout = layout
             } else if let widths = try container.decodeIfPresent([String: Double].self, forKey: .runSheetColumnWidths) {
@@ -69,6 +73,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
             try container.encodeIfPresent(runSheetLayout, forKey: .runSheetLayout)
             try container.encodeIfPresent(followByDefault, forKey: .followByDefault)
+            try container.encodeIfPresent(sharedPhrases, forKey: .sharedPhrases)
         }
     }
 
