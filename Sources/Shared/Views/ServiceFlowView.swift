@@ -49,7 +49,7 @@ public struct ServiceFlowView: View {
         let schedule = engine.runSheetSchedule()
 
         VStack(spacing: 0) {
-            SectionHeaderBar(mode: .serviceFlow) {
+            SectionHeaderBar(mode: .serviceFlow, showsTitles: true) {
                 #if os(macOS)
                 Picker("Layout", selection: $layoutRaw) {
                     Label("List", systemImage: "list.bullet").tag(RunSheetLayout.list.rawValue)
