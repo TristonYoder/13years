@@ -26,7 +26,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public var details: PCOItemDetails?
 
-    public var autoAdvance: Bool?
+    public var trigger: ItemTrigger?
 
     public init(
         id: String = UUID().uuidString,
@@ -44,7 +44,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         isDurationActual: Bool = false,
         waypointIds: [String] = [],
         details: PCOItemDetails? = nil,
-        autoAdvance: Bool? = nil
+        trigger: ItemTrigger? = nil
     ) {
         self.id = id
         self.title = title
@@ -61,7 +61,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         self.isDurationActual = isDurationActual
         self.waypointIds = waypointIds
         self.details = details
-        self.autoAdvance = autoAdvance
+        self.trigger = trigger
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -69,7 +69,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         case servicePlanTitle, notes, noteIds, pcoServiceTypeId, pcoPlanId, isDurationActual, waypointIds
         case tagIds
         case details
-        case autoAdvance
+        case trigger
     }
 
     public init(from decoder: Decoder) throws {
@@ -91,7 +91,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
             ?? container.decodeIfPresent([String].self, forKey: .tagIds)
             ?? []
         details = try container.decodeIfPresent(PCOItemDetails.self, forKey: .details)
-        autoAdvance = try container.decodeIfPresent(Bool.self, forKey: .autoAdvance)
+        trigger = try container.decodeIfPresent(ItemTrigger.self, forKey: .trigger)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -111,7 +111,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         try container.encode(isDurationActual, forKey: .isDurationActual)
         try container.encode(waypointIds, forKey: .waypointIds)
         try container.encodeIfPresent(details, forKey: .details)
-        try container.encodeIfPresent(autoAdvance, forKey: .autoAdvance)
+        try container.encodeIfPresent(trigger, forKey: .trigger)
     }
 
     public var broadcastTrimmed: PCOTimerItem {

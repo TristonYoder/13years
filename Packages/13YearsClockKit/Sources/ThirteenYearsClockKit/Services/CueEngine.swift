@@ -105,7 +105,7 @@ public final class CueEngine: ObservableObject {
         didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
     }
     private static let clockFormatDefaultsKey = "clockFormat"
-    @Published public var autoAdvanceByDefault = false
+    @Published public var followByDefault = false
     @Published public var runSheetLayout = RunSheetLayoutSettings()
     private var legacyRunSheetHiddenColumns: [String]?
 
@@ -791,7 +791,7 @@ public final class CueEngine: ObservableObject {
                 plotipharRelayHost: plotipharRelayHost,
                 clockFormat: clockFormat,
                 runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout,
-                autoAdvanceByDefault: autoAdvanceByDefault ? true : nil
+                followByDefault: followByDefault ? true : nil
             )
         )
     }
@@ -841,7 +841,7 @@ public final class CueEngine: ObservableObject {
         runSheetLayout = document.settings.runSheetLayout
             ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
-        autoAdvanceByDefault = document.settings.autoAdvanceByDefault ?? false
+        followByDefault = document.settings.followByDefault ?? false
     }
 
     func applyPlan(of document: ProducerDocument) {
@@ -1663,7 +1663,7 @@ public final class CueEngine: ObservableObject {
         Set(roles.flatMap { $0.pagerFields ?? [] })
     }
 
-    var autoAdvanceArmedItemId: String?
+    var triggerArmedItemId: String?
 
     public func nextPlanItem(startTimer: Bool = true) {
         if isRemoteMirror {
@@ -2399,7 +2399,7 @@ public final class CueEngine: ObservableObject {
 
     func tickTimer() {
         guard !isRemoteMirror else { return }
-        if isMasterServer { evaluateAutoAdvance() }
+        if isMasterServer { evaluateTrigger() }
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
             AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .private) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .private)")

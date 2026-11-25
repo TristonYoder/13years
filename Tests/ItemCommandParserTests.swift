@@ -13,7 +13,7 @@ final class ItemCommandParserTests: XCTestCase {
         XCTAssertEqual(result.command.title, "Amazing Grace")
         XCTAssertEqual(result.command.length, .setAbsolute(seconds: 270))
         XCTAssertEqual(result.command.type, "Song")
-        XCTAssertEqual(result.command.autoAdvance, true)
+        XCTAssertEqual(result.command.trigger, .follow)
     }
 
     func testTimeUsesTheTimerParserExactly() {
@@ -37,7 +37,7 @@ final class ItemCommandParserTests: XCTestCase {
         XCTAssertEqual(result.command.title, "Offering")
         XCTAssertEqual(result.command.length, .setAbsolute(seconds: 300))
         XCTAssertEqual(result.command.type, "Media")
-        XCTAssertEqual(result.command.autoAdvance, true)
+        XCTAssertEqual(result.command.trigger, .follow)
     }
 
     func testUnquotedWordsBecomeTheTitleUntilAKeyword() {
@@ -64,9 +64,9 @@ final class ItemCommandParserTests: XCTestCase {
     }
 
     func testTriggerGoAndFollowShortcuts() {
-        XCTAssertEqual(parse("Trigger Go").command.autoAdvance, false)
-        XCTAssertEqual(parse("Follow").command.autoAdvance, true)
-        XCTAssertEqual(parse("Go").command.autoAdvance, false)
+        XCTAssertEqual(parse("Trigger Go").command.trigger, .go)
+        XCTAssertEqual(parse("Follow").command.trigger, .follow)
+        XCTAssertEqual(parse("Go").command.trigger, .go)
         XCTAssertFalse(parse("Trigger Maybe").isValid)
     }
 

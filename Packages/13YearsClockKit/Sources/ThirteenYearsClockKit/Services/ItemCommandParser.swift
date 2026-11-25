@@ -9,7 +9,7 @@ public struct ItemCommand: Equatable, Sendable {
     public var title: String?
     public var type: String?
     public var length: TimerInputParser.Action?
-    public var autoAdvance: Bool?
+    public var trigger: ItemTrigger?
     public var isActual: Bool?
     public var servicePosition: PCOServicePosition?
 
@@ -139,11 +139,11 @@ public enum ItemCommandParser {
                     break
                 }
                 index += 1
-                command.autoAdvance = value == .follow
+                command.trigger = value == .follow ? .follow : .go
             case .follow:
-                command.autoAdvance = true
+                command.trigger = .follow
             case .go:
-                command.autoAdvance = false
+                command.trigger = .go
             case .thru:
                 errors.append("Thru goes after an item, like Item 4 Thru 6")
             case nil:
