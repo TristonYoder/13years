@@ -3,6 +3,13 @@
 
 import SwiftUI
 
+public struct NewItemPlacement: Equatable {
+    public var position: Int?
+    public var count: Int
+
+    public static let atEnd = NewItemPlacement(position: nil, count: 1)
+}
+
 public struct PlanItemEditorView: View {
     public enum Mode: Identifiable {
         case add
@@ -20,7 +27,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
-    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?) -> Void
+    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?, _ placement: NewItemPlacement) -> Void
 
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +37,10 @@ public struct PlanItemEditorView: View {
     @State private var isDurationActual: Bool
     @State private var isEditingDuration = false
     @State private var autoAdvance: Bool?
+    @State private var commandText = ""
+    @State private var commandResult = ItemCommandParser.parse("")
+    @State private var placement = NewItemPlacement.atEnd
+    @FocusState private var commandFocused: Bool
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -40,7 +51,7 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?) -> Void
+        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ autoAdvance: Bool?, _ placement: NewItemPlacement) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
@@ -117,13 +128,17 @@ public struct PlanItemEditorView: View {
             id, title, itemType, lengthInSeconds, notes, isDurationActual,
             isManual && !isHeader ? itemDescription : nil,
             isManual ? servicePosition : nil,
-            isHeader ? nil : autoAdvance
+            isHeader ? nil : autoAdvance,
+            isAdding ? placement : .atEnd
         )
         dismiss()
     }
 
     private var editorForm: some View {
             Form {
+                if isAdding {
+                    commandSection
+                }
                 Section("Item") {
                     TextField("Title", text: $title)
 
@@ -168,6 +183,57 @@ public struct PlanItemEditorView: View {
                 }
             }
             .formStyle(.grouped)
+    }
+
+    private var commandSection: some View {
+        Section {
+            TextField("Command", text: $commandText, prompt: Text("\u{201C}Amazing Grace\u{201D} Time 4:30 Type Song"))
+                .font(.system(.body, design: .monospaced))
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .focused($commandFocused)
+                .onSubmit { if canSave { save() } }
+                .onChange(of: commandText) { _, text in applyCommand(text) }
+                .onAppear { commandFocused = true }
+            if !commandText.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text(commandSummary)
+                    .font(.footnote)
+                    .foregroundStyle(commandResult.isValid ? Color.secondary : AppPalette.warning)
+            }
+        } header: {
+            Text("Quick add")
+        } footer: {
+            Text("Store Item 4 Thru 6 \u{201C}Song\u{201D} Time 4:30 Type Song Trigger Follow /Actual. Everything but the name is optional, and times work like the timer.")
+        }
+    }
+
+    private func applyCommand(_ text: String) {
+        let result = ItemCommandParser.parse(text)
+        commandResult = result
+        let command = result.command
+        if let value = command.title { title = value }
+        if let value = command.type { itemType = value }
+        if command.length != nil { lengthInSeconds = command.resolvedLength(base: 5 * 60) }
+        if command.autoAdvance != nil { autoAdvance = command.autoAdvance }
+        if let value = command.isActual { isDurationActual = value }
+        if let value = command.servicePosition { servicePosition = value }
+        placement = NewItemPlacement(position: command.position, count: max(1, min(command.count, ItemCommandParser.maxCount)))
+    }
+
+    private var commandSummary: String {
+        guard commandResult.isValid else { return commandResult.errors.joined(separator: " \u{00B7} ") }
+        let command = commandResult.command
+        var parts: [String] = []
+        if let type = command.type { parts.append(type) }
+        parts.append(command.title.map { "\u{201C}\($0)\u{201D}" } ?? "Untitled")
+        if command.length != nil { parts.append(formattedLength) }
+        if let auto = command.autoAdvance { parts.append(auto ? "Follow" : "Go") }
+        if command.isActual == true { parts.append("Actual") }
+        if let position = command.servicePosition { parts.append(position == .pre ? "Before event" : "After event") }
+        if let position = command.position { parts.append(command.count > 1 ? "Items \(position)\u{2013}\(position + command.count - 1)" : "Item \(position)") }
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     private var placementSection: some View {

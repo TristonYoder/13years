@@ -152,17 +152,28 @@ public struct ServiceFlowView: View {
         .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, autoAdvance in
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, autoAdvance, placement in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
                     engine.setItemAutoAdvance(id: id, autoAdvance)
                 } else {
-                    let newId = engine.addPlanItem(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual)
+                    let countBefore = engine.planItems.count
                     let hasDetails = !(description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (servicePosition ?? .during) != .during
-                    if let newId, hasDetails {
-                        engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
+                    for _ in 0..<placement.count {
+                        let newId = engine.addPlanItem(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual)
+                        guard let newId else { continue }
+                        if hasDetails {
+                            engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
+                        }
+                        engine.setItemAutoAdvance(id: newId, autoAdvance)
                     }
-                    if let newId { engine.setItemAutoAdvance(id: newId, autoAdvance) }
+                    let added = engine.planItems.count - countBefore
+                    if let position = placement.position, added > 0 {
+                        let target = min(max(position - 1, 0), countBefore)
+                        if target < countBefore {
+                            engine.movePlanItems(fromOffsets: IndexSet(countBefore..<(countBefore + added)), toOffset: target)
+                        }
+                    }
                 }
             }
         }
