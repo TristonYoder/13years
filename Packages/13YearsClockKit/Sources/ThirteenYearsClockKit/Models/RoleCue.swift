@@ -12,6 +12,10 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var plotipharRoleId: String?
     public var pcoTeamPosition: String?
     public var lastUpdated: Date
+    /// Quick phrases offered above the message composer for this role.
+    public var cannedPhrases: [String]?
+    /// Whether the shared phrase list is also offered to this role (nil means yes).
+    public var usesSharedPhrases: Bool?
 
     public var pagerItems: [RolePagerItem]?
 
@@ -77,7 +81,7 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, personName, clockFormat, state, plotipharRoleId, pcoTeamPosition, lastUpdated
-        case assignedNoteCategories, pagerFields, pagerItems
+        case assignedNoteCategories, pagerFields, pagerItems, cannedPhrases, usesSharedPhrases
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,6 +94,8 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         plotipharRoleId = try container.decodeIfPresent(String.self, forKey: .plotipharRoleId)
         pcoTeamPosition = try container.decodeIfPresent(String.self, forKey: .pcoTeamPosition)
         lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+        cannedPhrases = try? container.decodeIfPresent([String].self, forKey: .cannedPhrases)
+        usesSharedPhrases = try? container.decodeIfPresent(Bool.self, forKey: .usesSharedPhrases)
         if let raw = try? container.decodeIfPresent([String].self, forKey: .pagerItems) {
             pagerItems = RolePagerItem.decodeTolerant(raw)
         } else {
@@ -109,6 +115,8 @@ public struct RoleCue: Identifiable, Codable, Equatable, Hashable, Sendable {
         try container.encodeIfPresent(plotipharRoleId, forKey: .plotipharRoleId)
         try container.encodeIfPresent(pcoTeamPosition, forKey: .pcoTeamPosition)
         try container.encode(lastUpdated, forKey: .lastUpdated)
+        try container.encodeIfPresent(cannedPhrases, forKey: .cannedPhrases)
+        try container.encodeIfPresent(usesSharedPhrases, forKey: .usesSharedPhrases)
         try container.encode(assignedNoteCategories, forKey: .assignedNoteCategories)
         try container.encodeIfPresent(pagerFields?.map(\.rawValue), forKey: .pagerFields)
         try container.encodeIfPresent(pagerItems?.map(\.token), forKey: .pagerItems)

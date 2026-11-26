@@ -2,6 +2,11 @@
 // Copyright (C) 2026 Triston Yoder
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 public struct WaypointLibraryView: View {
     @EnvironmentObject var engine: CueEngine
@@ -11,6 +16,7 @@ public struct WaypointLibraryView: View {
     @State private var renamingWaypointId: String?
     @State private var renameText: String = ""
     @State private var pendingDeleteWaypoint: Waypoint?
+    @State private var colorsWaypoint: Waypoint?
 
     public init() {}
 
@@ -26,6 +32,13 @@ public struct WaypointLibraryView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            #if os(macOS) || os(iOS)
+            .sheet(item: $colorsWaypoint) { waypoint in
+                TimerColorOverrideSheet(title: "\u{201C}\(waypoint.name)\u{201D}", current: waypoint.timerColors) { scale in
+                    engine.setWaypointTimerColors(id: waypoint.id, scale)
+                }
+            }
+            #endif
             .alert("Rename Waypoint", isPresented: Binding(
                 get: { renamingWaypointId != nil },
                 set: { if !$0 { renamingWaypointId = nil } }
@@ -92,22 +105,34 @@ public struct WaypointLibraryView: View {
     }
 
     private func waypointRow(_ waypoint: Waypoint) -> some View {
-        HStack {
+        let assignedTitle = engine.itemId(forWaypointId: waypoint.id)
+            .flatMap { id in engine.planItems.first(where: { $0.id == id })?.title }
+        return HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Image(systemName: Waypoint.symbolName)
                         .foregroundStyle(.secondary)
                     Text(waypoint.name)
-                    Text(waypoint.slug)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .fontWeight(.semibold)
                 }
-                Text(assignmentDescription(for: waypoint))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                Text(waypoint.slug)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
+            assignmentChip(assignedTitle)
             Spacer()
+            if waypoint.timerColors != nil {
+                Image(systemName: "paintpalette.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Has its own timer colors")
+            }
             #if os(macOS)
+            RowActionButton(systemImage: "doc.on.doc", label: "Copy slug") {
+                copySlug(waypoint)
+            }
+            RowActionButton(systemImage: "paintpalette", label: "Timer colors\u{2026}") {
+                colorsWaypoint = waypoint
+            }
             RowActionButton(systemImage: "pencil", label: "Rename waypoint\u{2026}") {
                 renameText = waypoint.name
                 renamingWaypointId = waypoint.id
@@ -126,12 +151,47 @@ public struct WaypointLibraryView: View {
             }
             .tint(AppPalette.info)
 
+            Button {
+                copySlug(waypoint)
+            } label: {
+                Label("Copy Slug", systemImage: "doc.on.doc")
+            }
+            .tint(.gray)
+
+            Button {
+                colorsWaypoint = waypoint
+            } label: {
+                Label("Colors\u{2026}", systemImage: "paintpalette")
+            }
+
             Button(role: .destructive) {
                 pendingDeleteWaypoint = waypoint
             } label: {
                 Label("Delete\u{2026}", systemImage: "trash")
             }
         }
+    }
+
+    /// Green when an item in this week's flow carries the waypoint, grey when nothing does.
+    private func assignmentChip(_ title: String?) -> some View {
+        Text(title ?? "Unassigned")
+            .font(.caption.weight(.medium))
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .foregroundStyle(title == nil ? Color.secondary : AppPalette.positive)
+            .background((title == nil ? Color.primary.opacity(0.08) : AppPalette.positive.opacity(0.16)), in: Capsule())
+    }
+
+    private func copySlug(_ waypoint: Waypoint) {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(waypoint.slug, forType: .string)
+        #else
+        #if os(iOS)
+        UIPasteboard.general.string = waypoint.slug
+        #endif
+        #endif
     }
 
     private func assignmentDescription(for waypoint: Waypoint) -> String {

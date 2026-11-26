@@ -178,8 +178,25 @@
   }
   .conn-row[data-live="1"] .dot { background: var(--pal-positive); }
 
-  [data-stage="amber"] { color: var(--pal-warning); color: color-mix(in srgb, var(--fg) 70%, var(--pal-warning)); }
-  [data-stage="red"] { color: var(--pal-negative); color: color-mix(in srgb, var(--fg) 60%, var(--pal-negative)); }
+  /* Countdown effects from the timer color scale. None is standard; Reduce Motion plays none of them. */
+  [data-effect="pulse"] { animation: tc-pulse 1.4s ease-in-out infinite; }
+  [data-effect="blink"] { animation: tc-blink 1s steps(1, end) infinite; }
+  [data-effect="flicker"] { animation: tc-flicker 1.1s linear infinite; }
+  [data-effect="glitch"] { animation: tc-glitch 2.2s steps(1, end) infinite; }
+  @keyframes tc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+  @keyframes tc-blink { 0%, 59.9% { opacity: 1; } 60%, 100% { opacity: 0.1; } }
+  @keyframes tc-flicker {
+    0% { opacity: 1; } 8% { opacity: 0.2; } 12% { opacity: 1; } 31% { opacity: 1; } 34% { opacity: 0.55; } 37% { opacity: 1; }
+    58% { opacity: 1; } 60% { opacity: 0.25; } 63% { opacity: 0.9; } 66% { opacity: 0.3; } 69% { opacity: 1; } 100% { opacity: 1; }
+  }
+  @keyframes tc-glitch {
+    0%, 12.7%, 100% { transform: none; text-shadow: none; }
+    1% { transform: translateX(-0.04em); text-shadow: 0.05em 0 #0ff, -0.05em 0 #f00; }
+    4% { transform: translateX(0.05em); text-shadow: -0.04em 0 #0ff, 0.04em 0 #f00; }
+    7% { transform: translateX(-0.02em) skewX(-6deg); text-shadow: 0.06em 0 #0ff, -0.03em 0 #f00; }
+    10% { transform: translateX(0.03em); text-shadow: -0.05em 0 #0ff, 0.05em 0 #f00; }
+  }
+  @media (prefers-reduced-motion: reduce) { [data-effect] { animation: none; } }
   #iconRow {
     display: flex;
     gap: calc(var(--u) * 0.01);
@@ -1437,11 +1454,42 @@ function anchorNextBoundaryMs(anchor, producerNowMs) {
   return 1000 - (((raw % 1000) + 1000) % 1000) + 1;
 }
 
-function countdownStage(remaining) {
-  if (typeof remaining !== "number" || isNaN(remaining)) return "";
-  if (remaining < 30) return "red";
-  if (remaining < 60) return "amber";
-  return "";
+const TIMER_EFFECTS = ["pulse", "blink", "flicker", "glitch"];
+
+// The countdown's color and effect from the producer's timer color scale (state.timer.colors).
+// Lead-up stops: the one closest to zero among those reached. Overtime stops: the deepest reached,
+// else the scale's overtime color. With no scale nothing is colored: the pager never invents one.
+function timerColorStyle(scale, remaining, length) {
+  const none = { color: "", effect: "none" };
+  if (!scale || typeof remaining !== "number" || isNaN(remaining)) return none;
+  const hex = (v) => (typeof v === "string" && /^[0-9a-fA-F]{6}$/.test(v) ? "#" + v : "");
+  const effectOf = (v) => (TIMER_EFFECTS.indexOf(v) !== -1 ? v : "none");
+  const stops = Array.isArray(scale.stops) ? scale.stops : [];
+  const len = typeof length === "number" && length > 0 ? length : 0;
+  const threshold = (stop) => (stop.unit === "percent" ? len * Math.min(Math.max(Number(stop.value) || 0, 0), 100) / 100 : Number(stop.value) || 0);
+  if (remaining < 0) {
+    const over = -remaining;
+    // Not over by enough yet: keep the lead-up look, as if exactly at zero.
+    const start = scale.overtimeStart;
+    const startAt = start ? threshold({ unit: start.unit, value: start.value }) : 0;
+    if (over < startAt) return timerColorStyle(scale, 0, length);
+    let best = null;
+    for (const stop of stops) {
+      if (stop.phase !== "overtime") continue;
+      const t = threshold(stop);
+      if (over >= t && (!best || t > best.t)) best = { stop, t };
+    }
+    if (best) return { color: hex(best.stop.colorHex), effect: effectOf(best.stop.effect) };
+    return { color: hex(scale.overtimeHex), effect: effectOf(scale.overtimeEffect) };
+  }
+  let best = null;
+  for (const stop of stops) {
+    if (stop.phase === "overtime") continue;
+    const t = threshold(stop);
+    if (remaining <= t && (!best || t < best.t)) best = { stop, t };
+  }
+  if (best) return { color: hex(best.stop.colorHex), effect: effectOf(best.stop.effect) };
+  return { color: hex(scale.onTimeHex), effect: "none" };
 }
 
 function backoffDelay(attempt, rand) {
@@ -2511,8 +2559,6 @@ const params = new URLSearchParams(location.search);
 
 const ROLE_PARAM = (params.get("role") || "").trim();
 
-const STAGES_ENABLED = params.get("stages") === "1";
-
 const LAYOUT_PARAM = (params.get("layout") || "auto").toLowerCase().replace(/[^a-z]/g, "");
 
 const ROLE_STORAGE_KEY = "13years.webpager.role";
@@ -2927,13 +2973,17 @@ function setHidden(node, hidden) {
   node.classList.toggle("hidden", hidden);
 }
 
-function setStage(node, remaining) {
-  if (!STAGES_ENABLED) return;
-  const stage = typeof remaining === "number" ? countdownStage(remaining) : "";
-  if (node.__s === stage) return;
-  node.__s = stage;
-  if (stage) node.dataset.stage = stage;
-  else delete node.dataset.stage;
+// Colors and animates a countdown from the timer color scale the producer sent. Plays nothing without one.
+function setTimerStyle(node, remaining) {
+  const timer = snapshot && snapshot.timer;
+  const length = timer && timer.item ? timer.item.lengthInSeconds : 0;
+  const style = typeof remaining === "number" && timer ? timerColorStyle(timer.colors, remaining, length) : { color: "", effect: "none" };
+  const key = style.color + "|" + style.effect;
+  if (node.__ts === key) return;
+  node.__ts = key;
+  node.style.color = style.color;
+  if (style.effect === "none") delete node.dataset.effect;
+  else node.dataset.effect = style.effect;
 }
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -3090,7 +3140,7 @@ function renderCountdown(view, hideEmpty) {
     view.countdown.__em = text.length;
     view.countdown.style.setProperty("--em", String(countdownEmWidth(text) * 1.04));
   }
-  setStage(view.countdown, hasCountdown ? remaining : null);
+  setTimerStyle(view.countdown, hasCountdown ? remaining : null);
   setText(view.tag, hasCountdown ? (snapshot.timer.isDurationActualForDisplay ? "ACTUAL" : "PROJECTED") : "");
   setHidden(view.tag, !hasCountdown);
   if (hideEmpty) setHidden(view.countdown, !hasCountdown);
@@ -3304,7 +3354,7 @@ function renderLowerThird() {
   const hasCountdown = Boolean(item) && !isHeader && remaining !== null;
   const countdownText = hasCountdown ? formatDuration(remaining) : "--:--";
   setText(el.ltCountdownValue, countdownText);
-  setStage(el.ltCountdownValue, hasCountdown ? remaining : null);
+  setTimerStyle(el.ltCountdownValue, hasCountdown ? remaining : null);
   setHidden(el.ltDuration, !hasCountdown);
   let durationText = "";
   if (hasCountdown) {

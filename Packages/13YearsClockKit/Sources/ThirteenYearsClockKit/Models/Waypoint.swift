@@ -6,10 +6,13 @@ import Foundation
 public struct Waypoint: Identifiable, Codable, Equatable, Hashable, Sendable {
     public let id: String
     public var name: String
+    /// Overrides the producer-wide timer color scale for items at this waypoint.
+    public var timerColors: TimerColorScale?
 
-    public init(id: String = UUID().uuidString, name: String) {
+    public init(id: String = UUID().uuidString, name: String, timerColors: TimerColorScale? = nil) {
         self.id = id
         self.name = name
+        self.timerColors = timerColors
     }
 
     public static let symbolName = "signpost.right"

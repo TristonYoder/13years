@@ -11,7 +11,7 @@ const source = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const names = [
   "fnv1a64", "rolesCanonical", "timerCanonical", "messagesCanonical", "planCanonical", "localHashes",
   "createClockSync", "anchorElapsedMs", "anchorRemainingSeconds", "anchorNextBoundaryMs", "createLink",
-  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "countdownStage",
+  "backoffDelay", "lowerThirdForViewport", "layoutFor", "formatLocalTime", "msUntilNextSecond", "msUntilNextProducerSecond", "formatProducerClock", "applyClockFormat", "countdownEmWidth", "createRoleSelection", "matchRole", "timerColorStyle",
   "createWakeLock", "restRequest", "validAnchor", "sanitizeTimer", "nextItemFor", "notesForRole", "cueWordFor", "escapeHtml", "noteEntryHTML", "formatProjectedLength", "clockSlotFor", "fitScale", "bottomRowMode", "parseCueDisplay", "cueDisplayFor", "parseFlagParam", "disconnectPhase", "connectionStateText", "syncQualityText", "EXTENDED_DISCONNECT_MS", "SIGNAL_STALE_MS",
   "pagerFieldsForRole", "noteCategoriesForRole", "leaderBylineText", "lengthText", "itemDetailSegments", "itemDetailsLine", "currentStartMs", "nextStartMs", "detailBpmText", "titleCaseWords",
 ];
@@ -762,15 +762,28 @@ test("role param applies only at load, later choices persist", () => {
   assert.equal(core.matchRole(roles, "host"), "r1");
 });
 
-test("countdown stages", () => {
-  assert.equal(core.countdownStage(61), "");
-  assert.equal(core.countdownStage(60), "");
-  assert.equal(core.countdownStage(59), "amber");
-  assert.equal(core.countdownStage(30), "amber");
-  assert.equal(core.countdownStage(29), "red");
-  assert.equal(core.countdownStage(0), "red");
-  assert.equal(core.countdownStage(-12), "red");
-  assert.equal(core.countdownStage(null), "");
+test("timer color style follows the producer's scale and never invents one", () => {
+  const scale = {
+    onTimeHex: null,
+    stops: [
+      { id: "w", unit: "percent", value: 10, colorHex: "FFD60A" },
+      { id: "o", phase: "overtime", unit: "seconds", value: 3, colorHex: "CC1717", effect: "pulse" },
+    ],
+    overtimeHex: "CC1717",
+    overtimeEffect: "flicker",
+  };
+  assert.deepEqual(core.timerColorStyle(scale, 200, 300), { color: "", effect: "none" });
+  assert.deepEqual(core.timerColorStyle(scale, 30, 300), { color: "#FFD60A", effect: "none" });
+  assert.deepEqual(core.timerColorStyle(scale, -1, 300), { color: "#CC1717", effect: "flicker" });
+  assert.deepEqual(core.timerColorStyle(scale, -3, 300), { color: "#CC1717", effect: "pulse" });
+  assert.deepEqual(core.timerColorStyle(undefined, -30, 300), { color: "", effect: "none" });
+  assert.deepEqual(core.timerColorStyle(scale, null, 300), { color: "", effect: "none" });
+  const delayed = { stops: [{ id: "w", unit: "seconds", value: 30, colorHex: "FFD60A" }], overtimeHex: "CC1717", overtimeEffect: "blink", overtimeStart: { value: 10, unit: "seconds" } };
+  assert.deepEqual(core.timerColorStyle(delayed, -5, 300), { color: "#FFD60A", effect: "none" });
+  assert.deepEqual(core.timerColorStyle(delayed, -10, 300), { color: "#CC1717", effect: "blink" });
+  const withOnTime = { onTimeHex: "34C759", stops: [], overtimeHex: "FF0000", overtimeEffect: "bogus" };
+  assert.deepEqual(core.timerColorStyle(withOnTime, 100, 300), { color: "#34C759", effect: "none" });
+  assert.deepEqual(core.timerColorStyle(withOnTime, -1, 300), { color: "#FF0000", effect: "none" });
 });
 
 test("wake lock is feature detected and re-acquired after release", async () => {

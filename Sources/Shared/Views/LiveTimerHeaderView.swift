@@ -40,26 +40,38 @@ public struct LiveTimerHeaderView: View {
 
     public init() {}
 
+    /// Errors sit in their own tinted banner. On macOS the leading inset keeps them clear of the window controls.
+    private func headerError(_ text: String, systemImage: String, color: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.vertical, 6)
+            #if os(macOS)
+            .padding(.leading, 84)
+            #else
+            .padding(.leading, 12)
+            #endif
+            .padding(.trailing, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityElement(children: .combine)
+    }
+
     public var body: some View {
         VStack(spacing: 10) {
             if !engine.isLANConnected {
-                Label("Not connected to the LAN cue network — retrying in the background", systemImage: "wifi.exclamationmark")
-                    .foregroundStyle(AppPalette.negative)
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                headerError("Not connected to the LAN cue network \u{2014} retrying in the background", systemImage: "wifi.exclamationmark", color: AppPalette.negative)
             }
 
             if let error = engine.pcoLastError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                headerError(error, systemImage: "exclamationmark.triangle.fill", color: AppPalette.warning)
             }
 
             HStack {
                 HStack {
                     #if os(macOS)
-                    Color.clear.frame(width: engine.isRemoteMirror ? 1 : 64, height: 1)
+                    PlanHeaderMenu()
+                        .padding(.top, 22)
                     #endif
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,11 +220,17 @@ public struct LiveTimerHeaderView: View {
         .help("Actual is a temporary override for when you know the real time from outside the plan — e.g. a stream delay — Projected is the plan's own projection.")
     }
 
+    /// The countdown's color comes from the timer color scale alone; nil is the normal text color.
+    private func readoutColor(for item: PCOTimerItem) -> Color {
+        engine.timerColorHex(for: item).flatMap(Color.init(timerHex:)) ?? .primary
+    }
+
     @ViewBuilder
     private func remainingTimeControl(_ item: PCOTimerItem) -> some View {
         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold))
             .font(.inter(size: 52, weight: .black))
-            .foregroundStyle(isEditingTimer ? Color.primary : (item.isOvertime ? AppPalette.timerOvertime : .primary))
+            .foregroundStyle(isEditingTimer ? Color.primary : readoutColor(for: item))
+            .timerEffect(isEditingTimer ? .none : engine.timerStyle(for: item).effect)
             #if !os(tvOS)
             .contentTransition(.numericText())
             #endif
@@ -242,5 +260,60 @@ public struct LiveTimerHeaderView: View {
                     engine.setTimerRemainingTime(seconds: time.secondsUntil(now: Date()))
                 }
             }
+    }
+}
+
+/// The line between the header and the controls below it. It doubles as the current item's progress:
+/// a soft comet that grows with the item's elapsed time, in the timer color scale's color. No labels.
+struct PlanProgressRail: View {
+    @EnvironmentObject var engine: CueEngine
+    @State private var shown: Double = 0
+
+    /// The scale's color for the active item; with none, a neutral tone.
+    private var tint: Color {
+        engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) }.flatMap(Color.init(timerHex:)) ?? Color.primary
+    }
+
+    /// The scale's effect for the active item; an item that has run over pulses the rail even with none set.
+    private var effect: TimerEffect {
+        guard let item = engine.activeTimerItem else { return .none }
+        let effect = engine.timerStyle(for: item).effect
+        return effect == .none && item.isOvertime ? .pulse : effect
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.primary.opacity(0.10))
+                if engine.activeTimerItem != nil {
+                    let width = proxy.size.width * shown
+                    Rectangle()
+                        .fill(LinearGradient(colors: [tint.opacity(0), tint.opacity(0.5)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: width)
+                        .timerEffect(effect)
+                        .overlay(alignment: .trailing) {
+                            // A short, slightly brighter head so the leading edge reads without a hard line.
+                            Rectangle()
+                                .fill(LinearGradient(colors: [tint.opacity(0), tint.opacity(0.85)], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: min(width, 36))
+                        }
+                        .animation(.easeInOut(duration: 0.4), value: tint)
+                }
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
+        .onChange(of: engine.itemProgress, initial: true) { old, new in
+            if new < old {
+                // A new item starts over: let the old fill drain away instead of snapping.
+                withAnimation(.easeOut(duration: 0.45)) { shown = new }
+            } else if (new - old) * Double(max(engine.activeTimerItem?.lengthInSeconds ?? 1, 1)) <= 1.5 {
+                // An ordinary one-second tick: glide at constant speed into the next, so the bar never lurches.
+                withAnimation(.linear(duration: 1.0)) { shown = new }
+            } else {
+                // A jump (skipping ahead, editing the length): ease.
+                withAnimation(.easeInOut(duration: 0.8)) { shown = new }
+            }
+        }
     }
 }

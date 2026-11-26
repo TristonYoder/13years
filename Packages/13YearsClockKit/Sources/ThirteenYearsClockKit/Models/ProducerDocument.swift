@@ -14,6 +14,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         public var plotipharRelayHost: String
         public var clockFormat: ClockFormat?
         public var runSheetLayout: RunSheetLayoutSettings?
+        public var followByDefault: Bool?
+        public var sharedPhrases: [String]?
+        public var timerColors: TimerColorScale?
 
         public var runSheetColumnWidths: [String: Double]? {
             get { runSheetLayout?.columnWidths }
@@ -29,17 +32,23 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             pcoDefaultServiceTypeId: String?,
             plotipharRelayHost: String,
             clockFormat: ClockFormat? = nil,
-            runSheetLayout: RunSheetLayoutSettings? = nil
+            runSheetLayout: RunSheetLayoutSettings? = nil,
+            followByDefault: Bool? = nil,
+            sharedPhrases: [String]? = nil,
+            timerColors: TimerColorScale? = nil
         ) {
             self.hourFormatThreshold = hourFormatThreshold
             self.pcoDefaultServiceTypeId = pcoDefaultServiceTypeId
             self.plotipharRelayHost = plotipharRelayHost
             self.clockFormat = clockFormat
             self.runSheetLayout = runSheetLayout
+            self.followByDefault = followByDefault
+            self.sharedPhrases = sharedPhrases
+            self.timerColors = timerColors
         }
 
         private enum CodingKeys: String, CodingKey {
-            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths
+            case hourFormatThreshold, pcoDefaultServiceTypeId, plotipharRelayHost, clockFormat, runSheetLayout, runSheetColumnWidths, followByDefault, sharedPhrases, timerColors
         }
 
         public init(from decoder: Decoder) throws {
@@ -48,6 +57,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             pcoDefaultServiceTypeId = try container.decodeIfPresent(String.self, forKey: .pcoDefaultServiceTypeId)
             plotipharRelayHost = try container.decode(String.self, forKey: .plotipharRelayHost)
             clockFormat = try container.decodeIfPresent(ClockFormat.self, forKey: .clockFormat)
+            followByDefault = try container.decodeIfPresent(Bool.self, forKey: .followByDefault)
+            sharedPhrases = try? container.decodeIfPresent([String].self, forKey: .sharedPhrases)
+            timerColors = try? container.decodeIfPresent(TimerColorScale.self, forKey: .timerColors)
             if let layout = try container.decodeIfPresent(RunSheetLayoutSettings.self, forKey: .runSheetLayout) {
                 runSheetLayout = layout
             } else if let widths = try container.decodeIfPresent([String: Double].self, forKey: .runSheetColumnWidths) {
@@ -64,6 +76,9 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
             try container.encode(plotipharRelayHost, forKey: .plotipharRelayHost)
             try container.encodeIfPresent(clockFormat, forKey: .clockFormat)
             try container.encodeIfPresent(runSheetLayout, forKey: .runSheetLayout)
+            try container.encodeIfPresent(followByDefault, forKey: .followByDefault)
+            try container.encodeIfPresent(sharedPhrases, forKey: .sharedPhrases)
+            try container.encodeIfPresent(timerColors, forKey: .timerColors)
         }
     }
 
@@ -74,8 +89,12 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var waypoints: [Waypoint]
     public var serviceSchedules: [ServiceSchedule]
     public var planItems: [PCOTimerItem]
+    /// Name of the plan as a whole; stored once here rather than on every item.
+    public var planTitle: String?
     public var activeItemIndex: Int
     public var eventTimes: [EventTime]
+    /// Rehearsal times entered by hand for a plan that is not synced from Planning Center.
+    public var rehearsalTimes: [EventTime]?
     public var liveEventTimeId: String?
     public var pcoPlanContext: PCOPlanContext?
     public var itemActuals: [ItemActual]?
@@ -90,8 +109,10 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         waypoints: [Waypoint],
         serviceSchedules: [ServiceSchedule],
         planItems: [PCOTimerItem],
+        planTitle: String? = nil,
         activeItemIndex: Int,
         eventTimes: [EventTime] = [],
+        rehearsalTimes: [EventTime]? = nil,
         liveEventTimeId: String? = nil,
         pcoPlanContext: PCOPlanContext? = nil,
         itemActuals: [ItemActual]? = nil,
@@ -105,8 +126,10 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.waypoints = waypoints
         self.serviceSchedules = serviceSchedules
         self.planItems = planItems
+        self.planTitle = planTitle
         self.activeItemIndex = activeItemIndex
         self.eventTimes = eventTimes
+        self.rehearsalTimes = rehearsalTimes
         self.liveEventTimeId = liveEventTimeId
         self.pcoPlanContext = pcoPlanContext
         self.itemActuals = itemActuals
@@ -154,7 +177,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, planTitle, activeItemIndex, eventTimes, rehearsalTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -166,8 +189,11 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         waypoints = try container.decodeIfPresent([Waypoint].self, forKey: .waypoints) ?? []
         serviceSchedules = try container.decodeIfPresent([ServiceSchedule].self, forKey: .serviceSchedules) ?? []
         planItems = try container.decodeIfPresent([PCOTimerItem].self, forKey: .planItems) ?? []
+        // Documents from before the title moved to the plan carried it on each item.
+        planTitle = try container.decodeIfPresent(String.self, forKey: .planTitle) ?? planItems.lazy.compactMap(\.servicePlanTitle).first
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
+        rehearsalTimes = try? container.decodeIfPresent([EventTime].self, forKey: .rehearsalTimes)
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
         pcoPlanContext = try container.decodeIfPresent(PCOPlanContext.self, forKey: .pcoPlanContext)
         itemActuals = try container.decodeIfPresent([ItemActual].self, forKey: .itemActuals)

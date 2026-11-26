@@ -231,7 +231,8 @@ extension PagerPresentationState {
                 ?? .systemDefault,
             receivedNextItem: apiState.timer?.nextItem,
             producerUTCOffsetSeconds: apiState.utcOffsetSeconds,
-            nextItemStartDate: apiState.timer?.nextStartsAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+            nextItemStartDate: apiState.timer?.nextStartsAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) },
+            timerColors: apiState.timer?.colors
         )
     }
 }

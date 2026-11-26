@@ -221,7 +221,8 @@ final class PCOTwoWaySyncEngineTests: XCTestCase {
         XCTAssertEqual(engine.activeTimerItem?.isRunning, true)
         XCTAssertEqual(engine.activeTimerItem?.lengthInSeconds, 300)
         XCTAssertEqual(engine.activeTimerItem?.notes["Lights"], "warm")
-        XCTAssertEqual(engine.planItems[1].servicePlanTitle, "Sunday")
+        XCTAssertEqual(engine.planTitle, "Sunday")
+        XCTAssertNil(engine.planItems[1].servicePlanTitle)
 
         await engine.checkPCOForChanges()
         XCTAssertNil(engine.pcoPendingChanges)

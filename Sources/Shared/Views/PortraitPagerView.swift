@@ -179,9 +179,10 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                 Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation.hourFormatThreshold))
                     .font(.inter(size: m.countdownFontSize * scale, weight: .black))
                     .monospacedDigit()
-                    .foregroundColor(.white)
+                    .foregroundColor(presentation.timerTint(style: style) ?? .white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.3)
+                    .timerEffect(presentation.timerEffect)
 
                 Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
                     .font(.system(size: m.tagFontSize * scale, weight: .bold))

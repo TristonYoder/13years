@@ -3,6 +3,13 @@
 
 import SwiftUI
 
+public struct NewItemPlacement: Equatable {
+    public var position: Int?
+    public var count: Int
+
+    public static let atEnd = NewItemPlacement(position: nil, count: 1)
+}
+
 public struct PlanItemEditorView: View {
     public enum Mode: Identifiable {
         case add
@@ -16,11 +23,19 @@ public struct PlanItemEditorView: View {
         }
     }
 
+    enum EditorTab: String, CaseIterable, Identifiable {
+        case form = "Form"
+        case quick = "Quick add"
+        case importText = "Import text"
+        var id: String { rawValue }
+    }
+
     private static let commonTypes = ["Item", "Song", "Header", "Media"]
 
     let mode: Mode
     let knownCategories: [String]
-    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
+    let onImport: ((_ items: [PCOTimerItem]) -> Void)?
+    let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
 
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -29,6 +44,17 @@ public struct PlanItemEditorView: View {
     @State private var lengthInSeconds: Int
     @State private var isDurationActual: Bool
     @State private var isEditingDuration = false
+    @State private var trigger: ItemTrigger?
+    @State private var cueRoleIds: [String]
+    @State private var commandText = ""
+    @State private var commandResult = ItemCommandParser.parse("")
+    @State private var placement = NewItemPlacement.atEnd
+    @FocusState private var commandFocused: Bool
+    @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.form.rawValue
+    @State private var tab: EditorTab = .form
+    @State private var importText = ""
+    @State private var confirmingImport = false
+    @State private var showingTimerColors = false
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -39,10 +65,16 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?) -> Void
+        onImport: ((_ items: [PCOTimerItem]) -> Void)? = nil,
+        onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
+        self.onImport = onImport
+        if case .add = mode {
+            let stored = UserDefaults.standard.string(forKey: "itemEditorTab").flatMap(EditorTab.init(rawValue:))
+            _tab = State(initialValue: stored.flatMap { ($0 != .importText || onImport != nil) ? $0 : nil } ?? .form)
+        }
         self.onSave = onSave
 
         switch mode {
@@ -51,6 +83,8 @@ public struct PlanItemEditorView: View {
             _itemType = State(initialValue: "Item")
             _lengthInSeconds = State(initialValue: 5 * 60)
             _isDurationActual = State(initialValue: false)
+            _trigger = State(initialValue: nil)
+            _cueRoleIds = State(initialValue: [])
             _notes = State(initialValue: [:])
             _itemDescription = State(initialValue: "")
             _servicePosition = State(initialValue: .during)
@@ -60,6 +94,8 @@ public struct PlanItemEditorView: View {
             _itemType = State(initialValue: item.itemType)
             _lengthInSeconds = State(initialValue: item.lengthInSeconds)
             _isDurationActual = State(initialValue: item.isDurationActual)
+            _trigger = State(initialValue: item.trigger)
+            _cueRoleIds = State(initialValue: item.cueRoleIds)
             _notes = State(initialValue: item.notes)
             _itemDescription = State(initialValue: item.details?.description ?? "")
             _servicePosition = State(initialValue: item.details?.servicePosition ?? .during)
@@ -75,9 +111,7 @@ public struct PlanItemEditorView: View {
                     Spacer()
                     Button("Cancel") { dismiss() }
                         .keyboardShortcut(.cancelAction)
-                    Button("Save") { save() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(!canSave)
+                    saveButton
                 }
                 .padding()
                 .background(.bar)
@@ -92,12 +126,36 @@ public struct PlanItemEditorView: View {
                         Button("Cancel") { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") { save() }
-                            .disabled(!canSave)
+                        saveButton
                     }
                 }
         }
         #endif
+    }
+
+    @ViewBuilder
+    private var saveButton: some View {
+        if isImporting {
+            Button("Import") {
+                if engine.planItems.isEmpty { performImport() } else { confirmingImport = true }
+            }
+            #if !os(tvOS)
+            .keyboardShortcut(.defaultAction)
+            #endif
+            .disabled(importItems.isEmpty)
+            .confirmationDialog("Replace the current run sheet?", isPresented: $confirmingImport, titleVisibility: .visible) {
+                Button("Replace with \(importItems.count) Item\(importItems.count == 1 ? "" : "s")", role: .destructive) { performImport() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Importing replaces every item in the current flow.")
+            }
+        } else {
+            Button("Save") { save() }
+                #if !os(tvOS)
+                .keyboardShortcut(.defaultAction)
+                #endif
+                .disabled(!canSave)
+        }
     }
 
     private var canSave: Bool {
@@ -113,13 +171,108 @@ public struct PlanItemEditorView: View {
         onSave(
             id, title, itemType, lengthInSeconds, notes, isDurationActual,
             isManual && !isHeader ? itemDescription : nil,
-            isManual ? servicePosition : nil
+            isManual ? servicePosition : nil,
+            isHeader ? nil : trigger,
+            isHeader ? [] : cueRoleIds,
+            isAdding ? placement : .atEnd
         )
         dismiss()
     }
 
+    @ViewBuilder
     private var editorForm: some View {
+        if isAdding {
+            #if os(macOS)
+            VStack(spacing: 0) {
+                tabStrip
+                Divider()
+                Form { tabContent(tab) }
+                    .formStyle(.grouped)
+            }
+            .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
+            #else
             Form {
+                Picker("Editor", selection: $tab) {
+                    ForEach(availableTabs) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
+                tabContent(tab)
+            }
+            .formStyle(.grouped)
+            #endif
+        } else {
+            Form { formSections }
+                .formStyle(.grouped)
+        }
+    }
+
+    #if os(macOS)
+    /// Tabs sit outside the scrolling form so they stay put and never truncate (a native TabView squeezed them to "F…").
+    private var tabStrip: some View {
+        HStack(spacing: 4) {
+            ForEach(availableTabs) { entry in
+                Button { tab = entry } label: {
+                    Text(entry.rawValue)
+                        .font(.callout.weight(tab == entry ? .semibold : .regular))
+                        .foregroundStyle(tab == entry ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(tab == entry ? Color.accentColor : Color.clear)
+                                .frame(height: 2)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .accessibilityAddTraits(tab == entry ? [.isSelected, .isButton] : .isButton)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+    }
+    #endif
+
+    @ViewBuilder
+    private func tabContent(_ entry: EditorTab) -> some View {
+        switch entry {
+        case .form:
+            formSections
+        case .quick:
+            commandSection
+            resultSection
+        case .importText:
+            ImportFlowSections(text: $importText)
+        }
+    }
+
+    private var availableTabs: [EditorTab] {
+        onImport == nil ? [.form, .quick] : EditorTab.allCases
+    }
+
+    private var isImporting: Bool { isAdding && tab == .importText }
+
+    private var importItems: [PCOTimerItem] { ImportFlowSections.parsedItems(importText) }
+
+    private func performImport() {
+        onImport?(importItems)
+        dismiss()
+    }
+
+    @ViewBuilder
+    private var resultSection: some View {
+        Section("Result") {
+            Text(commandText.trimmingCharacters(in: .whitespaces).isEmpty ? "Type a command above to see the item it makes." : commandSummary)
+                .font(.callout)
+                .foregroundStyle(commandResult.isValid ? Color.primary : AppPalette.warning)
+        }
+    }
+
+    @ViewBuilder
+    private var formSections: some View {
                 Section("Item") {
                     TextField("Title", text: $title)
 
@@ -135,12 +288,34 @@ public struct PlanItemEditorView: View {
                     Section {
                         durationRow
                         Toggle("Actual duration (not projected)", isOn: $isDurationActual)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("How this starts")
+                            Picker("How this starts", selection: $trigger) {
+                                Text("Plan default").tag(ItemTrigger?.none)
+                                Text("Follow").tag(ItemTrigger?.some(.follow))
+                                Text("Go").tag(ItemTrigger?.some(.go))
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .disabled(startsPlan)
+                        }
+                        .padding(.vertical, 2)
                     } header: {
                         Text("Duration")
                     } footer: {
-                        Text("Most items are projected. Mark a duration as actual for a fixed, known length — a song's recorded runtime, a video clip.")
+                        Text("Most items are projected. Mark a duration as actual for a fixed, known length — a song's recorded runtime, a video clip. Follow starts this item when the one before it reaches zero. Go waits for the producer.")
                     }
                 }
+
+                if itemType.caseInsensitiveCompare("header") != .orderedSame {
+                    cueRolesSection
+                }
+
+                #if os(macOS) || os(iOS)
+                if case .edit(let item) = mode, !item.isHeader {
+                    timerColorsSection(item)
+                }
+                #endif
 
                 if isManual {
                     placementSection
@@ -151,8 +326,78 @@ public struct PlanItemEditorView: View {
                 if case .edit(let item) = mode {
                     waypointsSection(itemId: item.id)
                 }
+    }
+
+    #if os(macOS) || os(iOS)
+    private func timerColorsSection(_ item: PCOTimerItem) -> some View {
+        let current = engine.planItems.first(where: { $0.id == item.id })?.timerColors
+        return Section {
+            Button {
+                showingTimerColors = true
+            } label: {
+                HStack {
+                    Label("Timer Colors", systemImage: "paintpalette")
+                    Spacer()
+                    Text(current == nil ? "Default" : "Custom")
+                        .foregroundStyle(.secondary)
+                }
             }
-            .formStyle(.grouped)
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showingTimerColors) {
+                TimerColorOverrideSheet(title: "this item", current: current) { scale in
+                    engine.setItemTimerColors(id: item.id, scale)
+                }
+            }
+        } footer: {
+            Text("Overrides the producer-wide timer colors, and its waypoints' colors, for this item.")
+        }
+    }
+    #endif
+
+    private var commandSection: some View {
+        Section {
+            TextField("Command", text: $commandText, prompt: Text("\u{201C}Amazing Grace\u{201D} Time 4:30 Type Song"))
+                .font(.system(.body, design: .monospaced))
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .focused($commandFocused)
+                .onSubmit { if canSave { save() } }
+                .onChange(of: commandText) { _, text in applyCommand(text) }
+                .onAppear { commandFocused = true }
+        } header: {
+            Text("Quick add")
+        } footer: {
+            Text("Store Item 4 Thru 6 \u{201C}Song\u{201D} Time 4:30 Type Song Trigger Follow /Actual. Everything but the name is optional, and times work like the timer.")
+        }
+    }
+
+    private func applyCommand(_ text: String) {
+        let result = ItemCommandParser.parse(text)
+        commandResult = result
+        let command = result.command
+        if let value = command.title { title = value }
+        if let value = command.type { itemType = value }
+        if command.length != nil { lengthInSeconds = command.resolvedLength(base: 5 * 60) }
+        if command.trigger != nil { trigger = command.trigger }
+        if let value = command.isActual { isDurationActual = value }
+        if let value = command.servicePosition { servicePosition = value }
+        placement = NewItemPlacement(position: command.position, count: max(1, min(command.count, ItemCommandParser.maxCount)))
+    }
+
+    private var commandSummary: String {
+        guard commandResult.isValid else { return commandResult.errors.joined(separator: " \u{00B7} ") }
+        let command = commandResult.command
+        var parts: [String] = []
+        if let type = command.type { parts.append(type) }
+        parts.append(command.title.map { "\u{201C}\($0)\u{201D}" } ?? "Untitled")
+        if command.length != nil { parts.append(formattedLength) }
+        if let value = command.trigger { parts.append(value == .follow ? "Follow" : "Go") }
+        if command.isActual == true { parts.append("Actual") }
+        if let position = command.servicePosition { parts.append(position == .pre ? "Before event" : "After event") }
+        if let position = command.position { parts.append(command.count > 1 ? "Items \(position)\u{2013}\(position + command.count - 1)" : "Item \(position)") }
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     private var placementSection: some View {
@@ -308,6 +553,41 @@ public struct PlanItemEditorView: View {
         } footer: {
             Text("A checked waypoint (e.g. \u{201C}Song 1\u{201D}) is how a Stream Deck or Companion button finds this item without knowing its title. Create, rename, and delete waypoints in Settings › Waypoints.")
         }
+    }
+
+    private var cueRolesSection: some View {
+        Section {
+            ForEach(engine.roles) { role in
+                Toggle(isOn: Binding(
+                    get: { cueRoleIds.contains(role.id) },
+                    set: { isOn in
+                        if isOn {
+                            if !cueRoleIds.contains(role.id) { cueRoleIds.append(role.id) }
+                        } else {
+                            cueRoleIds.removeAll { $0 == role.id }
+                        }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(role.name)
+                        if let person = role.personName, !person.isEmpty {
+                            Text(person)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Cue")
+        } footer: {
+            Text("Standby and GO on this item's row call these roles. With none chosen, the row shows only play, which starts the clock without a light.")
+        }
+    }
+
+    private var startsPlan: Bool {
+        if case .edit(let item) = mode { return engine.isFirstPlanItem(id: item.id) }
+        return false
     }
 
     private var isAdding: Bool {

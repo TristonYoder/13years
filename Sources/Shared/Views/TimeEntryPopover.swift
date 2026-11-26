@@ -266,51 +266,47 @@ private struct TimeEntryKeypad: View {
     let onClear: () -> Void
     let onCommit: () -> Void
 
-    private let keySize: CGFloat = 48
+    /// One key is `cellWidth` by `cellHeight`. A key spanning two cells is two cells plus the gap between them,
+    /// so the gap that would have been there is part of the key instead of a notch beside it.
+    private let cellWidth: CGFloat = 72
+    private let cellHeight: CGFloat = 56
     private let spacing: CGFloat = 8
 
-    @State private var measuredKeySize = CGSize(width: 48, height: 48)
-
-    private var doubleContentWidth: CGFloat { keySize + measuredKeySize.width + spacing }
-    private var doubleContentHeight: CGFloat { keySize + measuredKeySize.height + spacing }
+    private var doubleWidth: CGFloat { cellWidth * 2 + spacing }
+    private var doubleHeight: CGFloat { cellHeight * 2 + spacing }
 
     var body: some View {
         VStack(spacing: spacing) {
-            Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
-                GridRow {
-                    key("C", tint: .secondary, action: onClear)
-                    key("h") { onDigit("h") }
-                        .disabled(isEndAt)
-                    key("m") { onDigit("m") }
-                        .disabled(isEndAt)
-                    key("s") { onDigit("s") }
-                        .disabled(isEndAt)
-                }
-                GridRow {
-                    key("7") { onDigit("7") }
-                    key("8") { onDigit("8") }
-                    key("9") { onDigit("9") }
-                    if isEndAt {
-                        key("AM", tint: meridiem == .am ? .accentColor : .primary, selected: meridiem == .am) { onMeridiem(.am) }
-                    } else {
-                        key("−") { onSign("-") }
-                    }
-                }
-                GridRow {
-                    key("4") { onDigit("4") }
-                    key("5") { onDigit("5") }
-                    key("6") { onDigit("6") }
-                    if isEndAt {
-                        key("PM", tint: meridiem == .pm ? .accentColor : .primary, selected: meridiem == .pm) { onMeridiem(.pm) }
-                            .background(sizeReader)
-                    } else {
-                        key("+") { onSign("+") }
-                            .background(sizeReader)
-                    }
+            HStack(spacing: spacing) {
+                key("C", tint: .secondary, action: onClear)
+                key("h") { onDigit("h") }
+                    .disabled(isEndAt)
+                key("m") { onDigit("m") }
+                    .disabled(isEndAt)
+                key("s") { onDigit("s") }
+                    .disabled(isEndAt)
+            }
+            HStack(spacing: spacing) {
+                key("7") { onDigit("7") }
+                key("8") { onDigit("8") }
+                key("9") { onDigit("9") }
+                if isEndAt {
+                    key("AM", tint: meridiem == .am ? .accentColor : .primary, selected: meridiem == .am) { onMeridiem(.am) }
+                } else {
+                    key("\u{2212}") { onSign("-") }
                 }
             }
-
             HStack(spacing: spacing) {
+                key("4") { onDigit("4") }
+                key("5") { onDigit("5") }
+                key("6") { onDigit("6") }
+                if isEndAt {
+                    key("PM", tint: meridiem == .pm ? .accentColor : .primary, selected: meridiem == .pm) { onMeridiem(.pm) }
+                } else {
+                    key("+") { onSign("+") }
+                }
+            }
+            HStack(alignment: .top, spacing: spacing) {
                 VStack(spacing: spacing) {
                     HStack(spacing: spacing) {
                         key("1") { onDigit("1") }
@@ -318,23 +314,15 @@ private struct TimeEntryKeypad: View {
                         key("3") { onDigit("3") }
                     }
                     HStack(spacing: spacing) {
-                        key("0", width: doubleContentWidth) { onDigit("0") }
+                        key("0", width: doubleWidth) { onDigit("0") }
                         key(":") { onDigit(":") }
                     }
                 }
-                key("↵", tint: .accentColor, prominent: true, width: keySize, height: doubleContentHeight, action: onCommit)
+                key("\u{21B5}", tint: .accentColor, prominent: true, height: doubleHeight, action: onCommit)
             }
         }
-        .onPreferenceChange(KeySizePreferenceKey.self) { measuredKeySize = $0 }
     }
 
-    private var sizeReader: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(key: KeySizePreferenceKey.self, value: proxy.size)
-        }
-    }
-
-    @ViewBuilder
     private func key(
         _ label: String,
         tint: Color = .primary,
@@ -344,27 +332,35 @@ private struct TimeEntryKeypad: View {
         height: CGFloat? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        let content = Text(label)
-            .font(.system(.title3, design: .monospaced).weight(.medium))
-            .frame(width: width ?? keySize, height: height ?? keySize)
-
-        if prominent {
-            Button(action: action) { content }
-                .buttonStyle(.borderedProminent)
-                .tint(tint)
-                .foregroundStyle(.white)
-        } else {
-            Button(action: action) { content }
-                .producerSecondaryButton()
-                .tint(selected ? Color.accentColor : Color.secondary)
-                .foregroundStyle(tint)
+        Button(action: action) {
+            Text(label)
+                .font(.system(.title3, design: .monospaced).weight(.medium))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .buttonStyle(KeypadKeyStyle(tint: tint, prominent: prominent, selected: selected))
+        .frame(width: width ?? cellWidth, height: height ?? cellHeight)
     }
 }
 
-private struct KeySizePreferenceKey: PreferenceKey {
-    static var defaultValue = CGSize(width: 48, height: 48)
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
+/// A key that fills whatever frame it is given, so a double-width or double-height key is exactly that size.
+private struct KeypadKeyStyle: ButtonStyle {
+    let tint: Color
+    let prominent: Bool
+    let selected: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        configuration.label
+            .foregroundStyle(prominent ? Color.white : tint)
+            .background(
+                shape.fill(
+                    prominent ? Color.accentColor
+                        : (selected ? Color.accentColor.opacity(0.28) : Color.primary.opacity(0.1))
+                )
+            )
+            .overlay(shape.fill(Color.primary.opacity(configuration.isPressed ? 0.15 : 0)))
+            .contentShape(shape)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }

@@ -186,9 +186,10 @@ public struct LandscapePagerView<RoleMenu: View>: View {
                         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation.hourFormatThreshold))
                             .font(.inter(size: m.countdownFontSize, weight: .black))
                             .monospacedDigit()
-                            .foregroundColor(primary)
+                            .foregroundColor(presentation.timerTint(style: style) ?? primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.3)
+                            .timerEffect(presentation.timerEffect)
 
                         Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
                             .font(.system(size: m.tagFontSize, weight: .bold))

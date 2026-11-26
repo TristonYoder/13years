@@ -62,6 +62,8 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoSelectServiceType(id: String?)
     case pcoRefreshServiceTypes
     case pcoSignOut
+    case pcoUnlink
+    case planTitle(String)
     case pcoAuthorize
     case pcoAuthorizeComplete(code: String, state: String)
     case pcoRefreshPlans
@@ -75,16 +77,21 @@ public enum RemoteCommand: Equatable, Sendable {
     case eventTimeCreate(name: String?, day: String?, startTime: String?)
     case eventTimeUpdate(id: String, name: String, day: String, startTime: String)
     case eventTimeDelete(id: String)
+    case rehearsalTimeCreate(name: String?, day: String?, startTime: String?)
+    case rehearsalTimeUpdate(id: String, name: String, day: String, startTime: String)
+    case rehearsalTimeDelete(id: String)
     case eventTimeLive(id: String)
     case eventTimeNext
     case loadDocument(body: Data)
     case hourFormat(String)
     case clockFormat(String)
+    case timerColors(TimerColorScale)
+    case waypointTimerColors(ref: String, TimerColorScale?)
 
     public var isIdempotent: Bool {
         switch self {
         case .planNext, .planPrevious, .timerAdjust, .message, .roleCreate, .scheduleCreate, .planItemAdd,
-             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .eventTimeCreate, .eventTimeNext, .planImport, .loadDocument:
+             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .eventTimeCreate, .rehearsalTimeCreate, .eventTimeNext, .planImport, .loadDocument:
             return false
         default:
             return true
@@ -194,6 +201,10 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/service-type", ["id": id ?? NSNull()])
         case .pcoSignOut:
             return Self.post("pco/sign-out")
+        case .pcoUnlink:
+            return Self.post("pco/unlink")
+        case .planTitle(let title):
+            return Request(method: "PATCH", path: "/v1/plan/title", body: Self.json(["title": title]))
         case .pcoAuthorize:
             return Self.post("pco/authorize")
         case .pcoAuthorizeComplete(let code, let state):
@@ -222,6 +233,12 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PATCH", path: "/v1/event-times/\(Self.segment(id))", body: Self.json(["name": name, "day": day, "startTime": startTime]))
         case .eventTimeDelete(let id):
             return Request(method: "DELETE", path: "/v1/event-times/\(Self.segment(id))", body: nil)
+        case .rehearsalTimeCreate(let name, let day, let startTime):
+            return Self.post("rehearsal-times", ["name": name ?? NSNull(), "day": day ?? NSNull(), "startTime": startTime ?? NSNull()])
+        case .rehearsalTimeUpdate(let id, let name, let day, let startTime):
+            return Request(method: "PATCH", path: "/v1/rehearsal-times/\(Self.segment(id))", body: Self.json(["name": name, "day": day, "startTime": startTime]))
+        case .rehearsalTimeDelete(let id):
+            return Request(method: "DELETE", path: "/v1/rehearsal-times/\(Self.segment(id))", body: nil)
         case .eventTimeLive(let id):
             return Self.post("event-times/live", ["id": id])
         case .eventTimeNext:
@@ -232,6 +249,11 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["hourFormatThreshold": raw]))
         case .clockFormat(let raw):
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["clockFormat": raw]))
+        case .timerColors(let scale):
+            return Request(method: "PUT", path: "/v1/settings", body: Self.encoded(["timerColors": scale]))
+        case .waypointTimerColors(let ref, let scale):
+            let body = scale.map { Self.encoded(["timerColors": $0]) } ?? Self.json(["clearTimerColors": true])
+            return Request(method: "PATCH", path: "/v1/waypoints/\(Self.segment(ref))", body: body)
         }
     }
 
@@ -241,6 +263,12 @@ public enum RemoteCommand: Equatable, Sendable {
 
     private static func post(_ path: String, _ fields: [String: Any]? = nil) -> Request {
         Request(method: "POST", path: "/v1/" + path, body: fields.map(json))
+    }
+
+    private static func encoded<T: Encodable>(_ fields: [String: T]) -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(fields)) ?? Data()
     }
 
     private static func json(_ fields: [String: Any]) -> Data {

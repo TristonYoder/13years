@@ -80,7 +80,9 @@ public final class CueEngine: ObservableObject {
     @Published public var nextItemStartsAtMs: Int?
     @Published var isActiveTimerActualOverride: Bool = false
     var actualOverrideItemId: String?
-    @Published public var isPCOConnected: Bool = false
+    @Published public var isPCOConnected: Bool = false {
+        didSet { if isPCOConnected && !oldValue { refreshPCOPlanTimesForCurrentPlan() } }
+    }
     @Published public var pcoUserName: String? {
         didSet { write(pcoUserName, forKey: Self.pcoUserNameDefaultsKey) }
     }
@@ -105,6 +107,23 @@ public final class CueEngine: ObservableObject {
         didSet { write(clockFormat.rawValue, forKey: Self.clockFormatDefaultsKey) }
     }
     private static let clockFormatDefaultsKey = "clockFormat"
+    @Published public var followByDefault = false
+    /// Title of the current plan, stored once. Items no longer carry their own copy.
+    @Published public var planTitle: String?
+    /// What a schedule that loads a Planning Center plan still has to do once the plan is in.
+    var pendingScheduleFollowUp: (target: ServiceSchedule.TimeTarget?, startsFirstItem: Bool)?
+    /// The producer-wide timer color scale. An item or waypoint can override it.
+    @Published public var timerColorScale = TimerColorScale.standard {
+        didSet { if timerColorScale != oldValue { timerColorsDidChange() } }
+    }
+    /// On a pager or remote mirror: the scale the producer sent for the active item. nil means no override.
+    @Published public internal(set) var receivedTimerColors: TimerColorScale?
+    /// Rehearsal times entered by hand; used when the plan is not managed by Planning Center.
+    @Published public var manualRehearsalTimes: [EventTime] = []
+    /// On a remote mirror: the rehearsal times the host reports, which may be entered by hand there.
+    @Published var remoteRehearsalPlanTimes: [PCOPlanTimeInfo]?
+    @Published public var sharedPhrases: [String] = CueEngine.defaultSharedPhrases
+    public static let defaultSharedPhrases = ["Standby", "Copy", "Hold please", "Go ahead", "Need 30 seconds", "Say again"]
     @Published public var runSheetLayout = RunSheetLayoutSettings()
     private var legacyRunSheetHiddenColumns: [String]?
 
@@ -128,6 +147,8 @@ public final class CueEngine: ObservableObject {
     }
 
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
+    /// True once a fetch of the service types has finished, so an account with none reads as empty rather than still loading.
+    @Published public var pcoServiceTypesLoaded = false
     @Published public var pcoPlans: [PCOClient.PCOPlanInfo] = []
     @Published public var eventTimes: [EventTime] = [] {
         didSet {
@@ -485,7 +506,18 @@ public final class CueEngine: ObservableObject {
         startNetworking()
     }
 
-    public func signInWithPCO() {
+    /// Runs `action` straight away when Planning Center is connected; otherwise shows the
+    /// sign-in screen first and runs it once sign-in succeeds. Cancelling sign-in does nothing.
+    /// When driving a remote Producer the sign-in happens there, so `action` is not run.
+    public func whenPCOConnected(_ action: @escaping () -> Void) {
+        if isPCOConnected {
+            action()
+        } else {
+            signInWithPCO(then: action)
+        }
+    }
+
+    public func signInWithPCO(then onSuccess: (() -> Void)? = nil) {
         if isRemoteMirror {
             signInWithPCOThroughRemote()
             return
@@ -495,6 +527,7 @@ public final class CueEngine: ObservableObject {
                 let signIn = OAuthSignIn()
                 let tokens = try await signIn.signIn()
                 try await finishPCOSignIn(with: tokens)
+                onSuccess?()
             } catch {
                 AppLog.cue.error("CueEngine: PCO OAuth sign-in error: \(error.localizedDescription, privacy: .private)")
                 if case OAuthError.userCancelled = error { return }
@@ -530,6 +563,7 @@ public final class CueEngine: ObservableObject {
         pcoUserName = nil
         isPCOConnected = false
         pcoServiceTypes = []
+        pcoServiceTypesLoaded = false
         pcoPlans = []
         pcoSelectedServiceTypeId = nil
     }
@@ -561,7 +595,12 @@ public final class CueEngine: ObservableObject {
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
                 await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
                 await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+                if let followUp = pendingScheduleFollowUp {
+                    pendingScheduleFollowUp = nil
+                    runScheduleFollowUp(followUp)
+                }
             } catch {
+                pendingScheduleFollowUp = nil
                 pcoLastError = error.localizedDescription
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
             }
@@ -619,6 +658,7 @@ public final class CueEngine: ObservableObject {
     private func fetchPCOServiceTypesAsync() async {
         do {
             pcoServiceTypes = try await pcoClient.fetchServiceTypes()
+            pcoServiceTypesLoaded = true
             pcoLastError = nil
         } catch {
             AppLog.cue.error("CueEngine: fetchPCOServiceTypes error: \(error.localizedDescription, privacy: .private)")
@@ -778,8 +818,10 @@ public final class CueEngine: ObservableObject {
             waypoints: waypoints,
             serviceSchedules: serviceSchedules,
             planItems: planItems,
+            planTitle: planTitle,
             activeItemIndex: activeItemIndex,
             eventTimes: eventTimes,
+            rehearsalTimes: manualRehearsalTimes.isEmpty ? nil : manualRehearsalTimes,
             liveEventTimeId: liveEventTimeId,
             pcoPlanContext: pcoPlanContext,
             itemActuals: itemActuals.isEmpty ? nil : itemActuals,
@@ -789,7 +831,10 @@ public final class CueEngine: ObservableObject {
                 pcoDefaultServiceTypeId: pcoDefaultServiceTypeId,
                 plotipharRelayHost: plotipharRelayHost,
                 clockFormat: clockFormat,
-                runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout
+                runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout,
+                followByDefault: followByDefault ? true : nil,
+                sharedPhrases: sharedPhrases == Self.defaultSharedPhrases ? nil : sharedPhrases,
+                timerColors: timerColorScale.isStandard ? nil : timerColorScale
             )
         )
     }
@@ -804,6 +849,7 @@ public final class CueEngine: ObservableObject {
         blank.planItems = []
         blank.activeItemIndex = 0
         blank.eventTimes = []
+        blank.rehearsalTimes = nil
         blank.liveEventTimeId = nil
         blank.pcoPlanContext = nil
         blank.itemActuals = nil
@@ -839,12 +885,17 @@ public final class CueEngine: ObservableObject {
         runSheetLayout = document.settings.runSheetLayout
             ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
+        followByDefault = document.settings.followByDefault ?? false
+        timerColorScale = document.settings.timerColors ?? .standard
+        sharedPhrases = document.settings.sharedPhrases ?? Self.defaultSharedPhrases
     }
 
     func applyPlan(of document: ProducerDocument) {
         restoreEventTimes(document.eventTimes, liveId: document.liveEventTimeId)
         var items = document.planItems
-        for index in items.indices { items[index].isRunning = false }
+        for index in items.indices { items[index].isRunning = false; items[index].servicePlanTitle = nil }
+        planTitle = document.planTitle
+        manualRehearsalTimes = EventTime.sorted(document.rehearsalTimes ?? [])
         let validIds = Set(items.map(\.id))
         isRehearsalMode = false
         rehearsalPlanTimeId = nil
@@ -882,10 +933,11 @@ public final class CueEngine: ObservableObject {
         var stamped = items
         for index in stamped.indices {
             stamped[index].sequence = index + 1
-            stamped[index].servicePlanTitle = title
+            stamped[index].servicePlanTitle = nil
             stamped[index].elapsedSeconds = 0
             stamped[index].isRunning = false
         }
+        planTitle = title
         planItems = stamped
         pcoPlanContext = Self.context(pcoPlanContext, matching: stamped)
         if let firstSelectable = stamped.firstIndex(where: { !$0.isHeader }) {
@@ -914,7 +966,6 @@ public final class CueEngine: ObservableObject {
             lengthInSeconds: lengthInSeconds,
             isDurationActual: isDurationActual
         )
-        item.servicePlanTitle = planItems.first?.servicePlanTitle
         planItems.append(item)
 
         if activeTimerItem == nil && !item.isHeader {
@@ -1219,7 +1270,9 @@ public final class CueEngine: ObservableObject {
         pcoServiceTypeId: String? = nil,
         pcoPlanId: String? = nil,
         recurrence: ServiceSchedule.Recurrence = .once,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        target: ServiceSchedule.TimeTarget? = nil,
+        startsFirstItem: Bool = false
     ) -> ServiceSchedule? {
         if isRemoteMirror {
             let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1233,6 +1286,8 @@ public final class CueEngine: ObservableObject {
             ]
             if let pcoServiceTypeId { fields["pcoServiceTypeId"] = pcoServiceTypeId }
             if let pcoPlanId { fields["pcoPlanId"] = pcoPlanId }
+            if let target { fields["targetKind"] = target.kind.rawValue; fields["targetId"] = target.id }
+            fields["startsFirstItem"] = startsFirstItem
             remoteCommands?.send(.scheduleCreate(body: RemoteCommand.body(fields)))
             return nil
         }
@@ -1245,7 +1300,9 @@ public final class CueEngine: ObservableObject {
             pcoServiceTypeId: pcoServiceTypeId,
             pcoPlanId: pcoPlanId,
             recurrence: recurrence,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            target: target,
+            startsFirstItem: startsFirstItem
         )
         serviceSchedules = sortedByStartsAt(serviceSchedules + [schedule])
         AppLog.cue.info("addServiceSchedule(\"\(trimmed, privacy: .private)\") -> \(schedule.id, privacy: .public)")
@@ -1260,10 +1317,17 @@ public final class CueEngine: ObservableObject {
         pcoServiceTypeId: String?? = nil,
         pcoPlanId: String?? = nil,
         recurrence: ServiceSchedule.Recurrence? = nil,
-        isEnabled: Bool? = nil
+        isEnabled: Bool? = nil,
+        target: ServiceSchedule.TimeTarget?? = nil,
+        startsFirstItem: Bool? = nil
     ) {
         if isRemoteMirror {
             var fields: [String: Any] = [:]
+            if let target {
+                fields["targetKind"] = target?.kind.rawValue ?? ""
+                fields["targetId"] = target?.id ?? ""
+            }
+            if let startsFirstItem { fields["startsFirstItem"] = startsFirstItem }
             if let title { fields["title"] = title }
             if let startsAt { fields["startsAt"] = ISO8601DateFormatter().string(from: startsAt) }
             if let goLiveOffsetSeconds { fields["goLiveOffsetSeconds"] = goLiveOffsetSeconds }
@@ -1293,6 +1357,8 @@ public final class CueEngine: ObservableObject {
         if let pcoPlanId { schedule.pcoPlanId = pcoPlanId }
         if let recurrence { schedule.recurrence = recurrence }
         if let isEnabled { schedule.isEnabled = isEnabled }
+        if let target { schedule.target = target }
+        if let startsFirstItem { schedule.startsFirstItem = startsFirstItem }
         if timingChanged { schedule.lastFiredAt = nil }
         var updated = serviceSchedules
         updated[index] = schedule
@@ -1327,14 +1393,22 @@ public final class CueEngine: ObservableObject {
 
         schedule.lastFiredAt = now
 
+        let followUp = (target: schedule.target, startsFirstItem: schedule.startsFirstItem)
+        let hasFollowUp = followUp.target != nil || followUp.startsFirstItem
         if let serviceTypeId = schedule.pcoServiceTypeId, let planId = schedule.pcoPlanId {
+            // The plan arrives asynchronously, and the times and first item are only there once it has.
+            if hasFollowUp { pendingScheduleFollowUp = followUp }
             fetchPCOPlan(serviceTypeId: serviceTypeId, planId: planId)
+        } else if hasFollowUp {
+            runScheduleFollowUp(followUp)
         }
         appMode = .producerControl
 
         switch schedule.recurrence {
         case .weekly:
-            if let next = schedule.nextOccurrence(after: now) {
+            // Roll to the occurrence after the one that just fired. Rolling from `now` left startsAt alone whenever the
+            // lead time fired it before the start, so the schedule fired again on every check.
+            if let next = schedule.nextOccurrence(after: max(now, schedule.startsAt)) {
                 schedule.startsAt = next
             }
             schedule.lastFiredAt = nil
@@ -1381,11 +1455,25 @@ public final class CueEngine: ObservableObject {
         }
     }
 
-    private func refreshPCOPlanTimes(serviceTypeId: String, planId: String) async {
+    /// Reloads the current plan's service times from Planning Center. Run when the connection comes up
+    /// (launch with a saved plan, or signing in) and when the plan panel is refreshed, so event times follow
+    /// Planning Center without opening Event Times.
+    func refreshPCOPlanTimesForCurrentPlan() {
+        guard !isRemoteMirror, isPCOConnected,
+              let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
+        Task { await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId) }
+    }
+
+    func refreshPCOPlanTimes(serviceTypeId: String, planId: String) async {
         do {
             let times = try await pcoClient.fetchPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
                 .filter(\.isService)
-            guard currentPCOPlanId == planId, !times.isEmpty else { return }
+            guard currentPCOPlanId == planId else { return }
+            guard !times.isEmpty else {
+                eventTimes.removeAll { $0.pcoPlanTimeId != nil }
+                liveEventTimeId = nil
+                return
+            }
             let previousLive = liveEventTime?.pcoPlanTimeId
             eventTimes = times.map { time in
                 EventTime(
@@ -1399,6 +1487,7 @@ public final class CueEngine: ObservableObject {
             liveEventTimeId = eventTimes.first(where: { $0.pcoPlanTimeId == previousLive })?.id
         } catch {
             AppLog.cue.error("CueEngine: fetchPlanTimes error: \(error.localizedDescription, privacy: .private)")
+            if currentPCOPlanId == planId { pcoLastError = error.localizedDescription }
         }
     }
 
@@ -1660,6 +1749,8 @@ public final class CueEngine: ObservableObject {
         Set(roles.flatMap { $0.pagerFields ?? [] })
     }
 
+    var triggerArmedItemId: String?
+
     public func nextPlanItem(startTimer: Bool = true) {
         if isRemoteMirror {
             remoteCommands?.send(.planNext(startTimer: startTimer))
@@ -1670,7 +1761,6 @@ public final class CueEngine: ObservableObject {
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
-        item.servicePlanTitle = activeTimerItem?.servicePlanTitle
         item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()
@@ -1687,7 +1777,6 @@ public final class CueEngine: ObservableObject {
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
-        item.servicePlanTitle = activeTimerItem?.servicePlanTitle
         item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()
@@ -1972,7 +2061,46 @@ public final class CueEngine: ObservableObject {
         guard let index = roles.firstIndex(where: { $0.id == id }) else { return }
         roles.remove(at: index)
         selectedRoleIds.remove(id)
+        for itemIndex in planItems.indices { planItems[itemIndex].cueRoleIds.removeAll { $0 == id } }
         broadcastState()
+    }
+
+    // MARK: Canned phrases
+
+    /// Phrases offered above the composer for a role: its own, then the shared list unless the role opts out.
+    public func phrases(forRoleId roleId: String?) -> [String] {
+        let role = roleId.flatMap { id in roles.first(where: { $0.id == id }) }
+        var result = role?.cannedPhrases ?? []
+        if role?.usesSharedPhrases ?? true {
+            for phrase in sharedPhrases where !result.contains(phrase) { result.append(phrase) }
+        }
+        return result
+    }
+
+    public func setPhrases(forRoleId roleId: String, phrases: [String], usesShared: Bool) {
+        guard !isRemoteMirror, let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        let cleaned = Self.cleanedPhrases(phrases)
+        roles[index].cannedPhrases = cleaned.isEmpty ? nil : cleaned
+        roles[index].usesSharedPhrases = usesShared ? nil : false
+        broadcastState()
+    }
+
+    /// Stores an in-progress edit without trimming or deduplicating, so a field being typed in keeps its row.
+    public func roleCannedPhrasesRaw(forRoleId roleId: String, _ phrases: [String]) {
+        guard !isRemoteMirror, let index = roles.firstIndex(where: { $0.id == roleId }) else { return }
+        roles[index].cannedPhrases = phrases
+    }
+
+    public func setSharedPhrases(_ phrases: [String]) {
+        guard !isRemoteMirror else { return }
+        sharedPhrases = Self.cleanedPhrases(phrases)
+    }
+
+    static func cleanedPhrases(_ phrases: [String]) -> [String] {
+        var seen = Set<String>()
+        return phrases
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     public func setPlotipharRoleId(forRoleId roleId: String, plotipharRoleId: String?) {
@@ -2394,6 +2522,7 @@ public final class CueEngine: ObservableObject {
 
     func tickTimer() {
         guard !isRemoteMirror else { return }
+        if isMasterServer { evaluateTrigger() }
         heartbeatTickCount += 1
         if heartbeatTickCount % 10 == 0 {
             AppLog.networking.debug("heartbeat — isMasterServer=\(self.isMasterServer, privacy: .public) connectedMasterName=\(self.connectedMasterName ?? "none", privacy: .private) activeItem=\(self.activeTimerItem?.title ?? "none", privacy: .private)")
@@ -2436,6 +2565,7 @@ public final class CueEngine: ObservableObject {
         if isMasterServer, activeTimerItem?.isRunning == true, heartbeatTickCount % 5 == 0 {
             var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
             packet.nextItem = nextItemForBroadcast
+            packet.timerColors = broadcastTimerColors
             stampUtcOffset(&packet)
             emit(packet, .lan(.legacy))
             emit(packet, .relay)
@@ -2473,6 +2603,7 @@ public final class CueEngine: ObservableObject {
     private func broadcastLegacyState() {
         var packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         AppLog.cue.debug("broadcastState() — isMasterServer=\(self.isMasterServer, privacy: .public)")
 
         if isMasterServer {
@@ -2485,6 +2616,7 @@ public final class CueEngine: ObservableObject {
     func broadcastCatchUp() {
         var packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastCatchUp() — isMasterServer=\(self.isMasterServer, privacy: .public) messages=\(self.recentMessages.count, privacy: .public)")
 
@@ -2501,6 +2633,7 @@ public final class CueEngine: ObservableObject {
         guard let item = activeTimerItemForBroadcast else { return }
         var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .private)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
@@ -2593,6 +2726,9 @@ public final class CueEngine: ObservableObject {
         }
 
         let isV2Timer = !isMasterServer && syncV2.producerIsV2 && syncV2.held != nil
+        if !isMasterServer, !isRemoteMirror, packet.type == .timerUpdate || packet.type == .timerAnchor {
+            receivedTimerColors = packet.timerColors
+        }
 
         switch packet.type {
         case .cueUpdate:

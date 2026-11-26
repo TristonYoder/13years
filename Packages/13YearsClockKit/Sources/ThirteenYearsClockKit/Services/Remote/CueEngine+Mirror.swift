@@ -9,7 +9,8 @@ extension CueEngine {
 
         assign(\.roles, state.roles)
         assign(\.selectedRoleIds, Set(state.selectedRoleIds))
-        assign(\.waypoints, state.waypoints.map { Waypoint(id: $0.id, name: $0.name) })
+        assign(\.waypoints, state.waypoints.map { Waypoint(id: $0.id, name: $0.name, timerColors: $0.timerColors) })
+        assign(\.timerColorScale, state.settings.timerColors ?? .standard)
         assign(\.serviceSchedules, state.schedules.entries.map { entry in
             ServiceSchedule(
                 id: entry.id,
@@ -20,7 +21,9 @@ extension CueEngine {
                 pcoPlanId: entry.pcoPlanId,
                 recurrence: ServiceSchedule.Recurrence(rawValue: entry.recurrence) ?? .once,
                 isEnabled: entry.isEnabled,
-                lastFiredAt: entry.lastFiredAt
+                lastFiredAt: entry.lastFiredAt,
+                target: entry.targetKind.flatMap { ServiceSchedule.TimeTarget.Kind(rawValue: $0) }.flatMap { kind in entry.targetId.map { ServiceSchedule.TimeTarget(kind: kind, id: $0) } },
+                startsFirstItem: entry.startsFirstItem ?? false
             )
         })
         assign(\.eventTimes, (state.eventTimes?.entries ?? []).map {
@@ -30,7 +33,10 @@ extension CueEngine {
         assign(\.itemActuals, state.liveOps?.actuals ?? [])
         assign(\.skippedItemIds, (state.liveOps?.skippedItemIds ?? [:]).mapValues(Set.init))
         assign(\.rehearsalPlanTimeId, state.liveOps?.rehearsalPlanTimeId)
+        assign(\.remoteRehearsalPlanTimes, state.liveOps?.rehearsalTimes)
+        assign(\.manualRehearsalTimes, state.liveOps?.manualRehearsalTimes ?? [])
         assign(\.isRehearsalMode, state.liveOps?.isRehearsalMode ?? false)
+        assign(\.planTitle, state.plan.title)
         assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)
@@ -46,6 +52,7 @@ extension CueEngine {
         assign(\.pcoSelectedServiceTypeId, state.pco.selectedServiceTypeId)
         assign(\.pcoDefaultServiceTypeId, state.pco.defaultServiceTypeId)
         assign(\.pcoPlanFilter, PCOClient.PCOPlanFilter(rawValue: state.pco.planFilter) ?? pcoPlanFilter)
+        assign(\.pcoServiceTypesLoaded, true)
         assign(\.pcoServiceTypes, state.pco.serviceTypes.map { PCOClient.PCOServiceType(id: $0.id, name: $0.name) })
         assign(\.pcoPlans, state.pco.plans.map { PCOClient.PCOPlanInfo(id: $0.id, title: $0.title, dates: $0.dates) })
         assign(\.pcoNoteCategories, state.pco.noteCategories.map { PCOClient.PCONoteCategory(id: $0.id, name: $0.name) })
@@ -56,6 +63,7 @@ extension CueEngine {
 
     public func apply(remoteTimer timer: ControlAPIState.ActiveTimer?) {
         guard isRemoteMirror else { return }
+        assign(\.receivedTimerColors, timer?.colors)
         if let timer {
             var item = timer.item
             if nextItem != timer.nextItem { nextItem = timer.nextItem }

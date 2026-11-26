@@ -260,8 +260,62 @@ extension CueEngine {
         skippedItemIds = updated
     }
 
+    /// Rehearsal times for the current plan: Planning Center's when the plan is synced from there, otherwise the ones entered by hand.
     public var rehearsalPlanTimes: [PCOPlanTimeInfo] {
-        pcoPlanContext?.times.filter { $0.timeType == "rehearsal" } ?? []
+        if isRemoteMirror, let remote = remoteRehearsalPlanTimes { return remote }
+        if isEventTimesManagedByPCO {
+            return pcoPlanContext?.times.filter { $0.timeType == "rehearsal" } ?? []
+        }
+        return manualRehearsalTimes.map { time in
+            PCOPlanTimeInfo(id: time.id, name: time.name, timeType: "rehearsal", startsAt: Self.startDate(of: time), endsAt: nil)
+        }
+    }
+
+    private static func startDate(of time: EventTime, now: Date = Date()) -> Date? {
+        guard let start = time.startTime else { return nil }
+        let day = time.day?.onOrAfter(now) ?? Calendar.current.startOfDay(for: now)
+        return start.date(on: day)
+    }
+
+    @discardableResult
+    public func addRehearsalTime(name: String?, day: EventDay?, startTime: TimeOfDay?) -> EventTime? {
+        guard !isEventTimesManagedByPCO, manualRehearsalTimes.count < Self.maxEventTimes else { return nil }
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeCreate(name: name?.trimmingCharacters(in: .whitespacesAndNewlines), day: day?.string, startTime: startTime?.string))
+            return nil
+        }
+        let time = EventTime(name: name?.trimmingCharacters(in: .whitespacesAndNewlines), day: day, startTime: startTime)
+        manualRehearsalTimes = EventTime.sorted(manualRehearsalTimes + [time])
+        return time
+    }
+
+    public func updateRehearsalTime(id: String, name: String?, day: EventDay?, startTime: TimeOfDay?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeUpdate(id: id, name: trimmed ?? "", day: day?.string ?? "", startTime: startTime?.string ?? ""))
+            return
+        }
+        guard let index = manualRehearsalTimes.firstIndex(where: { $0.id == id }) else { return }
+        var updated = manualRehearsalTimes
+        updated[index].name = trimmed.flatMap { $0.isEmpty ? nil : $0 }
+        updated[index].day = day
+        updated[index].startTime = startTime
+        manualRehearsalTimes = EventTime.sorted(updated)
+    }
+
+    public func removeRehearsalTime(id: String) {
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeDelete(id: id))
+            return
+        }
+        manualRehearsalTimes.removeAll { $0.id == id }
+        if rehearsalPlanTimeId == id { setRehearsalMode(false) }
+    }
+
+    /// How far through the current item the timer is, 0...1. Runs past the end read as full.
+    public var itemProgress: Double {
+        guard let item = activeTimerItem, item.lengthInSeconds > 0 else { return 0 }
+        return min(1, max(0, Double(item.elapsedSeconds) / Double(item.lengthInSeconds)))
     }
 
     public var rehearsalLabel: String {

@@ -19,10 +19,133 @@ struct ConnectToView: View {
     @State private var connectingTo: String?
     @State private var errorText: String?
     @State private var attempt: RemoteProducerSession?
+    @State private var chosen: (endpoint: RemoteEndpoint, name: String)?
+    @State private var mode = RemoteLANMode.stored()
 
     var body: some View {
+        Group {
+            if chosen == nil { producerStep } else { modeStep }
+        }
+        .padding(24)
+        #if os(macOS)
+        .frame(width: 460)
+        #endif
+        .onAppear {
+            discovery.start()
+            connectToPrefill()
+        }
+        .onChange(of: prefill) { _, _ in connectToPrefill() }
+        .onDisappear {
+            discovery.stop()
+            attempt?.disconnect()
+        }
+    }
+
+    private func stepper(_ step: Int) -> some View {
+        HStack(spacing: 6) {
+            Text("Step \(step) of 2")
+            Text("\u{00B7}")
+            Text(step == 1 ? "Producer" : "Mode")
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+    }
+
+    private func choose(_ endpoint: RemoteEndpoint, name: String) {
+        errorText = nil
+        mode = RemoteLANMode.stored()
+        chosen = (endpoint, name)
+    }
+
+    private var modeStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                stepper(2)
+                Text("How should this Mac connect?").font(.title2.weight(.bold))
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(chosen?.name ?? "").font(.body.weight(.medium))
+                    Text(chosen?.endpoint.address ?? "").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Change") {
+                    attempt?.disconnect()
+                    isConnecting = false
+                    chosen = nil
+                }
+                .disabled(isConnecting)
+            }
+            .padding(10)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(spacing: 6) {
+                ForEach(RemoteLANMode.allCases, id: \.self) { option in
+                    Button { mode = option } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: mode == option ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(mode == option ? Color.accentColor : Color.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.displayName).font(.body.weight(.medium))
+                                Text(option.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary.opacity(mode == option ? 0.9 : 0.4), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(mode == option ? Color.accentColor : Color.clear, lineWidth: 2))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isConnecting)
+                }
+            }
+            Text("Your Control API pauses while connected.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let errorText {
+                Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(AppPalette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                if isConnecting {
+                    ProgressView().compactControlSize()
+                    Text("Connecting to \(connectingTo ?? "Producer")\u{2026}")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancel") {
+                    attempt?.disconnect()
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Connect") {
+                    guard let chosen else { return }
+                    if RemoteLANCoordinator.shared.mode != mode { RemoteLANCoordinator.shared.mode = mode }
+                    connect(to: chosen.endpoint, name: chosen.name)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isConnecting)
+            }
+        }
+    }
+
+    private var producerStep: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
+                stepper(1)
                 Text("Connect To…").font(.title2.weight(.bold))
                 Text("Control another Producer on this network from here. The Producer you connect to needs its Control API switched on.")
                     .font(.callout)
@@ -51,7 +174,7 @@ struct ConnectToView: View {
                         .keyboardType(.URL)
                         #endif
                         .onSubmit(connectManually)
-                    Button("Connect", action: connectManually)
+                    Button("Next", action: connectManually)
                         .buttonStyle(.borderedProminent)
                         .disabled(isConnecting || address.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -78,19 +201,6 @@ struct ConnectToView: View {
                 }
                 .keyboardShortcut(.cancelAction)
             }
-        }
-        .padding(24)
-        #if os(macOS)
-        .frame(width: 460)
-        #endif
-        .onAppear {
-            discovery.start()
-            connectToPrefill()
-        }
-        .onChange(of: prefill) { _, _ in connectToPrefill() }
-        .onDisappear {
-            discovery.stop()
-            attempt?.disconnect()
         }
     }
 
@@ -145,7 +255,7 @@ struct ConnectToView: View {
     private func producerRow(_ producer: DiscoveredProducer) -> some View {
         let reachable = producer.apiReachable
         return Button {
-            connect(to: producer.endpoint, name: producer.displayName)
+            choose(producer.endpoint, name: producer.displayName)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: reachable == false ? "slash.circle" : "dot.radiowaves.left.and.right")
@@ -192,7 +302,7 @@ struct ConnectToView: View {
             errorText = "That doesn't look like an address. Use a host name or IP, optionally followed by :port."
             return
         }
-        connect(to: endpoint, name: endpoint.host)
+        choose(endpoint, name: endpoint.host)
     }
 
     private func connect(to endpoint: RemoteEndpoint, name: String) {

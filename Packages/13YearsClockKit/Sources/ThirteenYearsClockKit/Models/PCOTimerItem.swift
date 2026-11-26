@@ -26,6 +26,13 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public var details: PCOItemDetails?
 
+    public var trigger: ItemTrigger?
+
+    public var cueRoleIds: [String]
+
+    /// Overrides the producer-wide timer color scale for this item.
+    public var timerColors: TimerColorScale?
+
     public init(
         id: String = UUID().uuidString,
         title: String,
@@ -41,7 +48,10 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         pcoPlanId: String? = nil,
         isDurationActual: Bool = false,
         waypointIds: [String] = [],
-        details: PCOItemDetails? = nil
+        details: PCOItemDetails? = nil,
+        trigger: ItemTrigger? = nil,
+        cueRoleIds: [String] = [],
+        timerColors: TimerColorScale? = nil
     ) {
         self.id = id
         self.title = title
@@ -58,6 +68,9 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         self.isDurationActual = isDurationActual
         self.waypointIds = waypointIds
         self.details = details
+        self.trigger = trigger
+        self.cueRoleIds = cueRoleIds
+        self.timerColors = timerColors
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -65,6 +78,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         case servicePlanTitle, notes, noteIds, pcoServiceTypeId, pcoPlanId, isDurationActual, waypointIds
         case tagIds
         case details
+        case trigger, cueRoleIds, timerColors
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,6 +100,9 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
             ?? container.decodeIfPresent([String].self, forKey: .tagIds)
             ?? []
         details = try container.decodeIfPresent(PCOItemDetails.self, forKey: .details)
+        trigger = try container.decodeIfPresent(ItemTrigger.self, forKey: .trigger)
+        cueRoleIds = try container.decodeIfPresent([String].self, forKey: .cueRoleIds) ?? []
+        timerColors = try? container.decodeIfPresent(TimerColorScale.self, forKey: .timerColors)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -105,17 +122,22 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         try container.encode(isDurationActual, forKey: .isDurationActual)
         try container.encode(waypointIds, forKey: .waypointIds)
         try container.encodeIfPresent(details, forKey: .details)
+        try container.encodeIfPresent(trigger, forKey: .trigger)
+        if !cueRoleIds.isEmpty { try container.encode(cueRoleIds, forKey: .cueRoleIds) }
+        try container.encodeIfPresent(timerColors, forKey: .timerColors)
     }
 
     public var broadcastTrimmed: PCOTimerItem {
         var slim = self
         slim.details = details?.broadcastTrimmed
+        slim.timerColors = nil
         return slim
     }
 
     public func broadcastTrimmed(fields: Set<PagerItemField>) -> PCOTimerItem {
         var slim = self
         slim.details = details?.broadcastTrimmed(fields: fields)
+        slim.timerColors = nil
         return slim
     }
 
@@ -145,5 +167,14 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public mutating func setRemainingTime(seconds: Int) {
         lengthInSeconds = TimerLimits.clampLength(TimerLimits.saturatingAdd(elapsedSeconds, TimerLimits.clampLength(seconds)))
+    }
+}
+
+extension PCOTimerItem {
+    /// The plan title lives on the engine; the Control API still reports it on each item so existing clients keep working.
+    func withPlanTitle(_ title: String?) -> PCOTimerItem {
+        var copy = self
+        copy.servicePlanTitle = title
+        return copy
     }
 }

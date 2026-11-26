@@ -16,6 +16,7 @@
 #endif
 
 #include "../src/sync/details_line.h"
+#include "../src/sync/timer_colors.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -974,7 +975,85 @@ static void testReconnectKeepsState() {
   CHECK(!keepStateOnReconnect(LOST_AFTER_MS + 1));
 }
 
+static void testTimerColors() {
+  using namespace pagersync;
+  TimerColorScale scale;
+  scale.valid = true;
+  scale.overtimeRgb = 0xCC1717;
+  scale.overtimeEffect = TimerEffect::Flicker;
+  TimerColorStop warn;
+  warn.percent = true; warn.value = 10; warn.rgb = 0xFFD60A;
+  TimerColorStop deep;
+  deep.overtime = true; deep.value = 3; deep.rgb = 0xCC1717; deep.effect = TimerEffect::Pulse;
+  scale.stops[0] = warn;
+  scale.stops[1] = deep;
+  scale.stopCount = 2;
+
+  TimerStyle s = evaluateTimerColors(scale, 200, 300);
+  CHECK(!s.hasColor);
+  s = evaluateTimerColors(scale, 30, 300);
+  CHECK(s.hasColor && s.rgb == 0xFFD60A && s.effect == TimerEffect::None);
+  s = evaluateTimerColors(scale, 31, 300);
+  CHECK(!s.hasColor);
+  s = evaluateTimerColors(scale, -1, 300);
+  CHECK(s.hasColor && s.rgb == 0xCC1717 && s.effect == TimerEffect::Flicker);
+  s = evaluateTimerColors(scale, -3, 300);
+  CHECK(s.hasColor && s.effect == TimerEffect::Pulse);
+
+  TimerColorScale none;
+  CHECK(!evaluateTimerColors(none, -50, 300).hasColor);
+  scale.hasOnTime = true;
+  scale.onTimeRgb = 0x34C759;
+  s = evaluateTimerColors(scale, 200, 300);
+  CHECK(s.hasColor && s.rgb == 0x34C759 && s.effect == TimerEffect::None);
+
+  // Overtime that has not started yet keeps the lead-up look.
+  TimerColorScale late = scale;
+  late.overtimeStartValue = 10;
+  s = evaluateTimerColors(late, -5, 300);
+  CHECK(s.hasColor && s.rgb == 0xFFD60A && s.effect == TimerEffect::None);
+  s = evaluateTimerColors(late, -10, 300);
+  CHECK(s.hasColor && s.rgb == 0xCC1717);
+
+  // Of several lead-up stops reached, the one closest to zero wins.
+  TimerColorScale two;
+  two.valid = true;
+  TimerColorStop a; a.value = 60; a.rgb = 0x111111;
+  TimerColorStop b; b.value = 20; b.rgb = 0x222222;
+  two.stops[0] = a; two.stops[1] = b; two.stopCount = 2;
+  CHECK(evaluateTimerColors(two, 15, 300).rgb == 0x222222);
+  CHECK(evaluateTimerColors(two, 40, 300).rgb == 0x111111);
+
+  uint32_t rgb = 0;
+  CHECK(parseHexRgb("FFd60A", rgb) && rgb == 0xFFD60A);
+  CHECK(!parseHexRgb("FFD60", rgb));
+  CHECK(!parseHexRgb("GGD60A", rgb));
+  CHECK(parseTimerEffect("glitch") == TimerEffect::Glitch);
+  CHECK(parseTimerEffect("bogus") == TimerEffect::None);
+
+  CHECK(timerEffectFrame(TimerEffect::None, 123).opacity == 255);
+  CHECK(timerEffectFrame(TimerEffect::Blink, 100).opacity == 255);
+  CHECK(timerEffectFrame(TimerEffect::Blink, 700).opacity < 60);
+  CHECK(timerEffectFrame(TimerEffect::Glitch, 1000).offsetX == 0);
+
+#ifdef HAVE_ARDUINOJSON
+  JsonDocument doc;
+  deserializeJson(doc, "{\"onTimeHex\":null,\"stops\":[{\"id\":\"a\",\"value\":10,\"unit\":\"percent\",\"colorHex\":\"FFD60A\"},"
+                       "{\"id\":\"b\",\"phase\":\"overtime\",\"value\":3,\"unit\":\"seconds\",\"colorHex\":\"CC1717\",\"effect\":\"pulse\"}],"
+                       "\"overtimeHex\":\"CC1717\",\"overtimeEffect\":\"flicker\"}");
+  TimerColorScale parsed;
+  CHECK(parseTimerColorScale(doc.as<JsonVariantConst>(), parsed));
+  CHECK(parsed.valid && !parsed.hasOnTime && parsed.stopCount == 2 && parsed.overtimeEffect == TimerEffect::Flicker);
+  CHECK(parsed.stops[0].percent && !parsed.stops[0].overtime && parsed.stops[0].value == 10);
+  CHECK(parsed.stops[1].overtime && parsed.stops[1].effect == TimerEffect::Pulse);
+  JsonDocument absent;
+  CHECK(!parseTimerColorScale(absent["timerColors"], parsed));
+  CHECK(!parsed.valid);
+#endif
+}
+
 int main() {
+  testTimerColors();
   testEndpointParse();
   testHashVectors();
   testOffsetFormula();

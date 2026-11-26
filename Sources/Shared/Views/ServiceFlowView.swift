@@ -13,7 +13,6 @@ enum RunSheetLayout: String {
 public struct ServiceFlowView: View {
     @EnvironmentObject var engine: CueEngine
     @State private var editorMode: PlanItemEditorView.Mode?
-    @State private var showingImportText = false
     @State private var expandedItemId: String?
     @State private var showingPlanPicker = false
     @State private var newWaypointTargetItemId: String?
@@ -49,7 +48,7 @@ public struct ServiceFlowView: View {
         let schedule = engine.runSheetSchedule()
 
         VStack(spacing: 0) {
-            SectionHeaderBar(mode: .serviceFlow) {
+            SectionHeaderBar(mode: .serviceFlow, showsTitles: true) {
                 #if os(macOS)
                 Picker("Layout", selection: $layoutRaw) {
                     Label("List", systemImage: "list.bullet").tag(RunSheetLayout.list.rawValue)
@@ -58,6 +57,7 @@ public struct ServiceFlowView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 84)
+                .padding(.trailing, 6)
                 .help("Switch the run sheet between a list and a table with customizable columns")
 
                 if layout == .table {
@@ -72,23 +72,30 @@ public struct ServiceFlowView: View {
                 }
                 #endif
 
-                #if os(macOS) || os(iOS)
+                #if os(macOS)
+                Menu {
+                    RunSheetTimingToggles()
+                } label: {
+                    Label("Display", systemImage: "slider.horizontal.3")
+                }
+                .headerActionPrimary()
+                .help("End times and Follow by default")
+                #elseif os(iOS)
                 Button(action: { planPanelVisible.toggle() }) {
                     Label("Plan", systemImage: "sidebar.trailing")
                 }
-                .help("Show or hide the Planning Center plan details: notes, times and team")
+                .headerActionPrimary()
+                .help("Plan name, Sync PCO and Event Times, plus the Planning Center notes, times and team")
                 #endif
 
+                #if !os(macOS)
                 RehearsalBadge()
+                #endif
 
                 RunSheetActualsMenu()
 
-                Button(action: { showingImportText = true }) {
-                    Label("Import Text", systemImage: "text.badge.plus")
-                }
-                .help("Paste in a plain-text run sheet")
-
-                Button(action: { showingPlanPicker = true }) {
+                #if !(os(macOS) || os(iOS))
+                Button(action: { engine.whenPCOConnected { showingPlanPicker = true } }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
@@ -97,10 +104,12 @@ public struct ServiceFlowView: View {
                     Label("Event Times", systemImage: "clock")
                 }
                 .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
+                #endif
 
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")
                 }
+                .headerActionPrimary()
                 .help("Add a single item to the flow")
 
                 #if os(iOS)
@@ -122,13 +131,21 @@ public struct ServiceFlowView: View {
                         case .table:
                             tableLayout(schedule)
                         }
+                        #if os(macOS)
+                        RunSheetTotalsView(schedule: schedule, showsSummary: false)
+                        #else
                         RunSheetTotalsView(schedule: schedule)
+                        #endif
                     }
                 }
             }
         }
         #if os(macOS) || os(iOS)
-        .modifier(RunSheetPlanInspectorModifier(isPresented: $planPanelVisible))
+        .modifier(RunSheetPlanInspectorModifier(
+            isPresented: $planPanelVisible,
+            onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
+            onEventTimes: { showingEventTimes = true }
+        ))
         #endif
         #if os(macOS) || os(iOS)
         .environment(\.runSheetReferencePresenter, RunSheetReferencePresenter { referenceRequest = $0 })
@@ -149,24 +166,39 @@ public struct ServiceFlowView: View {
             pendingDeleteItem = engine.planItems.first { $0.id == id }
         }
         .onScreenshotTourSignal("runsheet.new-waypoint") { id in newWaypointTargetItemId = id }
-        .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
+        .onScreenshotTourSignal("runsheet.import-text") { _ in
+            UserDefaults.standard.set(PlanItemEditorView.EditorTab.importText.rawValue, forKey: "itemEditorTab")
+            editorMode = .add
+        }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition in
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories, onImport: { items in
+                engine.importFlow(title: nil, items: items)
+            }) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, cueRoleIds, placement in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
+                    engine.setItemTrigger(id: id, trigger)
+                    engine.setItemCueRoles(id: id, cueRoleIds)
                 } else {
-                    let newId = engine.addPlanItem(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual)
+                    let countBefore = engine.planItems.count
                     let hasDetails = !(description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (servicePosition ?? .during) != .during
-                    if let newId, hasDetails {
-                        engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
+                    for _ in 0..<placement.count {
+                        let newId = engine.addPlanItem(title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, isDurationActual: isDurationActual)
+                        guard let newId else { continue }
+                        if hasDetails {
+                            engine.updatePlanItem(id: newId, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, description: description, servicePosition: servicePosition)
+                        }
+                        engine.setItemTrigger(id: newId, trigger)
+                        engine.setItemCueRoles(id: newId, cueRoleIds)
+                    }
+                    let added = engine.planItems.count - countBefore
+                    if let position = placement.position, added > 0 {
+                        let target = min(max(position - 1, 0), countBefore)
+                        if target < countBefore {
+                            engine.movePlanItems(fromOffsets: IndexSet(countBefore..<(countBefore + added)), toOffset: target)
+                        }
                     }
                 }
-            }
-        }
-        .sheet(isPresented: $showingImportText) {
-            ImportFlowTextView { title, items in
-                engine.importFlow(title: title.isEmpty ? nil : title, items: items)
             }
         }
         .sheet(isPresented: $showingPlanPicker) {
@@ -231,8 +263,16 @@ public struct ServiceFlowView: View {
             ContentUnavailableView(
                 "No Run Sheet",
                 systemImage: "list.bullet.rectangle",
-                description: Text("Sync from Planning Center, paste in a run sheet, or add items below.")
+                description: Text("Sync a Planning Center plan from the Plan tab, or use Add Item to add items one at a time or paste in a whole run sheet.")
             )
+            #if os(macOS) || os(iOS)
+            Button {
+                planPanelVisible = true
+            } label: {
+                Label("Open Plan", systemImage: "sidebar.trailing")
+            }
+            .buttonStyle(.borderedProminent)
+            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -243,7 +283,6 @@ public struct ServiceFlowView: View {
         GeometryReader { proxy in
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                tableControls
                 RunSheetTableView(
                     schedule: schedule,
                     selection: $selectedItemId,
@@ -267,40 +306,6 @@ public struct ServiceFlowView: View {
         EmptyView()
         #endif
     }
-
-    #if os(macOS)
-    @ViewBuilder
-    private var tableControls: some View {
-        let hasLiveToggle = engine.planItems.first?.pcoPlanId != nil
-        let hasTimes = engine.eventTimes.count > 1
-        let hasRehearsal = engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty
-        if engine.pcoLastError != nil || hasLiveToggle || hasTimes || hasRehearsal || engine.isAtEndOfPlan {
-            VStack(alignment: .leading, spacing: 6) {
-                if let error = engine.pcoLastError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(AppPalette.warning)
-                        .font(.footnote)
-                }
-                HStack(spacing: 16) {
-                    if hasLiveToggle {
-                        PCOLiveSyncToggle()
-                            .help(PCOLiveSyncToggle.explanation)
-                    }
-                    if hasTimes {
-                        LiveEventTimePicker()
-                            .fixedSize()
-                    }
-                    RehearsalControl()
-                    Spacer(minLength: 0)
-                    StartNextEventButton()
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            Divider()
-        }
-    }
-    #endif
 
     private struct SheetSection: Identifiable {
         let position: PCOServicePosition
@@ -374,7 +379,7 @@ public struct ServiceFlowView: View {
         switch section.position {
         case .pre: return "Before the event"
         case .post: return "After the event"
-        case .during: return engine.planItems.first?.servicePlanTitle ?? "Run Sheet"
+        case .during: return engine.planTitle ?? "Run Sheet"
         }
     }
 
@@ -398,12 +403,19 @@ public struct ServiceFlowView: View {
 
     @ViewBuilder
     private func flowListContent(_ schedule: RunSheetSchedule) -> some View {
+        #if !os(macOS)
         if let error = engine.pcoLastError {
             Section {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
+        }
+
+        Section {
+            RunSheetTimingToggles()
+        } footer: {
+            Text(RunSheetTimingToggles.explanation)
         }
 
         if engine.planItems.first?.pcoPlanId != nil {
@@ -424,6 +436,7 @@ public struct ServiceFlowView: View {
                 RehearsalControl()
             }
         }
+        #endif
 
         let sections = sheetSections
         ForEach(sections) { section in
@@ -477,7 +490,7 @@ public struct ServiceFlowView: View {
             }
         )
         .padding(.top, position.roundsTop ? RunSheetCardPosition.gap : 0)
-        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position))
+        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position, timerColorHex: isActive ? engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) } : nil))
         #if !os(tvOS)
         .listRowSeparator(.hidden)
         #endif

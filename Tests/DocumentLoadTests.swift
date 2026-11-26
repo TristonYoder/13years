@@ -109,7 +109,8 @@ final class DocumentLoadRouterTests: XCTestCase {
         XCTAssertEqual(engine.planItems, reference.planItems)
         XCTAssertEqual(engine.activeItemIndex, 1)
         XCTAssertEqual(engine.activeTimerItem?.id, "a")
-        XCTAssertEqual(engine.planItems.first?.servicePlanTitle, "Sunday")
+        XCTAssertEqual(engine.planTitle, "Sunday")
+        XCTAssertNil(engine.planItems.first?.servicePlanTitle)
         XCTAssertEqual(engine.planItems[1].notes, ["Lights": "dim"])
         XCTAssertEqual(engine.planItems[1].elapsedSeconds, 0)
     }

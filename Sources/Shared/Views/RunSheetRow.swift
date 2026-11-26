@@ -289,6 +289,8 @@ struct RunSheetRowBackground: View {
     let isActive: Bool
     let isSelected: Bool
     var position: RunSheetCardPosition = .only
+    /// The active item's color from the timer color scale; nil pulses in the on-time accent.
+    var timerColorHex: String?
 
     var body: some View {
         let radius = RunSheetCardPosition.cornerRadius
@@ -329,14 +331,10 @@ struct RunSheetRowBackground: View {
         .padding(.horizontal, RunSheetCardPosition.horizontalInset)
     }
 
+    /// The pulse takes its color from the timer color scale and pulses harder once the item is over.
     private func overrunStyle(for item: PCOTimerItem) -> (color: Color, min: Double, max: Double) {
-        if item.isOvertime {
-            return (AppPalette.timerOvertime, 0.28, 0.55)
-        }
-        if item.lengthInSeconds > 0, Double(item.remainingSeconds) <= Double(item.lengthInSeconds) * 0.1 {
-            return (AppPalette.timerWarning, 0.14, 0.34)
-        }
-        return (AppPalette.timerOnTime, 0.12, 0.30)
+        let color = timerColorHex.flatMap(Color.init(timerHex:)) ?? AppPalette.timerOnTime
+        return item.isOvertime ? (color, 0.28, 0.55) : (color, 0.12, 0.30)
     }
 }
 
@@ -553,13 +551,13 @@ struct RunSheetRow: View {
 
     private var startColumn: some View {
         Group {
-            if let entry, !entry.isOmitted, let planned = entry.plannedStart {
+            if let entry, !entry.isOmitted, let planned = engine.runSheetLayout.displaysEndTimes ? (item.isHeader ? nil : entry.plannedEnd) : entry.plannedStart {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.clock(.caption))
                         .foregroundStyle(item.isHeader ? .tertiary : .secondary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
-                       let projected = entry.projectedStart {
+                       let projected = engine.runSheetLayout.displaysEndTimes ? entry.projectedEnd : entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.clock(.caption2, weight: .semibold))
                             .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
@@ -778,6 +776,7 @@ struct RunSheetRow: View {
                 EmptyView()
             } else if isActive {
                 HStack(spacing: 8) {
+                    ItemCueButtons(item: item)
                     Image(systemName: "play.circle.fill")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(AppPalette.timerOnTime)
@@ -797,18 +796,21 @@ struct RunSheetRow: View {
                     .help("Reset this item's clock back to its full length \u{2014} if Planning Center Live sync is on, also steps back and immediately forward there so PCO's own clock restarts too")
                 }
             } else {
-                Button {
-                    engine.setActivePlanItem(id: item.id)
-                } label: {
-                    Image(systemName: "play.fill")
-                        .font(.title2.weight(.bold))
-                        .frame(width: 52, height: 52)
+                HStack(spacing: 8) {
+                    ItemCueButtons(item: item)
+                    Button {
+                        engine.setActivePlanItem(id: item.id)
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.title2.weight(.bold))
+                            .frame(width: 52, height: 52)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 10))
+                    .tint(AppPalette.positive)
+                    .accessibilityLabel("Play")
+                    .help("Jump to this item and start its clock, without calling any roles")
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 10))
-                .tint(AppPalette.positive)
-                .accessibilityLabel("Go")
-                .help("Jump to this item and make it active")
             }
         }
         .frame(maxHeight: .infinity, alignment: .center)

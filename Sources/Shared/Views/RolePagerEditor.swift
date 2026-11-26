@@ -230,6 +230,13 @@ struct RolePagerEditorContent: View {
     @State private var targetedRoleId: String?
     @State private var paletteTargeted = false
     @State private var pendingAdd: RolePagerItem?
+    @State private var arrangement: Arrangement = .matrix
+
+    private enum Arrangement: String, CaseIterable, Identifiable {
+        case matrix = "Matrix"
+        case arrange = "Arrange"
+        var id: String { rawValue }
+    }
 
     private var showsPalette: Bool {
         #if os(macOS)
@@ -251,16 +258,29 @@ struct RolePagerEditorContent: View {
     }
 
     var body: some View {
-        Group {
-            if showsPalette {
-                HStack(alignment: .top, spacing: 0) {
-                    palette
-                        .frame(width: 270)
-                    Divider()
+        VStack(spacing: 0) {
+            Picker("Layout", selection: $arrangement) {
+                ForEach(Arrangement.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 220)
+            .padding(.vertical, 10)
+            .help("Matrix ticks fields per role. Arrange sets the order each role shows them in.")
+            Divider()
+            Group {
+                if arrangement == .matrix {
+                    matrix
+                } else if showsPalette {
+                    HStack(alignment: .top, spacing: 0) {
+                        palette
+                            .frame(width: 270)
+                        Divider()
+                        rolesPane
+                    }
+                } else {
                     rolesPane
                 }
-            } else {
-                rolesPane
             }
         }
         .confirmationDialog(
@@ -274,6 +294,65 @@ struct RolePagerEditorContent: View {
             }
             Button("Cancel", role: .cancel) { pendingAdd = nil }
         }
+    }
+
+    /// Roles as rows, pager fields and note categories as columns. Each box is set for one role at a time;
+    /// there is no select-all. A newly ticked field goes to the end of that role's order (see Arrange).
+    private var matrix: some View {
+        let columns: [RolePagerItem] = PagerItemField.allCases.map(RolePagerItem.field) + noteCategories.map(RolePagerItem.note)
+        return ScrollView([.horizontal, .vertical]) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    Text("Role").font(.caption.weight(.semibold)).frame(width: 150, alignment: .leading)
+                    ForEach(columns, id: \.self) { column in
+                        Text(column.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .frame(width: 74)
+                    }
+                }
+                .padding(.vertical, 8)
+                Divider()
+                ForEach(Array(engine.roles.enumerated()), id: \.element.id) { index, role in
+                    HStack(spacing: 0) {
+                        Text(role.name).fontWeight(.medium).lineLimit(1).frame(width: 150, alignment: .leading)
+                        ForEach(columns, id: \.self) { column in
+                            Toggle("", isOn: Binding(
+                                get: { (role.pagerItems ?? []).contains(column) },
+                                set: { on in
+                                    let items = role.pagerItems ?? []
+                                    engine.setPagerItems(forRoleId: role.id, on ? RolePagerItem.inserting(column, into: items) : RolePagerItem.removing(column, from: items))
+                                }
+                            ))
+                            .labelsHidden()
+                            .accessibilityLabel("\(column.label) for \(role.name)")
+                            .frame(width: 74)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .background(index % 2 == 0 ? Color.primary.opacity(0.05) : Color.clear)
+                }
+                HStack {
+                    TextField("New role name", text: $newRoleName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
+                        .onSubmit(addMatrixRole)
+                    Button("Add Role", action: addMatrixRole)
+                        .disabled(newRoleName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .padding(.top, 12)
+            }
+            .padding()
+        }
+    }
+
+    private func addMatrixRole() {
+        let name = newRoleName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        engine.addRole(name: name)
+        newRoleName = ""
     }
 
     private var palette: some View {

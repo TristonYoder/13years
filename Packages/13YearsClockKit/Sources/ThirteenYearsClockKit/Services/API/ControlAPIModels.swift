@@ -61,6 +61,8 @@ public struct ControlAPIState: Codable, Sendable {
         public var anchor: TimerAnchor?
         public var nextItem: PCOTimerItem? = nil
         public var nextStartsAtMs: Int? = nil
+        /// The active item's color scale; omitted when it is the standard one.
+        public var colors: TimerColorScale? = nil
     }
 
     public struct PlanStatus: Codable, Sendable {
@@ -111,8 +113,10 @@ public struct ControlAPIState: Codable, Sendable {
         public var clockFormat: String
         public var controlAPIPort: Int
         public var connectedAPIClients: Int
+        public var timerColors: TimerColorScale?
 
-        public init(hourFormatThreshold: String, clockFormat: String, controlAPIPort: Int, connectedAPIClients: Int) {
+        public init(hourFormatThreshold: String, clockFormat: String, controlAPIPort: Int, connectedAPIClients: Int, timerColors: TimerColorScale? = nil) {
+            self.timerColors = timerColors
             self.hourFormatThreshold = hourFormatThreshold
             self.clockFormat = clockFormat
             self.controlAPIPort = controlAPIPort
@@ -125,6 +129,7 @@ public struct ControlAPIState: Codable, Sendable {
             clockFormat = try container.decodeIfPresent(String.self, forKey: .clockFormat) ?? ""
             controlAPIPort = try container.decode(Int.self, forKey: .controlAPIPort)
             connectedAPIClients = try container.decode(Int.self, forKey: .connectedAPIClients)
+            timerColors = try? container.decodeIfPresent(TimerColorScale.self, forKey: .timerColors)
         }
     }
 
@@ -140,11 +145,16 @@ public struct ControlAPIState: Codable, Sendable {
         public var itemId: String?
         public var itemTitle: String?
         public var itemIndex: Int?
+        public var timerColors: TimerColorScale? = nil
     }
 
     public struct LiveOpsStatus: Codable, Sendable {
         public var isRehearsalMode: Bool
         public var rehearsalPlanTimeId: String?
+        /// The rehearsal times a client can choose from, so a remote Producer sees the same list as this one.
+        public var rehearsalTimes: [PCOPlanTimeInfo]?
+        /// Rehearsal times entered by hand, with day and start time, so a client can edit them.
+        public var manualRehearsalTimes: [EventTime]?
         public var actualsEventTimeId: String?
         public var actuals: [ItemActual]
         public var skippedItemIds: [String: [String]]
@@ -181,6 +191,9 @@ public struct ControlAPIState: Codable, Sendable {
             public var recurrence: String
             public var isEnabled: Bool
             public var lastFiredAt: Date?
+            public var targetKind: String? = nil
+            public var targetId: String? = nil
+            public var startsFirstItem: Bool? = nil
         }
     }
 }
@@ -496,6 +509,15 @@ public enum ControlAPIRequests {
         public var startTime: String?
     }
 
+    public struct RehearsalTimesStatus: Codable, Sendable {
+        public var managedByPCO: Bool
+        public var entries: [ControlAPIState.EventTimeStatus.Entry]
+    }
+
+    public struct PlanTitleBody: Decodable, Sendable {
+        public var title: String?
+    }
+
     public struct IdBody: Decodable, Sendable {
         public var id: String?
     }
@@ -523,6 +545,8 @@ public enum ControlAPIRequests {
     public struct SettingsBody: Decodable, Sendable {
         public var hourFormatThreshold: String?
         public var clockFormat: String?
+        /// `{}` resets to the standard scale.
+        public var timerColors: TimerColorScale?
     }
 
     public struct ModeBody: Decodable, Sendable {
@@ -535,6 +559,9 @@ public enum ControlAPIRequests {
 
     public struct WaypointUpdateBody: Decodable, Sendable {
         public var name: String?
+        public var timerColors: TimerColorScale?
+        /// Drop the waypoint's override so it follows the producer-wide scale again.
+        public var clearTimerColors: Bool?
     }
 
     public struct WaypointAssignBody: Decodable, Sendable {
@@ -560,6 +587,9 @@ public enum ControlAPIRequests {
         public var pcoPlanId: String?
         public var recurrence: String?
         public var isEnabled: Bool?
+        public var targetKind: String?
+        public var targetId: String?
+        public var startsFirstItem: Bool?
     }
 
     public struct ScheduleUpdateBody: Decodable, Sendable {
@@ -571,6 +601,9 @@ public enum ControlAPIRequests {
         public var pcoPlanId: String?
         public var recurrence: String?
         public var isEnabled: Bool?
+        public var targetKind: String?
+        public var targetId: String?
+        public var startsFirstItem: Bool?
     }
 }
 

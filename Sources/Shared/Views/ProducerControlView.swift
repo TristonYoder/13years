@@ -7,13 +7,14 @@ public struct ProducerControlView: View {
     @EnvironmentObject var engine: CueEngine
     @State private var showingPlanPicker = false
     @AppStorage("showPagerPreview") private var showsPreview = true
+    @AppStorage("pagerRoleLayout") private var roleLayout = "table"
 
     public init() {}
 
     public var body: some View {
         VStack(spacing: 0) {
             SectionHeaderBar(mode: .producerControl) {
-                Button(action: { showingPlanPicker = true }) {
+                Button(action: { engine.whenPCOConnected { showingPlanPicker = true } }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
@@ -51,6 +52,14 @@ public struct ProducerControlView: View {
                 Label("Roles", systemImage: "person.3.fill")
                     .font(.headline)
                 Spacer()
+                Picker("Layout", selection: $roleLayout) {
+                    Label("Table", systemImage: "list.bullet").tag("table")
+                    Label("Cards", systemImage: "square.grid.2x2").tag("cards")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Show the roles as a dense table or as cards")
                 Button("Clear All", role: .destructive) {
                     engine.clearAllCues()
                 }
@@ -58,12 +67,96 @@ public struct ProducerControlView: View {
                 .help("Clear the cue for every role")
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
-                ForEach(engine.roles) { role in
-                    roleCard(role)
+            if roleLayout == "table" {
+                roleTable
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
+                    ForEach(engine.roles) { role in
+                        roleCard(role)
+                    }
                 }
             }
         }
+    }
+
+    /// One line per role with every control inline, for scanning a long team quickly.
+    private var roleTable: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Color.clear.frame(width: 22)
+                Text("ROLE").frame(width: 150, alignment: .leading)
+                Text("PERSON").frame(width: 110, alignment: .leading)
+                Text("CUE").frame(width: 230, alignment: .leading)
+                Text("LAST MESSAGE").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+
+            ForEach(Array(engine.roles.enumerated()), id: \.element.id) { index, role in
+                roleRow(role, striped: index % 2 == 0)
+            }
+        }
+    }
+
+    private func roleRow(_ role: RoleCue, striped: Bool) -> some View {
+        let isSelected = engine.selectedRoleIds.contains(role.id)
+        let unread = engine.hasUnreadMessage(forRoleId: role.id)
+        let last = engine.recentMessages.first(where: { $0.targetRoleId == role.id })
+        return HStack(spacing: 10) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? AppPalette.info : .secondary)
+                .frame(width: 22)
+            Text(role.name)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .frame(width: 150, alignment: .leading)
+            Text(role.personName ?? "\u{2014}")
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: 110, alignment: .leading)
+            HStack(spacing: 6) {
+                Button("Standby") { engine.setCueForRole(id: role.id, state: .standby) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.cueStandby)
+                    .foregroundStyle(.black)
+                    .opacity(role.state == .standby ? 1 : 0.55)
+                Button("GO!") { engine.setCueForRole(id: role.id, state: .go) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.cueGo)
+                    .opacity(role.state == .go ? 1 : 0.55)
+                Button("Off") { engine.setCueForRole(id: role.id, state: .off) }
+                    .producerSecondaryButton()
+            }
+            .compactControlSize()
+            .frame(width: 230, alignment: .leading)
+            Text(last.map { ($0.senderRoleId == nil ? "You: " : "") + $0.text } ?? "\u{2014}")
+                .font(.callout)
+                .foregroundStyle(unread ? Color.primary : Color.secondary)
+                .fontWeight(unread ? .semibold : .regular)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: { engine.openMessageThread(forRoleId: role.id) }) {
+                Image(systemName: unread ? "message.badge.fill" : "message")
+            }
+            .producerSecondaryButton()
+            .compactControlSize()
+            .help("Open the message thread with \(role.name)")
+            Button(action: { engine.clearActiveNotification() }) {
+                Image(systemName: "bell.slash")
+            }
+            .producerSecondaryButton()
+            .compactControlSize()
+            .disabled(engine.activeNotification(forRoleId: role.id) == nil)
+            .help("Take the standing message off the web pagers and lower thirds, keeping the history")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(striped ? Color.primary.opacity(0.05) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isSelected ? AppPalette.info : .clear, lineWidth: 2))
+        .contentShape(Rectangle())
+        .onTapGesture { engine.toggleRoleSelection(role.id) }
     }
 
     private func roleCard(_ role: RoleCue) -> some View {

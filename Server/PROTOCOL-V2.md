@@ -231,3 +231,16 @@ A producer (or any app) can point a pager at a clock server with one UDP datagra
 - `mode` (optional): `"introducer"` marks a packet whose `host` is not the sender, as when a Producer in a remote session introduces a pager to the remote clock server. Without it the pager only accepts a packet whose `host` equals the datagram's source address, so a third party cannot redirect it.
 
 The pager remembers the host and port and reconnects to them until it is told to forget the assignment. A Producer sends its own address (no `port`, no `mode`) when it serves the pager itself, including a remote session in Local Relay mode; in Introducer or Control Only mode it sends the remote server's IPv4, its `network.lanPort`, and `"mode":"introducer"`.
+
+### Timer colors (additive)
+
+The producer adds `timerColors` to every packet that carries the active timer item (`TIMER_UPDATE`, `TIMER_ANCHOR`, `CUE_UPDATE` and `PONG`): the color scale in effect for that item, `{"onTimeHex": "RRGGBB?", "stops": [{"id","phase?":"remaining"|"overtime","value","unit":"seconds"|"percent","colorHex","effect?"}], "overtimeHex": "RRGGBB", "overtimeEffect": "none"|"pulse"|"blink"|"flicker"|"glitch", "overtimeStart": {"value","unit"}}`. It is sent even when it is the producer's standard scale, and it is absent only when there is no active item. A pager never assumes a scale: with none received it colors nothing. Receivers that do not know the field ignore it.
+
+A pager colors only the current item's countdown text (not the next item or any other text) with the color for its own remaining time, and plays the matching `effect` on it (absent or `none`: no effect; Reduce Motion plays none):
+- Time left (`remaining`, the default phase): of the stops whose threshold the remaining time has reached (`unit: seconds` is that many seconds; `percent` is that percent of `timerItem.lengthInSeconds`), the one with the smallest threshold wins; none reached gives `onTimeHex` (absent: the normal color) and no effect.
+- Overtime (remaining below zero): if the time over is less than `overtimeStart` (`value` seconds, or that percent of the item's length; absent or 0 means straight away), use the time-left rules as if the remaining time were exactly zero. Otherwise: of the `phase: "overtime"` stops whose threshold the time over has reached, the largest threshold wins; none reached gives `overtimeHex` with `overtimeEffect`.
+- Full-screen cue styles that paint the whole screen keep their dark text.
+
+Effects: `pulse` swells opacity between about 62% and 100% over 1.4 s; `blink` is 60% on and 40% at 10% over 1 s; `flicker` is mostly steady with quick irregular dips; `glitch` jumps the text sideways in short bursts every 2.2 s.
+
+Size: a scale is about 350 bytes at the default and at most about 1.3 KB (12 stops). The 4096-byte `PONG` limit above still holds and counts it; drop the oldest messages first.

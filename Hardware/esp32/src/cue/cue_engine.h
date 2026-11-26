@@ -8,6 +8,7 @@
 #include "cue_state.h"
 #include "sync/sync_core.h"
 #include "sync/details_line.h"
+#include "sync/timer_colors.h"
 
 namespace cue {
 
@@ -133,6 +134,9 @@ public:
   bool timerIsDurationActual() const { return timer_.isDurationActual; }
   const String &timerTitle() const { return timer_.title; }
   int timerRemainingSeconds() const;
+  int timerLengthSeconds() const { return timer_.lengthInSeconds; }
+  // The producer's timer color scale for the active item; invalid (nothing colored) when none was sent.
+  const pagersync::TimerColorScale &timerColors() const { return timerColors_; }
 
   bool nextFound() const { return next_.found; }
   const char *nextTitle() const { return next_.title; }
@@ -160,6 +164,8 @@ public:
   void (*onMessageReceived)(CueState currentDisplayState) = nullptr;
 
 private:
+  pagersync::TimerColorScale timerColors_;
+  void applyTimerColors(JsonVariantConst v) { pagersync::parseTimerColorScale(v, timerColors_); }
   static const int kMaxRoles = 8;
   static const int kMaxMessages = 16;
   static const int kMaxNoteCategories = 6;

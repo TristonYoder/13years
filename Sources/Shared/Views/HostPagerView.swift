@@ -32,7 +32,8 @@ public struct HostPagerView: View {
             receivedNextItem: engine.nextItem,
             producerClockOffsetMs: engine.producerClockOffsetMs,
             producerUTCOffsetSeconds: engine.producerUTCOffsetSeconds,
-            nextItemStartDate: engine.nextItemStartDate
+            nextItemStartDate: engine.nextItemStartDate,
+            timerColors: engine.pagerTimerColors
         )
     }
 

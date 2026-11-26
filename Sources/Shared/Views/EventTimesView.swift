@@ -20,6 +20,7 @@ public struct EventTimesView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var editorTarget: Target?
+    @State private var editorIsRehearsal = false
 
     public init() {}
 
@@ -41,10 +42,26 @@ public struct EventTimesView: View {
                             engine.removeEventTime(id: engine.eventTimes[index].id)
                         }
                     })
+                } header: {
+                    Text("Services")
                 } footer: {
                     Text(isManagedByPCO
                         ? "These are the plan's service times in Planning Center. Change them there and sync the plan again."
                         : "At the end of the run sheet you can jump to the next time and start over from the top.")
+                }
+
+                Section {
+                    if engine.rehearsalPlanTimes.isEmpty {
+                        Text(isManagedByPCO
+                            ? "This Planning Center plan has no rehearsal times."
+                            : "No rehearsal times yet. Add one to rehearse against: actual times aren't recorded while rehearsing.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(engine.rehearsalPlanTimes) { time in
+                        rehearsalRow(time)
+                    }
+                } header: {
+                    Text("Rehearsals")
                 }
             }
             .formStyle(.grouped)
@@ -54,14 +71,15 @@ public struct EventTimesView: View {
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { editorTarget = .add }) {
-                        Label("Add Event Time", systemImage: "plus")
+                    Button(action: { editorIsRehearsal = false; editorTarget = .add }) {
+                        Label("Add Time", systemImage: "plus")
                     }
-                    .disabled(isManagedByPCO || engine.eventTimes.count >= CueEngine.maxEventTimes)
+                    .disabled(isManagedByPCO)
+                    .help("Add an event or a rehearsal time")
                 }
             }
             .sheet(item: $editorTarget) { target in
-                EventTimeEditorView(target: target)
+                EventTimeEditorView(target: target, isRehearsal: editorIsRehearsal)
             }
         }
         #if os(macOS)
@@ -71,6 +89,39 @@ public struct EventTimesView: View {
 
     private var isManagedByPCO: Bool {
         engine.isEventTimesManagedByPCO
+    }
+
+    private func rehearsalRow(_ time: PCOPlanTimeInfo) -> some View {
+        let manual = engine.manualRehearsalTimes.first { $0.id == time.id }
+        let title = time.name?.isEmpty == false ? time.name! : (time.startsAt.map { engine.clockFormat.string(from: $0) } ?? "Rehearsal")
+        return HStack {
+            Image(systemName: "theatermasks")
+                .foregroundStyle(AppPalette.rehearsal)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                if let start = time.startsAt, time.name?.isEmpty == false {
+                    Text(engine.clockFormat.string(from: start))
+                        .font(.clock(.caption, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if let manual {
+                Button(action: { editorIsRehearsal = true; editorTarget = .edit(manual) }) {
+                    Image(systemName: "pencil")
+                }
+                .help("Edit this rehearsal time")
+                Button(role: .destructive, action: { engine.removeRehearsalTime(id: time.id) }) {
+                    Image(systemName: "trash")
+                }
+                .help("Delete this rehearsal time")
+            } else {
+                Text("PCO")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.borderless)
     }
 
     private func row(_ time: EventTime) -> some View {
@@ -113,6 +164,9 @@ struct EventTimeEditorView: View {
 
     let target: EventTimesView.Target
 
+    /// Event or rehearsal. Chosen at the top when adding; fixed when editing.
+    @State private var isRehearsal: Bool
+
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
 
@@ -123,8 +177,9 @@ struct EventTimeEditorView: View {
     @State private var date: Date
     @State private var weekday: Int
 
-    init(target: EventTimesView.Target) {
+    init(target: EventTimesView.Target, isRehearsal: Bool = false) {
         self.target = target
+        _isRehearsal = State(initialValue: isRehearsal)
         let existing: EventTime?
         switch target {
         case .add: existing = nil
@@ -152,8 +207,20 @@ struct EventTimeEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if isAdding {
+                    Section {
+                        Picker("Type", selection: $isRehearsal) {
+                            Text("Event").tag(false)
+                            Text("Rehearsal").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    } footer: {
+                        Text(isRehearsal ? "You rehearse against this time: actual times aren't recorded." : "A time this run sheet runs, like a 9:00 and an 11:00 event.")
+                    }
+                }
                 Section {
-                    TextField("Name (optional)", text: $name)
+                    TextField("Name (optional)", text: $name, prompt: Text(isRehearsal ? "Band Rehearsal" : "Early Service"))
                     Toggle("Start Time", isOn: $hasStartTime)
                     if hasStartTime {
                         #if os(tvOS)
@@ -197,7 +264,7 @@ struct EventTimeEditorView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(isAdding ? "Add Event Time" : "Edit Event Time")
+            .navigationTitle(isAdding ? "Add Time" : (isRehearsal ? "Edit Rehearsal" : "Edit Event Time"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -209,7 +276,7 @@ struct EventTimeEditorView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 360, idealWidth: 400, minHeight: 320, idealHeight: 360)
+        .frame(minWidth: 400, idealWidth: 440, minHeight: 540, idealHeight: 560)
         #endif
     }
 
@@ -230,9 +297,17 @@ struct EventTimeEditorView: View {
         let time = hasStartTime ? TimeOfDay(date: startTime) : nil
         switch target {
         case .add:
-            engine.addEventTime(name: name, day: resolvedDay, startTime: time)
+            if isRehearsal {
+                engine.addRehearsalTime(name: name, day: resolvedDay, startTime: time)
+            } else {
+                engine.addEventTime(name: name, day: resolvedDay, startTime: time)
+            }
         case .edit(let existing):
-            engine.updateEventTime(id: existing.id, name: name, day: resolvedDay, startTime: time)
+            if isRehearsal {
+                engine.updateRehearsalTime(id: existing.id, name: name, day: resolvedDay, startTime: time)
+            } else {
+                engine.updateEventTime(id: existing.id, name: name, day: resolvedDay, startTime: time)
+            }
         }
         dismiss()
     }

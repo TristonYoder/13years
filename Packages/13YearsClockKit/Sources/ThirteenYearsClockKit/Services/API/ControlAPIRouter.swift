@@ -214,6 +214,10 @@ public final class ControlAPIRouter {
                 }
                 engine.setClockFormat(format)
             }
+            if let colors = request.timerColors {
+                if let invalid = invalidTimerColors(colors) { return invalid }
+                engine.setTimerColorScale(colors)
+            }
             return json(settingsStatus())
 
         case "waypoints":
@@ -258,6 +262,31 @@ public final class ControlAPIRouter {
             }
             return json(eventTimeEntry(created), status: 201)
 
+        case "rehearsal-times":
+            if allows(method, "GET") { return json(rehearsalTimesStatus()) }
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard !engine.isEventTimesManagedByPCO else { return rehearsalTimesManagedByPCO() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name?.trimmingCharacters(in: .whitespaces)
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Rehearsal time name") { return tooLong }
+            guard engine.manualRehearsalTimes.count < CueEngine.maxEventTimes else { return limitReached("rehearsal times", CueEngine.maxEventTimes) }
+            var day: EventDay?
+            var startTime: TimeOfDay?
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .keep, .clear: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .keep, .clear: break
+            }
+            guard let created = engine.addRehearsalTime(name: name, day: day, startTime: startTime) else {
+                return Self.error(400, "Could not create rehearsal time")
+            }
+            return json(eventTimeEntry(created), status: 201)
+
         case "schedules":
             if allows(method, "GET") { return json(scheduleStatus()) }
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -294,7 +323,9 @@ public final class ControlAPIRouter {
                 pcoServiceTypeId: request.pcoServiceTypeId,
                 pcoPlanId: request.pcoPlanId,
                 recurrence: recurrence,
-                isEnabled: request.isEnabled ?? true
+                isEnabled: request.isEnabled ?? true,
+                target: scheduleTarget(kind: request.targetKind, id: request.targetId),
+                startsFirstItem: request.startsFirstItem ?? false
             ) else {
                 return Self.error(400, "Could not create schedule", detail: "Title must be non-empty and the lead time must not be negative.")
             }
@@ -400,6 +431,17 @@ public final class ControlAPIRouter {
             engine.setActiveTimerActualOverride(isActual)
             return json(snapshot())
 
+        case ("plan", "title"):
+            guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.PlanTitleBody.self, body) else { return badBody() }
+            guard !engine.isLinkedToPCOPlan else {
+                return Self.error(409, "The plan is linked to Planning Center", detail: "A linked plan takes its name from Planning Center. POST /v1/pco/unlink first.")
+            }
+            let title = (request.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if let tooLong = tooLong(title, ContentLimits.title, "Plan title") { return tooLong }
+            engine.setPlanTitle(title)
+            return json(snapshot())
+
         case ("plan", "next"):
             guard allows(method, "POST") else { return methodNotAllowed() }
             engine.nextPlanItem(startTimer: decode(ControlAPIRequests.PlanStepBody.self, body)?.startTimer ?? true)
@@ -503,6 +545,14 @@ public final class ControlAPIRouter {
             guard allows(method, "POST", "DELETE") else { return methodNotAllowed() }
             engine.signOutOfPCO()
             return json(pcoStatus())
+
+        case ("pco", "unlink"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.isLinkedToPCOPlan else {
+                return Self.error(409, "No Planning Center plan is linked", detail: "The loaded plan is already running in 13 Years.")
+            }
+            engine.unlinkPCOPlan()
+            return json(snapshot())
 
         case ("pco", "service-types"):
             guard allows(method, "GET") else { return methodNotAllowed() }
@@ -624,6 +674,40 @@ public final class ControlAPIRouter {
             engine.advanceToNextEventTime()
             return json(snapshot())
 
+        case ("rehearsal-times", let rehearsalId):
+            guard let existing = engine.manualRehearsalTimes.first(where: { $0.id == rehearsalId }) else {
+                return Self.error(404, "Unknown rehearsal time id", detail: rehearsalId)
+            }
+            if allows(method, "GET") { return json(eventTimeEntry(existing)) }
+            guard !engine.isEventTimesManagedByPCO else { return rehearsalTimesManagedByPCO() }
+            if allows(method, "DELETE") {
+                engine.removeRehearsalTime(id: rehearsalId)
+                return json(rehearsalTimesStatus())
+            }
+            guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name.map { $0.trimmingCharacters(in: .whitespaces) } ?? existing.name
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Rehearsal time name") { return tooLong }
+            var day = existing.day
+            var startTime = existing.startTime
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .clear: day = nil
+            case .keep: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .clear: startTime = nil
+            case .keep: break
+            }
+            engine.updateRehearsalTime(id: rehearsalId, name: name, day: day, startTime: startTime)
+            guard let updated = engine.manualRehearsalTimes.first(where: { $0.id == rehearsalId }) else {
+                return Self.error(404, "Unknown rehearsal time id", detail: rehearsalId)
+            }
+            return json(eventTimeEntry(updated))
+
         case ("event-times", let eventTimeId):
             guard let existing = engine.eventTime(id: eventTimeId) else {
                 return Self.error(404, "Unknown event time id", detail: eventTimeId)
@@ -686,6 +770,12 @@ public final class ControlAPIRouter {
                 }
                 engine.renameWaypoint(id: waypoint.id, name: trimmed)
             }
+            if request.clearTimerColors == true {
+                engine.setWaypointTimerColors(id: waypoint.id, nil)
+            } else if let colors = request.timerColors {
+                if let invalid = invalidTimerColors(colors) { return invalid }
+                engine.setWaypointTimerColors(id: waypoint.id, colors)
+            }
             guard let updated = engine.waypoint(matching: waypoint.id) else {
                 return Self.error(404, "Unknown waypoint", detail: waypoint.id)
             }
@@ -736,7 +826,9 @@ public final class ControlAPIRouter {
                 pcoServiceTypeId: pcoServiceTypeId,
                 pcoPlanId: pcoPlanId,
                 recurrence: recurrence,
-                isEnabled: request.isEnabled
+                isEnabled: request.isEnabled,
+                target: request.targetKind == nil && request.targetId == nil ? nil : .some(scheduleTarget(kind: request.targetKind, id: request.targetId)),
+                startsFirstItem: request.startsFirstItem
             )
             guard let updated = engine.serviceSchedule(id: scheduleId) else {
                 return Self.error(404, "Unknown schedule id", detail: scheduleId)
@@ -1318,7 +1410,7 @@ public final class ControlAPIRouter {
         let anchor = engine.currentAnchor
         guard let item = engine.activeTimerItem else { return nil }
         return ControlAPIState.ActiveTimer(
-            item: item,
+            item: item.withPlanTitle(engine.planTitle),
             index: engine.activeItemIndex,
             isRunning: item.isRunning,
             remainingSeconds: item.remainingSeconds,
@@ -1327,7 +1419,8 @@ public final class ControlAPIRouter {
             isDurationActualForDisplay: engine.activeTimerActualForDisplay,
             anchor: anchor,
             nextItem: engine.derivedNextPlanItem,
-            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil
+            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil,
+            colors: engine.broadcastTimerColors
         )
     }
 
@@ -1347,8 +1440,8 @@ public final class ControlAPIRouter {
 
     private func planStatus() -> ControlAPIState.PlanStatus {
         ControlAPIState.PlanStatus(
-            title: engine.activeTimerItem?.servicePlanTitle ?? engine.planItems.first?.servicePlanTitle,
-            items: engine.planItems,
+            title: engine.planTitle,
+            items: engine.planItems.map { $0.withPlanTitle(engine.planTitle) },
             activeItemIndex: engine.activeItemIndex,
             isAtEndOfPlan: engine.isAtEndOfPlan,
             isAtStartOfPlan: engine.isAtStartOfPlan,
@@ -1430,8 +1523,21 @@ public final class ControlAPIRouter {
             slug: waypoint.slug,
             itemId: itemId,
             itemTitle: itemIndex.map { engine.planItems[$0].title },
-            itemIndex: itemIndex
+            itemIndex: itemIndex,
+            timerColors: waypoint.timerColors
         )
+    }
+
+    private func invalidTimerColors(_ scale: TimerColorScale) -> HTTPResponse? {
+        let hexes = [scale.onTimeHex].compactMap { $0 } + [scale.overtimeHex] + scale.stops.map(\.colorHex)
+        if let bad = hexes.first(where: { !TimerColorScale.isValidHex($0) }) {
+            return Self.error(400, "Invalid timer color", detail: "\(bad): use six hex digits, RRGGBB")
+        }
+        if scale.stops.count > 12 { return limitReached("timer color stops", 12) }
+        if scale.stops.contains(where: { $0.unit == .percent && $0.value > 100 }) {
+            return Self.error(400, "Invalid timer color stop", detail: "A percent stop is 0 to 100")
+        }
+        return nil
     }
 
     private func waypointStatuses() -> [ControlAPIState.WaypointStatus] {
@@ -1450,14 +1556,25 @@ public final class ControlAPIRouter {
             pcoPlanId: schedule.pcoPlanId,
             recurrence: schedule.recurrence.rawValue,
             isEnabled: schedule.isEnabled,
-            lastFiredAt: schedule.lastFiredAt
+            lastFiredAt: schedule.lastFiredAt,
+            targetKind: schedule.target?.kind.rawValue,
+            targetId: schedule.target?.id,
+            startsFirstItem: schedule.startsFirstItem
         )
+    }
+
+    /// `targetKind` is `event` or `rehearsal` with the time's id; empty or unknown clears it.
+    private func scheduleTarget(kind: String?, id: String?) -> ServiceSchedule.TimeTarget? {
+        guard let kind, let id, !id.isEmpty, let parsed = ServiceSchedule.TimeTarget.Kind(rawValue: kind) else { return nil }
+        return ServiceSchedule.TimeTarget(kind: parsed, id: id)
     }
 
     private func liveOpsStatus() -> ControlAPIState.LiveOpsStatus {
         ControlAPIState.LiveOpsStatus(
             isRehearsalMode: engine.isRehearsalMode,
             rehearsalPlanTimeId: engine.rehearsalPlanTimeId,
+            rehearsalTimes: engine.rehearsalPlanTimes,
+            manualRehearsalTimes: engine.manualRehearsalTimes.isEmpty ? nil : engine.manualRehearsalTimes,
             actualsEventTimeId: engine.actualsEventTimeId,
             actuals: engine.itemActualsIncludingLive,
             skippedItemIds: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
@@ -1494,6 +1611,17 @@ public final class ControlAPIRouter {
             liveId: engine.liveEventTime?.id,
             nextId: engine.nextEventTime?.id
         )
+    }
+
+    private func rehearsalTimesStatus() -> ControlAPIRequests.RehearsalTimesStatus {
+        ControlAPIRequests.RehearsalTimesStatus(
+            managedByPCO: engine.isEventTimesManagedByPCO,
+            entries: engine.manualRehearsalTimes.map(eventTimeEntry)
+        )
+    }
+
+    private func rehearsalTimesManagedByPCO() -> HTTPResponse {
+        Self.error(409, "Rehearsal times are managed by Planning Center", detail: "A Planning Center plan is loaded, so its rehearsal times are used and add, edit and delete are refused.")
     }
 
     private func eventTimeEntry(_ time: EventTime) -> ControlAPIState.EventTimeStatus.Entry {
@@ -1545,7 +1673,8 @@ public final class ControlAPIRouter {
             hourFormatThreshold: engine.hourFormatThreshold.rawValue,
             clockFormat: engine.clockFormat.rawValue,
             controlAPIPort: engine.controlAPIPort,
-            connectedAPIClients: connectedClientCount()
+            connectedAPIClients: connectedClientCount(),
+            timerColors: engine.timerColorScale
         )
     }
 

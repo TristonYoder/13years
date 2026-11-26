@@ -9,10 +9,14 @@ struct RunSheetPlanPanel: View {
     @Environment(\.openURL) private var openURL
     @State private var isRefreshing = false
     @StateObject private var attachmentOpener = AttachmentOpener()
+    let onChangePlan: () -> Void
+    let onEventTimes: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            Divider()
+            planBar
             Divider()
             if let context = engine.pcoPlanContext {
                 List {
@@ -34,6 +38,36 @@ struct RunSheetPlanPanel: View {
         }
         .attachmentPreview(attachmentOpener)
         .inspectorColumnWidthIfAvailable()
+    }
+
+    /// Which plan this run sheet is, and the two actions that change it.
+    private var planBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(engine.pcoPlanContext?.title ?? engine.planTitle ?? "No plan")
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+                if let dates = engine.pcoPlanContext?.dates, !dates.isEmpty {
+                    Text(dates)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 8) {
+                Button(action: onChangePlan) {
+                    Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .help("Pick a Planning Center plan type and plan to sync")
+                Button(action: onEventTimes) {
+                    Label("Event Times", systemImage: "clock")
+                }
+                .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 12)
     }
 
     private func attachmentsSection(_ context: PCOPlanContext) -> some View {
@@ -87,7 +121,6 @@ struct RunSheetPlanPanel: View {
                     .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
-            LabeledContent("Title", value: context.title ?? engine.planItems.first?.servicePlanTitle ?? "Untitled")
             if let series = context.seriesTitle, !series.isEmpty {
                 LabeledContent("Series", value: series)
             }
@@ -289,10 +322,12 @@ private extension View {
 
 struct RunSheetPlanInspectorModifier: ViewModifier {
     @Binding var isPresented: Bool
+    let onChangePlan: () -> Void
+    let onEventTimes: () -> Void
 
     func body(content: Content) -> some View {
         content.inspector(isPresented: $isPresented) {
-            RunSheetPlanPanel()
+            RunSheetPlanPanel(onChangePlan: onChangePlan, onEventTimes: onEventTimes)
         }
     }
 }

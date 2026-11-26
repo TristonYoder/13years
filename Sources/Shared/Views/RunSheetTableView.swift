@@ -164,7 +164,7 @@ struct RunSheetTableView: View {
     private func columnHeader(_ widths: [String: CGFloat]) -> some View {
         HStack(spacing: Self.columnSpacing) {
             ForEach(columns) { column in
-                Text(column.title)
+                Text(column.id == "start" && engine.runSheetLayout.displaysEndTimes ? "End" : column.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -360,6 +360,7 @@ struct RunSheetTableView: View {
         case "title": itemCell(item, detailed: !compact).markerHighlight(on)
         case "time": timeCell(item).markerHighlight(on)
         case "drift": driftCell(item).markerHighlight(on)
+        case "cue": cueCell(item).markerHighlight(on)
         case "key": keyCell(item).markerHighlight(on)
         case "sequence": sequenceCell(item).markerHighlight(on)
         case "number": cell(item, text: String(item.sequence), monospaced: true, highlight: on)
@@ -466,12 +467,12 @@ struct RunSheetTableView: View {
         let entry = schedule.entry(forItemId: item.id)
         return styled(item) {
             VStack(alignment: .leading, spacing: 1) {
-                if let entry, !entry.isOmitted, let planned = entry.plannedStart {
+                if let entry, !entry.isOmitted, let planned = engine.runSheetLayout.displaysEndTimes ? (item.isHeader ? nil : entry.plannedEnd) : entry.plannedStart {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.clock(.body))
                         .foregroundStyle(item.isHeader ? .secondary : .primary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
-                       let projected = entry.projectedStart {
+                       let projected = engine.runSheetLayout.displaysEndTimes ? entry.projectedEnd : entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.caption.weight(.semibold))
                             .font(.clock(.body))
@@ -569,7 +570,7 @@ struct RunSheetTableView: View {
                     if let live {
                         ProgressView(value: Double(min(live.elapsedSeconds, max(live.lengthInSeconds, 1))), total: Double(max(live.lengthInSeconds, 1)))
                             .progressViewStyle(.linear)
-                            .tint(live.isOvertime ? AppPalette.warning : AppPalette.timerOnTime)
+                            .tint(engine.timerColorHex(for: live).flatMap(Color.init(timerHex:)) ?? AppPalette.timerOnTime)
                     }
                 }
                 .help(timeHelp(entry))
@@ -583,6 +584,12 @@ struct RunSheetTableView: View {
             text += "\nPlanning Center recorded \(format(pco)) for this item"
         }
         return text
+    }
+
+    private func cueCell(_ item: PCOTimerItem) -> some View {
+        styled(item) {
+            ItemCueButtons(item: item, compact: true)
+        }
     }
 
     private func driftCell(_ item: PCOTimerItem) -> some View {
@@ -723,6 +730,7 @@ struct RunSheetTableColumn: Identifiable {
         .init(id: "leader", title: "Leader", isItemPart: true),
         .init(id: "time", title: "Time", fixedWidth: 112),
         .init(id: "drift", title: "Drift", fixedWidth: 64),
+        .init(id: "cue", title: "Cue", fixedWidth: 118),
         .init(id: "key", title: "Key", fixedWidth: 52),
         .init(id: "sequence", title: "Sequence", fixedWidth: 200),
         .init(id: "number", title: "#", fixedWidth: 36),
@@ -745,7 +753,7 @@ struct RunSheetTableColumn: Identifiable {
     }
 
     static func all(_ categories: [String]) -> [RunSheetTableColumn] {
-        Array(fixed.prefix(9)) + noteColumns(categories) + Array(fixed.dropFirst(9))
+        Array(fixed.prefix(10)) + noteColumns(categories) + Array(fixed.dropFirst(10))
     }
 
     static func ordered(_ categories: [String], layout: RunSheetLayoutSettings) -> [RunSheetTableColumn] {
