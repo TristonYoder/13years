@@ -32,7 +32,7 @@ extension CueEngine {
         assign(\.rehearsalPlanTimeId, state.liveOps?.rehearsalPlanTimeId)
         assign(\.isRehearsalMode, state.liveOps?.isRehearsalMode ?? false)
         assign(\.planTitle, state.plan.title)
-        assign(\.planItems, state.plan.items.map { $0.withPlanTitle(nil) })
+        assign(\.planItems, state.plan.items)
         assign(\.activeItemIndex, state.plan.activeItemIndex)
         apply(remoteTimer: state.timer)
         setRemoteUTCOffset(state.utcOffsetSeconds)
