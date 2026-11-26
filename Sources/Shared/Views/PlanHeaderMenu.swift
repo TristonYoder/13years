@@ -26,11 +26,9 @@ struct PlanHeaderMenu: View {
                 planMenu
                 statusTag
             }
-            HStack(alignment: .center, spacing: 14) {
-                timeCard
-                    .frame(width: 118)
-                summary
-            }
+            timeCard
+                .frame(width: 118)
+            summary
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
