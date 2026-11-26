@@ -35,8 +35,115 @@ public struct SettingsView: View {
         }
     }
 
+    private enum Category: String, CaseIterable, Identifiable {
+        case planning = "Planning Center"
+        case show = "Roles & Show"
+        case display = "Display"
+        case network = "Network & Devices"
+        case integrations = "Integrations"
+        case app = "App"
+
+        var id: String { rawValue }
+
+        var symbol: String {
+            switch self {
+            case .planning: return "calendar"
+            case .show: return "person.text.rectangle"
+            case .display: return "textformat.123"
+            case .network: return "network"
+            case .integrations: return "puzzlepiece"
+            case .app: return "gearshape"
+            }
+        }
+    }
+
+    @State private var category: Category = .planning
+    @State private var showingPhrases = false
+
+    private var categories: [Category] {
+        Category.allCases.filter { $0 != .integrations || Self.showsPlotipharIntegration }
+    }
+
+    @ViewBuilder
+    private func content(for category: Category) -> some View {
+        switch category {
+        case .planning:
+            planningCenter
+            eventScheduleSection
+        case .show:
+            rolesSection
+            quickPhrasesSection
+            waypointsSection
+            timerColorsSection
+        case .display:
+            hourFormatSection
+            clockSection
+        case .network:
+            remoteProducerSection
+            controlAPISection
+            pagerConnectSection
+            customScreenSection
+        case .integrations:
+            plotipharSection
+        case .app:
+            startupSection
+            appSection
+        }
+    }
+
+    @ViewBuilder
+    private var quickPhrasesSection: some View {
+        #if os(macOS) || os(iOS)
+        Section {
+            Button(action: { showingPhrases = true }) {
+                Label("Quick Phrases", systemImage: "text.bubble")
+            }
+        } header: {
+            Text("Quick Phrases")
+        } footer: {
+            Text("The one-tap messages above the Messages composer: a shared list plus a list for each role.")
+        }
+        #endif
+    }
+
     private var settingsForm: some View {
+        #if os(macOS)
+        HStack(spacing: 0) {
+            List(categories, selection: Binding<Category?>(get: { category }, set: { if let value = $0 { category = value } })) { entry in
+                Label(entry.rawValue, systemImage: entry.symbol)
+                    .tag(entry)
+            }
+            .listStyle(.sidebar)
+            .frame(width: 210)
+            Divider()
+            Form { content(for: category) }
+                .formStyle(.grouped)
+        }
+        .modifier(settingsPresentations)
+        #else
         Form {
+            ForEach(categories) { entry in content(for: entry) }
+        }
+        .formStyle(.grouped)
+        .modifier(settingsPresentations)
+        #endif
+    }
+
+
+    private var settingsPresentations: SettingsPresentations {
+        SettingsPresentations(
+            showingPlanPicker: $showingPlanPicker,
+            showingRoleNotes: $showingRoleNotes,
+            showingServiceSchedule: $showingServiceSchedule,
+            showingWaypointLibrary: $showingWaypointLibrary,
+            showingTimerColors: $showingTimerColors,
+            showingPhrases: $showingPhrases,
+            knownNoteCategories: knownNoteCategories
+        )
+    }
+
+    @ViewBuilder
+    private var planningCenter: some View {
             Section {
                 if let name = engine.pcoUserName {
                     HStack {
@@ -70,6 +177,10 @@ public struct SettingsView: View {
                 Text("Sign in with your PCO account to sync live service plans, item timers, and team assignments. Stays signed in across app launches until you sign out.")
             }
 
+    }
+
+    @ViewBuilder
+    private var rolesSection: some View {
             Section {
                 Button(action: { showingRoleNotes = true }) {
                     Label("Roles & Pager Fields", systemImage: "person.text.rectangle")
@@ -80,6 +191,10 @@ public struct SettingsView: View {
                 Text("Add, rename, or remove roles, and drag the item fields and note categories each one sees onto its pager, in the order you want them.")
             }
 
+    }
+
+    @ViewBuilder
+    private var waypointsSection: some View {
             Section {
                 Button(action: { showingWaypointLibrary = true }) {
                     Label("Waypoints", systemImage: Waypoint.symbolName)
@@ -90,16 +205,25 @@ public struct SettingsView: View {
                 Text("Reusable handles like \u{201C}Song 1\u{201D} that a Stream Deck or Companion button fires by name. Define them once here; each week, assign them to that week's items from the Run Sheet and every button keeps working.")
             }
 
-            Section {
-                Button(action: { showingTimerColors = true }) {
-                    Label("Timer Colors", systemImage: "paintpalette")
-                }
-            } header: {
-                Text("Timer Colors")
-            } footer: {
-                Text("Color the countdown as time runs out, by seconds or percent of each item. It drives the readout, the progress bar and the text on pagers. An item or a waypoint can set its own.")
-            }
+    }
 
+    @ViewBuilder
+    private var timerColorsSection: some View {
+        #if os(macOS) || os(iOS)
+        Section {
+            Button(action: { showingTimerColors = true }) {
+                Label("Timer Colors", systemImage: "paintpalette")
+            }
+        } header: {
+            Text("Timer Colors")
+        } footer: {
+            Text("Color the countdown as time runs out, by seconds or percent of each item. It drives the readout, the progress bar and the text on pagers. An item or a waypoint can set its own.")
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var eventScheduleSection: some View {
             Section {
                 Button(action: { showingServiceSchedule = true }) {
                     Label("Event Schedule", systemImage: "clock.badge.checkmark")
@@ -110,6 +234,10 @@ public struct SettingsView: View {
                 Text("Pick a lead time before each service and this device goes live automatically — switching into the live producer view and, optionally, loading a specific Planning Center plan. Setup done once, ahead of a week's flow.")
             }
 
+    }
+
+    @ViewBuilder
+    private var customScreenSection: some View {
             Section {
                 CustomScreenURLSection()
             } header: {
@@ -118,6 +246,10 @@ public struct SettingsView: View {
                 Text("Builds an address for the built-in web pager, for a screen that can't run the app: a laptop, an OBS browser source, a lobby display. Open it in a browser on that screen.")
             }
 
+    }
+
+    @ViewBuilder
+    private var hourFormatSection: some View {
             Section {
                 HStack(spacing: 10) {
                     ForEach([HourFormatThreshold.never, .over90Minutes, .over60Minutes]) { threshold in
@@ -136,6 +268,10 @@ public struct SettingsView: View {
                 Text("Once a duration crosses this threshold, it displays as H:MM:SS instead of MM:SS — the examples show a 75-minute and a 95-minute countdown.")
             }
 
+    }
+
+    @ViewBuilder
+    private var clockSection: some View {
             Section {
                 Picker("Clock", selection: Binding(
                     get: { engine.clockFormat },
@@ -152,10 +288,18 @@ public struct SettingsView: View {
                 Text("How time-of-day appears on pagers and in End @ entry. Each role can override this in Roles.")
             }
 
+    }
+
+    @ViewBuilder
+    private var remoteProducerSection: some View {
             #if os(macOS) || os(iOS)
             RemoteProducerSettingsSection()
             #endif
 
+    }
+
+    @ViewBuilder
+    private var startupSection: some View {
             #if os(macOS) || os(iOS)
             Section {
                 LaunchSettingsSection()
@@ -166,6 +310,10 @@ public struct SettingsView: View {
             }
             #endif
 
+    }
+
+    @ViewBuilder
+    private var controlAPISection: some View {
             Section {
                 if SettingsGating.isLocalControlAPIConfigurable(isRemoteSession: engine.isRemoteMirror) {
                     ControlAPISettingsSection()
@@ -180,6 +328,10 @@ public struct SettingsView: View {
                 Text("Lets a Stream Deck, Bitfocus Companion, QLab, or any script on this network drive cues, timers, and the run sheet over HTTP and WebSocket. There is no password on it — anyone who can reach this device on the network can fire a cue, so leave it off on untrusted or guest Wi-Fi. See CONTROL-API.md for the full endpoint reference.")
             }
 
+    }
+
+    @ViewBuilder
+    private var pagerConnectSection: some View {
             Section {
                 HStack {
                     TextField("Pager or App IP address", text: $connectTargetIP)
@@ -212,6 +364,10 @@ public struct SettingsView: View {
                 Text("If an ESP32 hardware pager or another 13 Years app can't find this device on its own (some venue Wi-Fi blocks the discovery it normally uses), type its IP address — shown on its own waiting screen — and send it the address to connect to. It remembers this and skips discovery from then on; \"producer auto\" on an ESP32's Serial console, or \"Forget Assigned Producer\" on another app, undoes that.")
             }
 
+    }
+
+    @ViewBuilder
+    private var plotipharSection: some View {
             if Self.showsPlotipharIntegration {
                 Section("StagePlotiphar") {
                     TextField("Server URL", text: $plotipharURL)
@@ -230,6 +386,10 @@ public struct SettingsView: View {
                 }
             }
 
+    }
+
+    @ViewBuilder
+    private var appSection: some View {
             #if !os(tvOS)
             UpdateSettingsSection()
 
@@ -239,27 +399,8 @@ public struct SettingsView: View {
                 }
             }
             #endif
-        }
-        .formStyle(.grouped)
-        .sheet(isPresented: $showingPlanPicker) {
-            PCOPlanPickerView()
-        }
-        .onScreenshotTourSignal("settings.roles") { _ in showingRoleNotes = true }
-        .onScreenshotTourSignal("settings.waypoints") { _ in showingWaypointLibrary = true }
-        .onScreenshotTourSignal("settings.event-schedule") { _ in showingServiceSchedule = true }
-        .sheet(isPresented: $showingRoleNotes) {
-            RoleNoteAssignmentView(categories: knownNoteCategories)
-        }
-        .sheet(isPresented: $showingWaypointLibrary) {
-            WaypointLibraryView()
-        }
-        .sheet(isPresented: $showingTimerColors) {
-            TimerColorsSettingsView()
-        }
-        .sheet(isPresented: $showingServiceSchedule) {
-            ServiceScheduleView()
-        }
     }
+
 
     @ViewBuilder
     private var plotipharAssignmentSyncStatusRow: some View {
@@ -313,5 +454,45 @@ struct HourFormatOptionCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+
+private struct SettingsPresentations: ViewModifier {
+    @Binding var showingPlanPicker: Bool
+    @Binding var showingRoleNotes: Bool
+    @Binding var showingServiceSchedule: Bool
+    @Binding var showingWaypointLibrary: Bool
+    @Binding var showingTimerColors: Bool
+    @Binding var showingPhrases: Bool
+    let knownNoteCategories: [String]
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showingPlanPicker) {
+                PCOPlanPickerView()
+            }
+            .onScreenshotTourSignal("settings.roles") { _ in showingRoleNotes = true }
+            .onScreenshotTourSignal("settings.waypoints") { _ in showingWaypointLibrary = true }
+            .onScreenshotTourSignal("settings.event-schedule") { _ in showingServiceSchedule = true }
+            .sheet(isPresented: $showingRoleNotes) {
+                RoleNoteAssignmentView(categories: knownNoteCategories)
+            }
+            .sheet(isPresented: $showingWaypointLibrary) {
+                WaypointLibraryView()
+            }
+            #if os(macOS) || os(iOS)
+            .sheet(isPresented: $showingTimerColors) {
+                TimerColorsSettingsView()
+            }
+            #endif
+            .sheet(isPresented: $showingServiceSchedule) {
+                ServiceScheduleView()
+            }
+            #if os(macOS) || os(iOS)
+            .sheet(isPresented: $showingPhrases) {
+                CannedPhrasesView()
+            }
+            #endif
     }
 }

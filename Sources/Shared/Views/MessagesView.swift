@@ -214,10 +214,12 @@ public struct MessagesView: View {
             .controlSize(.small)
             .help("Edit the quick phrases, shared and per role")
         }
+        #if os(macOS) || os(iOS)
         .sheet(isPresented: $showingPhrases) {
             CannedPhrasesView()
                 .environmentObject(engine)
         }
+        #endif
     }
 
     private var threadName: String {

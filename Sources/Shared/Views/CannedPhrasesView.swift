@@ -3,8 +3,10 @@
 
 import SwiftUI
 
-/// Edits the quick phrases offered above the message composer: one shared list plus
-/// an optional list per role. Stored in the producer document, so they travel with it.
+#if os(macOS) || os(iOS)
+
+/// Edits the quick phrases offered above the message composer: one shared list plus an optional list per
+/// role, as chips, with a live preview of the composer that role's operator would use. Saved with the producer document.
 struct CannedPhrasesView: View {
     @EnvironmentObject var engine: CueEngine
     @Environment(\.dismiss) private var dismiss
@@ -15,29 +17,14 @@ struct CannedPhrasesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                List(selection: $selectedRoleId) {
-                    Label("Shared (all roles)", systemImage: "star")
-                        .tag(String?.none)
-                    Section("Roles") {
-                        ForEach(engine.roles) { role in
-                            HStack {
-                                Text(role.name)
-                                Spacer()
-                                Text("\(role.cannedPhrases?.count ?? 0)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .tag(String?.some(role.id))
-                        }
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    rolePicker
+                    editor
+                    Divider()
+                    preview
                 }
-                #if os(macOS)
-                .listStyle(.sidebar)
-                #endif
-                .frame(width: 200)
-                Divider()
-                editor
+                .padding()
             }
             Divider()
             HStack {
@@ -51,7 +38,7 @@ struct CannedPhrasesView: View {
             .padding()
         }
         #if os(macOS)
-        .frame(minWidth: 620, minHeight: 420)
+        .frame(minWidth: 560, minHeight: 480)
         #endif
     }
 
@@ -61,6 +48,28 @@ struct CannedPhrasesView: View {
 
     private var phrases: [String] {
         role?.cannedPhrases ?? (selectedRoleId == nil ? engine.sharedPhrases : [])
+    }
+
+    private var rolePicker: some View {
+        ChipFlowLayout {
+            roleChip("Shared", id: nil)
+            ForEach(engine.roles) { entry in
+                roleChip(entry.name, id: entry.id)
+            }
+        }
+    }
+
+    private func roleChip(_ title: String, id: String?) -> some View {
+        let selected = selectedRoleId == id
+        return Button { selectedRoleId = id } label: {
+            Text(title)
+                .font(.callout.weight(selected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color.primary.opacity(0.08), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func commit(_ list: [String]) {
@@ -74,7 +83,7 @@ struct CannedPhrasesView: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(role?.name ?? "Shared phrases")
+                Text(role.map { "\($0.name) phrases" } ?? "Shared phrases")
                     .font(.headline)
                 Spacer()
                 if let role {
@@ -83,7 +92,6 @@ struct CannedPhrasesView: View {
                         set: { engine.setPhrases(forRoleId: role.id, phrases: role.cannedPhrases ?? [], usesShared: $0) }
                     ))
                     .toggleStyle(.switch)
-                    .help("Shared phrases appear after this role's own phrases")
                 }
             }
             Text(role == nil
@@ -92,61 +100,79 @@ struct CannedPhrasesView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            List {
+            ChipFlowLayout {
                 ForEach(Array(phrases.enumerated()), id: \.offset) { index, phrase in
-                    HStack {
-                        TextField("Phrase", text: Binding(
-                            get: { phrase },
-                            set: { value in
-                                var list = phrases
-                                guard list.indices.contains(index) else { return }
-                                list[index] = value
-                                commitKeepingEmpty(list)
-                            }
-                        ))
-                        .textFieldStyle(.plain)
+                    HStack(spacing: 4) {
+                        Text(phrase)
                         Button {
                             var list = phrases
                             list.remove(at: index)
                             commit(list)
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            Image(systemName: "xmark")
+                                .font(.caption2.weight(.bold))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
                         .help("Remove this phrase")
                         .accessibilityLabel("Remove \(phrase)")
                     }
-                }
-                .onMove { source, destination in
-                    var list = phrases
-                    list.move(fromOffsets: source, toOffset: destination)
-                    commit(list)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.accentColor.opacity(0.18), in: Capsule())
                 }
             }
-            .overlay {
-                if phrases.isEmpty {
-                    Text(role == nil ? "No shared phrases." : "No phrases for this role yet.")
-                        .foregroundStyle(.secondary)
-                }
+            if phrases.isEmpty {
+                Text(role == nil ? "No shared phrases." : "No phrases for this role yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             HStack {
                 TextField("Add a phrase", text: $newPhrase)
+                    .textFieldStyle(.roundedBorder)
                     .onSubmit(addPhrase)
                 Button("Add", action: addPhrase)
                     .disabled(newPhrase.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding()
     }
 
-    /// Editing a field live must not drop an entry that is momentarily empty.
-    private func commitKeepingEmpty(_ list: [String]) {
-        if let role {
-            engine.roleCannedPhrasesRaw(forRoleId: role.id, list)
-        } else {
-            engine.sharedPhrases = list
+    /// The composer as that role's operator sees it.
+    private var preview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preview in Messages")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                let shown = engine.phrases(forRoleId: selectedRoleId)
+                ChipFlowLayout {
+                    ForEach(shown, id: \.self) { phrase in
+                        Text(phrase)
+                            .font(.caption)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Color.primary.opacity(0.1), in: Capsule())
+                    }
+                }
+                HStack {
+                    Text("To: \(role?.name ?? "Everyone")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Message…")
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                    Text("Send")
+                        .font(.callout.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 6))
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -157,3 +183,4 @@ struct CannedPhrasesView: View {
         newPhrase = ""
     }
 }
+#endif

@@ -29,9 +29,7 @@ public struct ServiceScheduleView: View {
             Form {
                 if let next = engine.nextScheduledService {
                     Section {
-                        Label(nextScheduledLine(next), systemImage: "clock.badge.checkmark")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        nextCard(next)
                     }
                 }
 
@@ -110,7 +108,7 @@ public struct ServiceScheduleView: View {
                                 .background(AppPalette.surfaceSubtle, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                         }
                     }
-                    Text("\(engine.clockFormat.dateTime(schedule.startsAt)) \u{2014} live at \(engine.clockFormat.string(from: schedule.goLiveAt))")
+                    Text("\(engine.clockFormat.dateTime(schedule.startsAt)) \u{00B7} live \(leadDescription(schedule)) before")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -165,8 +163,29 @@ public struct ServiceScheduleView: View {
         }
     }
 
-    private func nextScheduledLine(_ schedule: ServiceSchedule) -> String {
-        "Next: \(schedule.title) \u{2014} \(engine.clockFormat.dateTime(schedule.startsAt)), live at \(engine.clockFormat.string(from: schedule.goLiveAt))"
+    /// The next run, called out at the top with the one action you reach for: go live now.
+    private func nextCard(_ schedule: ServiceSchedule) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "clock.badge.checkmark")
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Next: \(engine.clockFormat.dateTime(schedule.goLiveAt))")
+                    .font(.headline)
+                Text("\(schedule.title) \u{00B7} live \(leadDescription(schedule)) before \(engine.clockFormat.string(from: schedule.startsAt))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Go Live Now") { engine.goLiveWithSchedule(id: schedule.id) }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func leadDescription(_ schedule: ServiceSchedule) -> String {
+        let minutes = schedule.goLiveOffsetSeconds / 60
+        return minutes == 0 ? "at start" : "\(minutes) min"
     }
 }
 

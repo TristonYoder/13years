@@ -139,7 +139,9 @@ public struct PlanItemEditorView: View {
             Button("Import") {
                 if engine.planItems.isEmpty { performImport() } else { confirmingImport = true }
             }
+            #if !os(tvOS)
             .keyboardShortcut(.defaultAction)
+            #endif
             .disabled(importItems.isEmpty)
             .confirmationDialog("Replace the current run sheet?", isPresented: $confirmingImport, titleVisibility: .visible) {
                 Button("Replace with \(importItems.count) Item\(importItems.count == 1 ? "" : "s")", role: .destructive) { performImport() }
@@ -149,7 +151,9 @@ public struct PlanItemEditorView: View {
             }
         } else {
             Button("Save") { save() }
+                #if !os(tvOS)
                 .keyboardShortcut(.defaultAction)
+                #endif
                 .disabled(!canSave)
         }
     }
@@ -307,9 +311,11 @@ public struct PlanItemEditorView: View {
                     cueRolesSection
                 }
 
+                #if os(macOS) || os(iOS)
                 if case .edit(let item) = mode, !item.isHeader {
                     timerColorsSection(item)
                 }
+                #endif
 
                 if isManual {
                     placementSection
@@ -322,6 +328,7 @@ public struct PlanItemEditorView: View {
                 }
     }
 
+    #if os(macOS) || os(iOS)
     private func timerColorsSection(_ item: PCOTimerItem) -> some View {
         let current = engine.planItems.first(where: { $0.id == item.id })?.timerColors
         return Section {
@@ -345,6 +352,7 @@ public struct PlanItemEditorView: View {
             Text("Overrides the producer-wide timer colors, and its waypoints' colors, for this item.")
         }
     }
+    #endif
 
     private var commandSection: some View {
         Section {

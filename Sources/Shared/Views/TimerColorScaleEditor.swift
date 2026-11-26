@@ -35,6 +35,7 @@ extension Color {
     }
 }
 
+#if os(macOS) || os(iOS)
 /// Edits a timer color scale: a color while there is plenty of time, stops that take over as time runs
 /// out (by seconds or percent of the item's length), and a color for overtime. Shows a preview of the
 /// colors across a five-minute item.
@@ -251,3 +252,4 @@ struct TimerColorOverrideSheet: View {
         #endif
     }
 }
+#endif
