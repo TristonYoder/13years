@@ -95,10 +95,28 @@ public struct PCOPlanPickerView: View {
             }
 
             if engine.pcoServiceTypes.isEmpty && engine.pcoLastError == nil {
-                HStack {
-                    ProgressView()
-                    Text("Loading plan types…")
-                        .foregroundStyle(.secondary)
+                if engine.pcoServiceTypesLoaded {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("No plan types in this account", systemImage: "tray")
+                            .font(.headline)
+                        Text("This Planning Center account has no service types yet. Create one in Planning Center Services, then reload.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Button("Reload") { engine.fetchPCOServiceTypes() }
+                            if let url = URL(string: "https://services.planningcenteronline.com") {
+                                Link("Open Planning Center", destination: url)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.vertical, 6)
+                } else {
+                    HStack {
+                        ProgressView()
+                        Text("Loading plan types…")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

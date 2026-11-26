@@ -133,6 +133,8 @@ public final class CueEngine: ObservableObject {
     }
 
     @Published public var pcoServiceTypes: [PCOClient.PCOServiceType] = []
+    /// True once a fetch of the service types has finished, so an account with none reads as empty rather than still loading.
+    @Published public var pcoServiceTypesLoaded = false
     @Published public var pcoPlans: [PCOClient.PCOPlanInfo] = []
     @Published public var eventTimes: [EventTime] = [] {
         didSet {
@@ -547,6 +549,7 @@ public final class CueEngine: ObservableObject {
         pcoUserName = nil
         isPCOConnected = false
         pcoServiceTypes = []
+        pcoServiceTypesLoaded = false
         pcoPlans = []
         pcoSelectedServiceTypeId = nil
     }
@@ -636,6 +639,7 @@ public final class CueEngine: ObservableObject {
     private func fetchPCOServiceTypesAsync() async {
         do {
             pcoServiceTypes = try await pcoClient.fetchServiceTypes()
+            pcoServiceTypesLoaded = true
             pcoLastError = nil
         } catch {
             AppLog.cue.error("CueEngine: fetchPCOServiceTypes error: \(error.localizedDescription, privacy: .private)")
