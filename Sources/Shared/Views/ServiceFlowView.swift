@@ -152,8 +152,8 @@ public struct ServiceFlowView: View {
         }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories, onImport: { title, items in
-                engine.importFlow(title: title.isEmpty ? nil : title, items: items)
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories, onImport: { items in
+                engine.importFlow(title: nil, items: items)
             }) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, cueRoleIds, placement in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
@@ -384,7 +384,7 @@ public struct ServiceFlowView: View {
         switch section.position {
         case .pre: return "Before the event"
         case .post: return "After the event"
-        case .during: return engine.planItems.first?.servicePlanTitle ?? "Run Sheet"
+        case .during: return engine.planTitle ?? "Run Sheet"
         }
     }
 

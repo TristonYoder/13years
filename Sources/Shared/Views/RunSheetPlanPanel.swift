@@ -87,7 +87,7 @@ struct RunSheetPlanPanel: View {
                     .foregroundStyle(AppPalette.warning)
                     .font(.footnote)
             }
-            LabeledContent("Title", value: context.title ?? engine.planItems.first?.servicePlanTitle ?? "Untitled")
+            LabeledContent("Title", value: context.title ?? engine.planTitle ?? "Untitled")
             if let series = context.seriesTitle, !series.isEmpty {
                 LabeledContent("Series", value: series)
             }

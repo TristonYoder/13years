@@ -1318,7 +1318,7 @@ public final class ControlAPIRouter {
         let anchor = engine.currentAnchor
         guard let item = engine.activeTimerItem else { return nil }
         return ControlAPIState.ActiveTimer(
-            item: item,
+            item: item.withPlanTitle(engine.planTitle),
             index: engine.activeItemIndex,
             isRunning: item.isRunning,
             remainingSeconds: item.remainingSeconds,
@@ -1347,8 +1347,8 @@ public final class ControlAPIRouter {
 
     private func planStatus() -> ControlAPIState.PlanStatus {
         ControlAPIState.PlanStatus(
-            title: engine.activeTimerItem?.servicePlanTitle ?? engine.planItems.first?.servicePlanTitle,
-            items: engine.planItems,
+            title: engine.planTitle,
+            items: engine.planItems.map { $0.withPlanTitle(engine.planTitle) },
             activeItemIndex: engine.activeItemIndex,
             isAtEndOfPlan: engine.isAtEndOfPlan,
             isAtStartOfPlan: engine.isAtStartOfPlan,

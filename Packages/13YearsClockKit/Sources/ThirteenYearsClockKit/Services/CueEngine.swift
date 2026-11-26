@@ -106,6 +106,8 @@ public final class CueEngine: ObservableObject {
     }
     private static let clockFormatDefaultsKey = "clockFormat"
     @Published public var followByDefault = false
+    /// Title of the current plan, stored once. Items no longer carry their own copy.
+    @Published public var planTitle: String?
     @Published public var sharedPhrases: [String] = CueEngine.defaultSharedPhrases
     public static let defaultSharedPhrases = ["Standby", "Copy", "Hold please", "Go ahead", "Need 30 seconds", "Say again"]
     @Published public var runSheetLayout = RunSheetLayoutSettings()
@@ -781,6 +783,7 @@ public final class CueEngine: ObservableObject {
             waypoints: waypoints,
             serviceSchedules: serviceSchedules,
             planItems: planItems,
+            planTitle: planTitle,
             activeItemIndex: activeItemIndex,
             eventTimes: eventTimes,
             liveEventTimeId: liveEventTimeId,
@@ -851,7 +854,8 @@ public final class CueEngine: ObservableObject {
     func applyPlan(of document: ProducerDocument) {
         restoreEventTimes(document.eventTimes, liveId: document.liveEventTimeId)
         var items = document.planItems
-        for index in items.indices { items[index].isRunning = false }
+        for index in items.indices { items[index].isRunning = false; items[index].servicePlanTitle = nil }
+        planTitle = document.planTitle
         let validIds = Set(items.map(\.id))
         isRehearsalMode = false
         rehearsalPlanTimeId = nil
@@ -889,10 +893,11 @@ public final class CueEngine: ObservableObject {
         var stamped = items
         for index in stamped.indices {
             stamped[index].sequence = index + 1
-            stamped[index].servicePlanTitle = title
+            stamped[index].servicePlanTitle = nil
             stamped[index].elapsedSeconds = 0
             stamped[index].isRunning = false
         }
+        planTitle = title
         planItems = stamped
         pcoPlanContext = Self.context(pcoPlanContext, matching: stamped)
         if let firstSelectable = stamped.firstIndex(where: { !$0.isHeader }) {
@@ -921,7 +926,6 @@ public final class CueEngine: ObservableObject {
             lengthInSeconds: lengthInSeconds,
             isDurationActual: isDurationActual
         )
-        item.servicePlanTitle = planItems.first?.servicePlanTitle
         planItems.append(item)
 
         if activeTimerItem == nil && !item.isHeader {
@@ -1679,7 +1683,6 @@ public final class CueEngine: ObservableObject {
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
-        item.servicePlanTitle = activeTimerItem?.servicePlanTitle
         item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()
@@ -1696,7 +1699,6 @@ public final class CueEngine: ObservableObject {
         let steps = realItemStepCount(from: activeItemIndex, to: targetIndex)
         activeItemIndex = targetIndex
         var item = planItems[activeItemIndex]
-        item.servicePlanTitle = activeTimerItem?.servicePlanTitle
         item.isRunning = startTimer
         activeTimerItem = item
         broadcastTimerUpdate()

@@ -96,7 +96,6 @@ extension CueEngine {
             ?? planItems.firstIndex(where: { !$0.isHeader }) else { return }
         activeItemIndex = firstIndex
         var item = planItems[firstIndex]
-        item.servicePlanTitle = activeTimerItem?.servicePlanTitle
         item.elapsedSeconds = 0
         item.isRunning = false
         activeTimerItem = item

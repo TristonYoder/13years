@@ -34,7 +34,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
-    let onImport: ((_ title: String, _ items: [PCOTimerItem]) -> Void)?
+    let onImport: ((_ items: [PCOTimerItem]) -> Void)?
     let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
 
     @EnvironmentObject var engine: CueEngine
@@ -52,7 +52,6 @@ public struct PlanItemEditorView: View {
     @FocusState private var commandFocused: Bool
     @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.form.rawValue
     @State private var tab: EditorTab = .form
-    @State private var importTitle = ""
     @State private var importText = ""
     @State private var confirmingImport = false
     @State private var notes: [String: String]
@@ -65,7 +64,7 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
-        onImport: ((_ title: String, _ items: [PCOTimerItem]) -> Void)? = nil,
+        onImport: ((_ items: [PCOTimerItem]) -> Void)? = nil,
         onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
     ) {
         self.mode = mode
@@ -241,7 +240,7 @@ public struct PlanItemEditorView: View {
             commandSection
             resultSection
         case .importText:
-            ImportFlowSections(planTitle: $importTitle, text: $importText)
+            ImportFlowSections(text: $importText)
         }
     }
 
@@ -254,7 +253,7 @@ public struct PlanItemEditorView: View {
     private var importItems: [PCOTimerItem] { ImportFlowSections.parsedItems(importText) }
 
     private func performImport() {
-        onImport?(importTitle, importItems)
+        onImport?(importItems)
         dismiss()
     }
 

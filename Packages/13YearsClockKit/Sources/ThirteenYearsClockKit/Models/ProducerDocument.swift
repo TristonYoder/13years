@@ -84,6 +84,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var waypoints: [Waypoint]
     public var serviceSchedules: [ServiceSchedule]
     public var planItems: [PCOTimerItem]
+    /// Name of the plan as a whole; stored once here rather than on every item.
+    public var planTitle: String?
     public var activeItemIndex: Int
     public var eventTimes: [EventTime]
     public var liveEventTimeId: String?
@@ -100,6 +102,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         waypoints: [Waypoint],
         serviceSchedules: [ServiceSchedule],
         planItems: [PCOTimerItem],
+        planTitle: String? = nil,
         activeItemIndex: Int,
         eventTimes: [EventTime] = [],
         liveEventTimeId: String? = nil,
@@ -115,6 +118,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.waypoints = waypoints
         self.serviceSchedules = serviceSchedules
         self.planItems = planItems
+        self.planTitle = planTitle
         self.activeItemIndex = activeItemIndex
         self.eventTimes = eventTimes
         self.liveEventTimeId = liveEventTimeId
@@ -164,7 +168,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, planTitle, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -176,6 +180,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         waypoints = try container.decodeIfPresent([Waypoint].self, forKey: .waypoints) ?? []
         serviceSchedules = try container.decodeIfPresent([ServiceSchedule].self, forKey: .serviceSchedules) ?? []
         planItems = try container.decodeIfPresent([PCOTimerItem].self, forKey: .planItems) ?? []
+        // Documents from before the title moved to the plan carried it on each item.
+        planTitle = try container.decodeIfPresent(String.self, forKey: .planTitle) ?? planItems.lazy.compactMap(\.servicePlanTitle).first
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)

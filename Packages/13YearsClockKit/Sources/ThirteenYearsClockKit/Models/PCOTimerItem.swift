@@ -160,3 +160,12 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         lengthInSeconds = TimerLimits.clampLength(TimerLimits.saturatingAdd(elapsedSeconds, TimerLimits.clampLength(seconds)))
     }
 }
+
+extension PCOTimerItem {
+    /// The plan title lives on the engine; the Control API still reports it on each item so existing clients keep working.
+    func withPlanTitle(_ title: String?) -> PCOTimerItem {
+        var copy = self
+        copy.servicePlanTitle = title
+        return copy
+    }
+}

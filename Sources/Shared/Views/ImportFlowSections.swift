@@ -5,7 +5,6 @@ import SwiftUI
 
 /// The import fields, shared by the standalone sheet and the Import text tab of the item editor.
 struct ImportFlowSections: View {
-    @Binding var planTitle: String
     @Binding var text: String
 
     private static let placeholder = """
@@ -20,10 +19,6 @@ struct ImportFlowSections: View {
     var body: some View {
         let parsedItems = Self.parsedItems(text)
         Group {
-                Section("Event Title") {
-                    TextField("e.g. Sunday Morning", text: $planTitle)
-                }
-
                 Section {
                     #if os(iOS) || os(macOS)
                     TextEditor(text: $text)

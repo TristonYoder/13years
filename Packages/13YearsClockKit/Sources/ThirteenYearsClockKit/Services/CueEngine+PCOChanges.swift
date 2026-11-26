@@ -101,12 +101,11 @@ extension CueEngine {
         let remote = pcoChangeTracking.pendingRemote
         let baseline = pcoChangeTracking.baseline
         let activeId = activeTimerItem?.id
-        let planTitle = planItems.first?.servicePlanTitle
 
         var merged = PCOPlanDiff.merge(remote: remote, baseline: baseline, into: planItems, keeping: activeId)
         for index in merged.indices {
             merged[index].sequence = index + 1
-            if merged[index].servicePlanTitle == nil { merged[index].servicePlanTitle = planTitle }
+            merged[index].servicePlanTitle = nil
             if merged[index].id != activeId { merged[index].isRunning = false }
         }
         planItems = merged
