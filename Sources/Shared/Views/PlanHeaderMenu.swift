@@ -22,7 +22,17 @@ struct PlanHeaderMenu: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            planMenu
+            // A Menu label collapses to its first Text on macOS, so the time is a sibling, not part of the label.
+            VStack(alignment: .leading, spacing: 1) {
+                planMenu
+                if let time = currentTimeText {
+                    Text(time)
+                        .font(.clock(.callout, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.leading, 5)
+                }
+            }
             statusTag
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
@@ -105,17 +115,9 @@ struct PlanHeaderMenu: View {
             }
         } label: {
             HStack(alignment: .center, spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(planName)
-                        .font(.system(size: 15, weight: .bold))
-                        .lineLimit(1)
-                    if let time = currentTimeText {
-                        Text(time)
-                            .font(.clock(.callout, weight: .regular))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                Text(planName)
+                    .font(.system(size: 15, weight: .bold))
+                    .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
