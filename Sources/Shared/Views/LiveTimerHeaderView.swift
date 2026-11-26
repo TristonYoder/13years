@@ -70,7 +70,8 @@ public struct LiveTimerHeaderView: View {
             HStack {
                 HStack {
                     #if os(macOS)
-                    Color.clear.frame(width: engine.isRemoteMirror ? 1 : 64, height: 1)
+                    PlanHeaderMenu()
+                        .padding(.top, 22)
                     #endif
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

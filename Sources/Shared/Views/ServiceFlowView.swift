@@ -72,7 +72,15 @@ public struct ServiceFlowView: View {
                 }
                 #endif
 
-                #if os(macOS) || os(iOS)
+                #if os(macOS)
+                Menu {
+                    RunSheetTimingToggles()
+                } label: {
+                    Label("Display", systemImage: "slider.horizontal.3")
+                }
+                .headerActionPrimary()
+                .help("End times and Follow by default")
+                #elseif os(iOS)
                 Button(action: { planPanelVisible.toggle() }) {
                     Label("Plan", systemImage: "sidebar.trailing")
                 }
@@ -80,7 +88,9 @@ public struct ServiceFlowView: View {
                 .help("Plan name, Sync PCO and Event Times, plus the Planning Center notes, times and team")
                 #endif
 
+                #if !os(macOS)
                 RehearsalBadge()
+                #endif
 
                 RunSheetActualsMenu()
 
@@ -269,7 +279,6 @@ public struct ServiceFlowView: View {
         GeometryReader { proxy in
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                tableControls
                 RunSheetTableView(
                     schedule: schedule,
                     selection: $selectedItemId,
@@ -293,38 +302,6 @@ public struct ServiceFlowView: View {
         EmptyView()
         #endif
     }
-
-    #if os(macOS)
-    @ViewBuilder
-    private var tableControls: some View {
-        let hasLiveToggle = engine.planItems.first?.pcoPlanId != nil
-        let hasTimes = engine.eventTimes.count > 1
-        VStack(alignment: .leading, spacing: 6) {
-            if let error = engine.pcoLastError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
-            }
-            HStack(spacing: 16) {
-                if hasLiveToggle {
-                    PCOLiveSyncToggle()
-                        .help(PCOLiveSyncToggle.explanation)
-                }
-                if hasTimes {
-                    LiveEventTimePicker()
-                        .fixedSize()
-                }
-                RunSheetTimingToggles()
-                RehearsalControl()
-                Spacer(minLength: 0)
-                StartNextEventButton()
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        Divider()
-    }
-    #endif
 
     private struct SheetSection: Identifiable {
         let position: PCOServicePosition
@@ -422,6 +399,7 @@ public struct ServiceFlowView: View {
 
     @ViewBuilder
     private func flowListContent(_ schedule: RunSheetSchedule) -> some View {
+        #if !os(macOS)
         if let error = engine.pcoLastError {
             Section {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -454,6 +432,7 @@ public struct ServiceFlowView: View {
                 RehearsalControl()
             }
         }
+        #endif
 
         let sections = sheetSections
         ForEach(sections) { section in
