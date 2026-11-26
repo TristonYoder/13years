@@ -21,51 +21,101 @@ struct PlanHeaderMenu: View {
     private var canRehearse: Bool { engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 10) {
             planMenu
-            HStack(spacing: 8) {
-                timePicker
-                statusTag
-            }
+            statusTag
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
     }
 
+    /// The time shown under the plan name: the rehearsal time while rehearsing, otherwise the live event time.
+    private var currentTimeText: String? {
+        if engine.isRehearsalMode {
+            return engine.rehearsalLabel.replacingOccurrences(of: "Rehearsal \u{00B7} ", with: "")
+        }
+        return engine.liveEventTime?.displayName(engine.clockFormat) ?? engine.eventTimes.first?.displayName(engine.clockFormat)
+    }
+
+    /// One menu for the whole plan: which event time is running, changing the plan, rehearsal and live sync.
     private var planMenu: some View {
         Menu {
-            Button(engine.isPCOConnected ? "Change Plan\u{2026}" : "Sync PCO\u{2026}") {
-                engine.whenPCOConnected { showingPlanPicker = true }
-            }
-            Button("Event Times\u{2026}") { showingEventTimes = true }
-            Button(planPanelVisible ? "Hide Plan Details" : "Show Plan Details") { planPanelVisible.toggle() }
-            if let raw = engine.pcoPlanContext?.planningCenterURL, let url = URL(string: raw) {
-                Button("Open in Planning Center") { openURL(url) }
+            if engine.isRehearsalMode {
+                if engine.rehearsalPlanTimes.count > 1 {
+                    Section("Rehearsal Time") {
+                        Picker("Rehearsal Time", selection: Binding(
+                            get: { engine.rehearsalPlanTimeId ?? "" },
+                            set: { engine.setRehearsalMode(true, planTimeId: $0) }
+                        )) {
+                            ForEach(engine.rehearsalPlanTimes) { time in
+                                Text(rehearsalLabel(for: time)).tag(time.id)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    }
+                }
+            } else if engine.eventTimes.count > 1 {
+                Section("Event Time") {
+                    Picker("Live Event Time", selection: Binding(
+                        get: { engine.liveEventTime?.id ?? "" },
+                        set: { id in
+                            guard !id.isEmpty else { return }
+                            engine.setLiveEventTime(id: id)
+                        }
+                    )) {
+                        ForEach(engine.eventTimes) { time in
+                            Text(time.displayName(engine.clockFormat)).tag(time.id)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .disabled(engine.isChangingEventTime)
+                }
             }
 
-            Divider()
-
-            if canRehearse {
-                Toggle("Rehearsal Mode", isOn: Binding(
-                    get: { engine.isRehearsalMode },
-                    set: { engine.setRehearsalMode($0) }
-                ))
-            } else {
-                Toggle("Rehearsal Mode", isOn: .constant(false))
-                    .disabled(true)
+            Section("Plan") {
+                Button(engine.isPCOConnected ? "Change Plan\u{2026}" : "Sync PCO\u{2026}") {
+                    engine.whenPCOConnected { showingPlanPicker = true }
+                }
+                Button("Event Times\u{2026}") { showingEventTimes = true }
+                Button(planPanelVisible ? "Hide Plan Details" : "Show Plan Details") { planPanelVisible.toggle() }
+                if let raw = engine.pcoPlanContext?.planningCenterURL, let url = URL(string: raw) {
+                    Button("Open in Planning Center") { openURL(url) }
+                }
             }
-            if hasPCOPlan {
-                Toggle("Sync with PCO Live", isOn: Binding(
-                    get: { engine.isPCOLiveSyncEnabled },
-                    set: { $0 ? engine.enablePCOLiveSync() : engine.disablePCOLiveSync() }
-                ))
-                .disabled(engine.isRehearsalMode)
+
+            Section("Mode") {
+                if canRehearse {
+                    Toggle("Rehearsal Mode", isOn: Binding(
+                        get: { engine.isRehearsalMode },
+                        set: { engine.setRehearsalMode($0) }
+                    ))
+                } else {
+                    Toggle("Rehearsal Mode", isOn: .constant(false))
+                        .disabled(true)
+                }
+                if hasPCOPlan {
+                    Toggle("Sync with PCO Live", isOn: Binding(
+                        get: { engine.isPCOLiveSyncEnabled },
+                        set: { $0 ? engine.enablePCOLiveSync() : engine.disablePCOLiveSync() }
+                    ))
+                    .disabled(engine.isRehearsalMode)
+                }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(planName)
-                    .font(.system(size: 15, weight: .bold))
-                    .lineLimit(1)
+            HStack(alignment: .center, spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(planName)
+                        .font(.system(size: 15, weight: .bold))
+                        .lineLimit(1)
+                    if let time = currentTimeText {
+                        Text(time)
+                            .font(.clock(.callout, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -74,47 +124,7 @@ struct PlanHeaderMenu: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Plan: change it, set event times, rehearse, or sync with Planning Center Live")
-    }
-
-    @ViewBuilder
-    private var timePicker: some View {
-        if engine.isRehearsalMode, engine.rehearsalPlanTimes.count > 1 {
-            Picker("Rehearsal time", selection: Binding(
-                get: { engine.rehearsalPlanTimeId ?? "" },
-                set: { engine.setRehearsalMode(true, planTimeId: $0) }
-            )) {
-                ForEach(engine.rehearsalPlanTimes) { time in
-                    Text(rehearsalLabel(for: time)).tag(time.id)
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-        } else if engine.isRehearsalMode {
-            Text(engine.rehearsalLabel.replacingOccurrences(of: "Rehearsal \u{00B7} ", with: ""))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if engine.eventTimes.count > 1 {
-            Picker("Live event time", selection: Binding(
-                get: { engine.liveEventTime?.id ?? "" },
-                set: { id in
-                    guard !id.isEmpty else { return }
-                    engine.setLiveEventTime(id: id)
-                }
-            )) {
-                ForEach(engine.eventTimes) { time in
-                    Text(time.displayName(engine.clockFormat)).tag(time.id)
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-            .disabled(engine.isChangingEventTime)
-            .help("Which event time is running")
-        } else if let time = engine.eventTimes.first {
-            Text(time.displayName(engine.clockFormat))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        .help("Plan and event time: switch event, change the plan, rehearse, or sync with Planning Center Live")
     }
 
     /// Rehearsal replaces the PCO Live tag: you are either rehearsing or in the event.
