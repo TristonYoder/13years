@@ -110,6 +110,8 @@ public final class CueEngine: ObservableObject {
     @Published public var followByDefault = false
     /// Title of the current plan, stored once. Items no longer carry their own copy.
     @Published public var planTitle: String?
+    /// Rehearsal times entered by hand; used when the plan is not managed by Planning Center.
+    @Published public var manualRehearsalTimes: [EventTime] = []
     @Published public var sharedPhrases: [String] = CueEngine.defaultSharedPhrases
     public static let defaultSharedPhrases = ["Standby", "Copy", "Hold please", "Go ahead", "Need 30 seconds", "Say again"]
     @Published public var runSheetLayout = RunSheetLayoutSettings()
@@ -804,6 +806,7 @@ public final class CueEngine: ObservableObject {
             planTitle: planTitle,
             activeItemIndex: activeItemIndex,
             eventTimes: eventTimes,
+            rehearsalTimes: manualRehearsalTimes.isEmpty ? nil : manualRehearsalTimes,
             liveEventTimeId: liveEventTimeId,
             pcoPlanContext: pcoPlanContext,
             itemActuals: itemActuals.isEmpty ? nil : itemActuals,
@@ -830,6 +833,7 @@ public final class CueEngine: ObservableObject {
         blank.planItems = []
         blank.activeItemIndex = 0
         blank.eventTimes = []
+        blank.rehearsalTimes = nil
         blank.liveEventTimeId = nil
         blank.pcoPlanContext = nil
         blank.itemActuals = nil
@@ -874,6 +878,7 @@ public final class CueEngine: ObservableObject {
         var items = document.planItems
         for index in items.indices { items[index].isRunning = false; items[index].servicePlanTitle = nil }
         planTitle = document.planTitle
+        manualRehearsalTimes = EventTime.sorted(document.rehearsalTimes ?? [])
         let validIds = Set(items.map(\.id))
         isRehearsalMode = false
         rehearsalPlanTimeId = nil

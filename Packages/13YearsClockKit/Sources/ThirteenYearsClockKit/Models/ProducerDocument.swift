@@ -88,6 +88,8 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     public var planTitle: String?
     public var activeItemIndex: Int
     public var eventTimes: [EventTime]
+    /// Rehearsal times entered by hand for a plan that is not synced from Planning Center.
+    public var rehearsalTimes: [EventTime]?
     public var liveEventTimeId: String?
     public var pcoPlanContext: PCOPlanContext?
     public var itemActuals: [ItemActual]?
@@ -105,6 +107,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         planTitle: String? = nil,
         activeItemIndex: Int,
         eventTimes: [EventTime] = [],
+        rehearsalTimes: [EventTime]? = nil,
         liveEventTimeId: String? = nil,
         pcoPlanContext: PCOPlanContext? = nil,
         itemActuals: [ItemActual]? = nil,
@@ -121,6 +124,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         self.planTitle = planTitle
         self.activeItemIndex = activeItemIndex
         self.eventTimes = eventTimes
+        self.rehearsalTimes = rehearsalTimes
         self.liveEventTimeId = liveEventTimeId
         self.pcoPlanContext = pcoPlanContext
         self.itemActuals = itemActuals
@@ -168,7 +172,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, planTitle, activeItemIndex, eventTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
+        case version, savedAt, roles, selectedRoleIds, waypoints, serviceSchedules, planItems, planTitle, activeItemIndex, eventTimes, rehearsalTimes, liveEventTimeId, pcoPlanContext, itemActuals, skippedItemIds, settings
     }
 
     public init(from decoder: Decoder) throws {
@@ -184,6 +188,7 @@ public struct ProducerDocument: Codable, Equatable, Sendable {
         planTitle = try container.decodeIfPresent(String.self, forKey: .planTitle) ?? planItems.lazy.compactMap(\.servicePlanTitle).first
         activeItemIndex = try container.decodeIfPresent(Int.self, forKey: .activeItemIndex) ?? 0
         eventTimes = try container.decodeIfPresent([EventTime].self, forKey: .eventTimes) ?? []
+        rehearsalTimes = try? container.decodeIfPresent([EventTime].self, forKey: .rehearsalTimes)
         liveEventTimeId = try container.decodeIfPresent(String.self, forKey: .liveEventTimeId)
         pcoPlanContext = try container.decodeIfPresent(PCOPlanContext.self, forKey: .pcoPlanContext)
         itemActuals = try container.decodeIfPresent([ItemActual].self, forKey: .itemActuals)

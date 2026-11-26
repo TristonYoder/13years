@@ -147,9 +147,17 @@ private struct PlanPopover: View {
 
             section("Rehearsal") {
                 if engine.rehearsalPlanTimes.isEmpty {
-                    Text("This plan has no rehearsal time in Planning Center.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if engine.isEventTimesManagedByPCO {
+                        Text("This plan has no rehearsal time in Planning Center.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button(action: onEventTimes) {
+                            Label("Add a rehearsal time", systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 } else {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(engine.rehearsalPlanTimes) { time in
@@ -217,7 +225,8 @@ private struct PlanPopover: View {
             if engine.liveEventTime?.id != time.id { engine.setLiveEventTime(id: time.id) }
         } label: {
             card(
-                day: time.day?.formatted ?? "",
+                title: time.name ?? time.day?.formatted ?? "",
+                detail: time.name != nil ? time.day?.formatted : nil,
                 time: time.startTime?.formatted(engine.clockFormat) ?? time.name ?? "Event",
                 badge: isSelected ? "LIVE" : nil,
                 tint: AppPalette.positive,
@@ -234,7 +243,8 @@ private struct PlanPopover: View {
             engine.setRehearsalMode(true, planTimeId: time.id)
         } label: {
             card(
-                day: time.startsAt.map { Self.dayFormatter.string(from: $0) } ?? (time.name ?? ""),
+                title: time.name.flatMap { $0.isEmpty ? nil : $0 } ?? time.startsAt.map { Self.dayFormatter.string(from: $0) } ?? "",
+                detail: time.name.flatMap { $0.isEmpty ? nil : $0 } != nil ? time.startsAt.map { Self.dayFormatter.string(from: $0) } : nil,
                 time: time.startsAt.map { engine.clockFormat.string(from: $0) } ?? "Rehearsal",
                 badge: isSelected ? "REHEARSING" : nil,
                 tint: AppPalette.rehearsal,
@@ -245,17 +255,24 @@ private struct PlanPopover: View {
         .buttonStyle(.plain)
     }
 
-    private func card(day: String, time: String, badge: String?, tint: Color, isSelected: Bool, fill: Color? = nil) -> some View {
+    private func card(title: String, detail: String?, time: String, badge: String?, tint: Color, isSelected: Bool, fill: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(day)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(fill == nil ? Color.secondary : tint)
                 .lineLimit(1)
             Text(time)
                 .font(.clock(.title3, weight: .semibold))
-            Text(badge ?? " ")
-                .font(.caption2.weight(.heavy))
-                .foregroundStyle(tint)
+            if let badge {
+                Text(badge)
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(tint)
+            } else {
+                Text(detail ?? " ")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
