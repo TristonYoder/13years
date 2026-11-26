@@ -96,9 +96,13 @@ public struct ProducerRootView: View {
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
+            // The detail floats as a rounded panel like the sidebar, instead of running square to the window edge.
             NavigationStack {
                 detailView(for: engine.appMode)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
+            .padding(EdgeInsets(top: 8, leading: columnVisibility == .detailOnly ? 8 : 0, bottom: 8, trailing: 8))
         }
         .environment(\.toggleSidebar, toggleSidebarAction)
     }

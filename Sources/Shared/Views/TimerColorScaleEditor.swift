@@ -43,8 +43,8 @@ struct TimerColorScaleEditor: View {
 
     private static let maxStops = 12
     private static let valueWidth: CGFloat = 64
-    private static let unitWidth: CGFloat = 70
-    private static let captionWidth: CGFloat = 34
+    private static let unitWidth: CGFloat = 84
+    private static let captionWidth: CGFloat = 24
     private static let removeWidth: CGFloat = 18
 
     var body: some View {
@@ -89,11 +89,11 @@ struct TimerColorScaleEditor: View {
                     .font(.clock(.body, weight: .regular))
                     .frame(width: Self.valueWidth, alignment: .trailing)
                     .padding(.trailing, 8)
-                Color.clear.frame(width: Self.unitWidth, height: 1)
-                Text("over")
+                Text("time over")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .frame(width: Self.captionWidth, alignment: .leading)
+                    .padding(.leading, 8)
+                    .frame(width: Self.unitWidth + Self.captionWidth, alignment: .leading)
                 Spacer()
                 effectMenu($scale.overtimeEffect)
                 swatch(scale.overtimeHex) { scale.overtimeHex = $0 }
@@ -134,17 +134,15 @@ struct TimerColorScaleEditor: View {
         HStack(spacing: 8) {
             TimerLevelValueField(value: stop.value, unit: stop.wrappedValue.unit)
                 .frame(width: Self.valueWidth + 16)
+            let word = stop.wrappedValue.phase == .remaining ? "left" : "over"
             Picker("Unit", selection: stop.unit) {
-                Text("mm:ss").tag(TimerColorStop.Unit.seconds)
-                Text("%").tag(TimerColorStop.Unit.percent)
+                Text("time \(word)").tag(TimerColorStop.Unit.seconds)
+                Text("% \(word)").tag(TimerColorStop.Unit.percent)
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(width: Self.unitWidth, alignment: .leading)
-            Text(stop.wrappedValue.phase == .remaining ? "left" : "over")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(width: Self.captionWidth, alignment: .leading)
+            .fixedSize()
+            .frame(width: Self.unitWidth + Self.captionWidth, alignment: .leading)
             Spacer()
             effectMenu(stop.effect)
             swatch(stop.wrappedValue.colorHex) { stop.wrappedValue.colorHex = $0 }
