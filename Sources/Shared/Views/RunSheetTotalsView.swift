@@ -3,24 +3,52 @@
 
 import SwiftUI
 
+/// A labeled figure: small caps label over a clock-font value. Shared by the footer and the header summary.
+struct RunSheetTotalFigure: View {
+    let label: String
+    let value: String
+    var tint: Color = .primary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.clock(.callout, weight: .medium))
+                .foregroundStyle(tint)
+        }
+    }
+}
+
 struct RunSheetTotalsView: View {
     @EnvironmentObject var engine: CueEngine
     let schedule: RunSheetSchedule
+    /// Planned, Ends and Pace. The macOS header shows these, so its footer keeps only the rest.
+    var showsSummary = true
+
+    private var hasExtras: Bool {
+        schedule.plannedEnd == nil || hasDrift || schedule.actualElapsedSeconds > 0 || engine.isRehearsalMode
+    }
 
     var body: some View {
+        if showsSummary || hasExtras { footer }
+    }
+
+    private var footer: some View {
         VStack(spacing: 0) {
             Divider()
             HStack(alignment: .firstTextBaseline, spacing: 20) {
                 if engine.isRehearsalMode {
                     RehearsalBadge()
                 }
-                total("Planned", duration(schedule.plannedLength))
+                if showsSummary { total("Planned", duration(schedule.plannedLength)) }
                 if let plannedEnd = schedule.plannedEnd {
-                    total("Ends", clock(plannedEnd))
+                    if showsSummary { total("Ends", clock(plannedEnd)) }
                     if let projectedEnd = schedule.projectedEnd, hasDrift {
                         total("Projected", clock(projectedEnd), tint: driftColor)
                     }
-                    if let overUnder = schedule.overUnderSeconds {
+                    if showsSummary, let overUnder = schedule.overUnderSeconds {
                         overUnderView(overUnder)
                     }
                 } else {
@@ -71,14 +99,7 @@ struct RunSheetTotalsView: View {
     }
 
     private func total(_ label: String, _ value: String, tint: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.clock(.callout, weight: .medium))
-                .foregroundStyle(tint)
-        }
+        RunSheetTotalFigure(label: label, value: value, tint: tint)
     }
 
     private func duration(_ seconds: Int) -> String {

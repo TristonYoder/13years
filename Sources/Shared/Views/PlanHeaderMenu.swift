@@ -21,22 +21,55 @@ struct PlanHeaderMenu: View {
     private var hasPCOPlan: Bool { engine.planItems.first?.pcoPlanId != nil }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            // A Menu label collapses to its first Text on macOS, so the time is a sibling, not part of the label.
-            VStack(alignment: .leading, spacing: 1) {
-                planMenu
-                if let time = currentTimeText {
-                    Text(time)
-                        .font(.clock(.callout, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .padding(.leading, 5)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                // A Menu label collapses to its first Text on macOS, so the time is a sibling, not part of the label.
+                VStack(alignment: .leading, spacing: 1) {
+                    planMenu
+                    if let time = currentTimeText {
+                        Text(time)
+                            .font(.clock(.callout, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .padding(.leading, 5)
+                    }
                 }
+                statusTag
             }
-            statusTag
+            summary
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
+    }
+
+    /// Planned length, planned end and pace, moved up from the run sheet footer so every screen shows them.
+    @ViewBuilder
+    private var summary: some View {
+        if engine.planItems.contains(where: { !$0.isHeader }) {
+            let schedule = engine.runSheetSchedule()
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                RunSheetTotalFigure(label: "Planned", value: duration(schedule.plannedLength))
+                if let end = schedule.plannedEnd {
+                    RunSheetTotalFigure(label: "Ends", value: engine.clockFormat.string(from: end))
+                    if let seconds = schedule.overUnderSeconds {
+                        if abs(seconds) < RunSheetSchedule.driftThreshold {
+                            RunSheetTotalFigure(label: "Pace", value: "On time")
+                        } else {
+                            RunSheetTotalFigure(
+                                label: seconds > 0 ? "Over" : "Under",
+                                value: duration(abs(seconds)),
+                                tint: seconds > 0 ? AppPalette.driftLate : AppPalette.driftEarly
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.leading, 5)
+        }
+    }
+
+    private func duration(_ seconds: Int) -> String {
+        TimeFormatting.string(forSeconds: seconds, threshold: engine.hourFormatThreshold)
     }
 
     /// The time shown under the plan name: the rehearsal time while rehearsing, otherwise the live event time.

@@ -131,7 +131,11 @@ public struct ServiceFlowView: View {
                         case .table:
                             tableLayout(schedule)
                         }
+                        #if os(macOS)
+                        RunSheetTotalsView(schedule: schedule, showsSummary: false)
+                        #else
                         RunSheetTotalsView(schedule: schedule)
+                        #endif
                     }
                 }
             }
