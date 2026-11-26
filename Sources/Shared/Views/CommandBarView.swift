@@ -231,6 +231,51 @@ struct CommandBarView: View {
     }
 }
 
+#if os(macOS)
+struct CommandBarKeyCapture: NSViewRepresentable {
+    let isEnabled: Bool
+    let onKey: (String) -> Bool
+
+    func makeNSView(context: Context) -> CaptureView {
+        let view = CaptureView()
+        view.onKey = onKey
+        view.isEnabled = isEnabled
+        return view
+    }
+
+    func updateNSView(_ view: CaptureView, context: Context) {
+        view.onKey = onKey
+        view.isEnabled = isEnabled
+    }
+
+    final class CaptureView: NSView {
+        var onKey: ((String) -> Bool)?
+        var isEnabled = true
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isEnabled, event.window === self.window, self.window?.attachedSheet == nil else { return event }
+                if let responder = self.window?.firstResponder, responder is NSTextView || responder is NSTextField { return event }
+                guard event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
+                guard let characters = event.characters, characters.count == 1, let first = characters.first, !first.isWhitespace,
+                      characters.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value != 127 && !(0xF700...0xF8FF).contains($0.value) })
+                else { return event }
+                return self.onKey?(characters) == true ? nil : event
+            }
+        }
+
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+    }
+}
+#endif
+
 enum CommandBarKeys {
     static func startingText(for press: KeyPress) -> String? {
         guard press.modifiers.isDisjoint(with: [.command, .control, .option]) else { return nil }

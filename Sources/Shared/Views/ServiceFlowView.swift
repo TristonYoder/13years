@@ -159,17 +159,14 @@ public struct ServiceFlowView: View {
                 }
             }
         }
+        #if os(macOS)
+        .background(CommandBarKeyCapture(isEnabled: !commandActive) { handleTypedStart($0) })
+        #else
         .onKeyPress(phases: .down) { press in
             guard !commandActive, let typed = CommandBarKeys.startingText(for: press) else { return .ignored }
-            if CommandBarKeys.isTimeEntryStart(typed) {
-                guard engine.activeTimerItem != nil else { return .ignored }
-                engine.timeEntrySeed = typed
-            } else {
-                commandText = typed
-                commandActive = true
-            }
-            return .handled
+            return handleTypedStart(typed) ? .handled : .ignored
         }
+        #endif
         .modifier(RunSheetPlanInspectorModifier(
             isPresented: $planPanelVisible,
             onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
@@ -278,6 +275,19 @@ public struct ServiceFlowView: View {
             Text("\u{201C}\(item.title)\u{201D} and its notes will be removed from the flow.")
         }
     }
+
+    #if os(macOS) || os(iOS)
+    private func handleTypedStart(_ typed: String) -> Bool {
+        if CommandBarKeys.isTimeEntryStart(typed) {
+            guard engine.activeTimerItem != nil else { return false }
+            engine.timeEntrySeed = typed
+        } else {
+            commandText = typed
+            commandActive = true
+        }
+        return true
+    }
+    #endif
 
     private var knownNoteCategories: [String] {
         var set = Set(engine.pcoNoteCategories.map(\.name))
