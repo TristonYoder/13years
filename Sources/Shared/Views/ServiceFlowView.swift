@@ -58,6 +58,7 @@ public struct ServiceFlowView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 84)
+                .padding(.trailing, 6)
                 .help("Switch the run sheet between a list and a table with customizable columns")
 
                 if layout == .table {
@@ -91,6 +92,7 @@ public struct ServiceFlowView: View {
                 Button(action: { showingPlanPicker = true }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
+                .headerActionPrimary()
                 .help("Pick a Planning Center plan type and plan to sync")
 
                 Button(action: { showingEventTimes = true }) {
@@ -101,6 +103,7 @@ public struct ServiceFlowView: View {
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")
                 }
+                .headerActionPrimary()
                 .help("Add a single item to the flow")
 
                 #if os(iOS)

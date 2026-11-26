@@ -21,18 +21,19 @@ public struct SectionHeaderBar<Actions: View>: View {
         VStack(spacing: 0) {
             if showsTitles {
                 ViewThatFits(in: .horizontal) {
-                    row(titles: true)
-                    row(titles: false)
+                    row(tier: .all)
+                    row(tier: .primary)
+                    row(tier: .none)
                 }
             } else {
-                row(titles: false)
+                row(tier: .none)
             }
 
             Divider()
         }
     }
 
-    private func row(titles: Bool) -> some View {
+    private func row(tier: HeaderTitleTier) -> some View {
         HStack(spacing: 8) {
             if let toggleSidebar {
                 Button(action: toggleSidebar) {
@@ -49,9 +50,12 @@ public struct SectionHeaderBar<Actions: View>: View {
             Text(mode.displayName)
                 .font(.title2.weight(.bold))
             Spacer()
-            actions()
-                .labelStyle(TitledOrIconLabelStyle(showsTitle: titles))
-                .buttonStyle(SectionHeaderActionButtonStyle(showsTitles: titles))
+            HStack(spacing: 8) {
+                actions()
+                    .labelStyle(TitledOrIconLabelStyle())
+                    .buttonStyle(SectionHeaderActionButtonStyle())
+            }
+            .environment(\.headerTitleTier, tier)
         }
         .padding(.horizontal)
         .padding(.top, 16)
@@ -59,33 +63,74 @@ public struct SectionHeaderBar<Actions: View>: View {
     }
 }
 
-private struct TitledOrIconLabelStyle: LabelStyle {
-    let showsTitle: Bool
+/// How many toolbar actions show their title: all, only those marked primary, or none.
+enum HeaderTitleTier { case all, primary, none }
 
+private struct HeaderTitleTierKey: EnvironmentKey { static let defaultValue = HeaderTitleTier.none }
+private struct HeaderActionIsPrimaryKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    var headerTitleTier: HeaderTitleTier {
+        get { self[HeaderTitleTierKey.self] }
+        set { self[HeaderTitleTierKey.self] = newValue }
+    }
+    var headerActionIsPrimary: Bool {
+        get { self[HeaderActionIsPrimaryKey.self] }
+        set { self[HeaderActionIsPrimaryKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Keeps this action's title visible when the header is too narrow for every title.
+    func headerActionPrimary() -> some View {
+        environment(\.headerActionIsPrimary, true)
+    }
+}
+
+private func headerShowsTitle(tier: HeaderTitleTier, primary: Bool) -> Bool {
+    switch tier {
+    case .all: return true
+    case .primary: return primary
+    case .none: return false
+    }
+}
+
+private struct TitledOrIconLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        if showsTitle {
-            HStack(spacing: 6) {
+        TitledOrIconLabel(configuration: configuration)
+    }
+
+    private struct TitledOrIconLabel: View {
+        let configuration: LabelStyleConfiguration
+        @Environment(\.headerTitleTier) private var tier
+        @Environment(\.headerActionIsPrimary) private var primary
+
+        var body: some View {
+            if headerShowsTitle(tier: tier, primary: primary) {
+                HStack(spacing: 6) {
+                    configuration.icon
+                    configuration.title.font(.callout.weight(.medium)).lineLimit(1)
+                }
+            } else {
                 configuration.icon
-                configuration.title.font(.callout.weight(.medium)).lineLimit(1)
             }
-        } else {
-            configuration.icon
         }
     }
 }
 
 struct SectionHeaderActionButtonStyle: ButtonStyle {
-    var showsTitles = false
-
     func makeBody(configuration: Configuration) -> some View {
-        SectionHeaderActionButton(configuration: configuration, showsTitles: showsTitles)
+        SectionHeaderActionButton(configuration: configuration)
     }
 }
 
 private struct SectionHeaderActionButton: View {
     let configuration: ButtonStyle.Configuration
-    let showsTitles: Bool
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.headerTitleTier) private var tier
+    @Environment(\.headerActionIsPrimary) private var primary
+
+    private var showsTitles: Bool { headerShowsTitle(tier: tier, primary: primary) }
 
     var body: some View {
         configuration.label
