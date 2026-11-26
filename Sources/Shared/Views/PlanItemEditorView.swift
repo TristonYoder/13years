@@ -223,6 +223,7 @@ public struct PlanItemEditorView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .accessibilityAddTraits(tab == entry ? [.isSelected, .isButton] : .isButton)
             }
             Spacer()
