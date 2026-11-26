@@ -12,13 +12,13 @@ struct PlanHeaderMenu: View {
     @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @State private var showingPlanPicker = false
     @State private var showingEventTimes = false
+    @State private var showingPopover = false
 
     private var planName: String {
         engine.pcoPlanContext?.title ?? engine.planTitle ?? "No plan"
     }
 
     private var hasPCOPlan: Bool { engine.planItems.first?.pcoPlanId != nil }
-    private var canRehearse: Bool { engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -47,72 +47,10 @@ struct PlanHeaderMenu: View {
         return engine.liveEventTime?.displayName(engine.clockFormat) ?? engine.eventTimes.first?.displayName(engine.clockFormat)
     }
 
-    /// One menu for the whole plan: which event time is running, changing the plan, rehearsal and live sync.
+    /// One popover for the whole plan: event times as cards, rehearsal times beneath, live sync, plan actions.
     private var planMenu: some View {
-        Menu {
-            if engine.isRehearsalMode {
-                if engine.rehearsalPlanTimes.count > 1 {
-                    Section("Rehearsal Time") {
-                        Picker("Rehearsal Time", selection: Binding(
-                            get: { engine.rehearsalPlanTimeId ?? "" },
-                            set: { engine.setRehearsalMode(true, planTimeId: $0) }
-                        )) {
-                            ForEach(engine.rehearsalPlanTimes) { time in
-                                Text(rehearsalLabel(for: time)).tag(time.id)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                        .labelsHidden()
-                    }
-                }
-            } else if engine.eventTimes.count > 1 {
-                Section("Event Time") {
-                    Picker("Live Event Time", selection: Binding(
-                        get: { engine.liveEventTime?.id ?? "" },
-                        set: { id in
-                            guard !id.isEmpty else { return }
-                            engine.setLiveEventTime(id: id)
-                        }
-                    )) {
-                        ForEach(engine.eventTimes) { time in
-                            Text(time.displayName(engine.clockFormat)).tag(time.id)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .disabled(engine.isChangingEventTime)
-                }
-            }
-
-            Section("Plan") {
-                Button(engine.isPCOConnected ? "Change Plan\u{2026}" : "Sync PCO\u{2026}") {
-                    engine.whenPCOConnected { showingPlanPicker = true }
-                }
-                Button("Event Times\u{2026}") { showingEventTimes = true }
-                Button(planPanelVisible ? "Hide Plan Details" : "Show Plan Details") { planPanelVisible.toggle() }
-                if let raw = engine.pcoPlanContext?.planningCenterURL, let url = URL(string: raw) {
-                    Button("Open in Planning Center") { openURL(url) }
-                }
-            }
-
-            Section("Mode") {
-                if canRehearse {
-                    Toggle("Rehearsal Mode", isOn: Binding(
-                        get: { engine.isRehearsalMode },
-                        set: { engine.setRehearsalMode($0) }
-                    ))
-                } else {
-                    Toggle("Rehearsal Mode", isOn: .constant(false))
-                        .disabled(true)
-                }
-                if hasPCOPlan {
-                    Toggle("Sync with PCO Live", isOn: Binding(
-                        get: { engine.isPCOLiveSyncEnabled },
-                        set: { $0 ? engine.enablePCOLiveSync() : engine.disablePCOLiveSync() }
-                    ))
-                    .disabled(engine.isRehearsalMode)
-                }
-            }
+        Button {
+            showingPopover.toggle()
         } label: {
             HStack(alignment: .center, spacing: 6) {
                 Text(planName)
@@ -122,11 +60,30 @@ struct PlanHeaderMenu: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.secondary)
             }
+            .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Plan and event time: switch event, change the plan, rehearse, or sync with Planning Center Live")
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
+            PlanPopover(
+                planName: planName,
+                subtitle: engine.pcoPlanContext?.dates,
+                hasPCOPlan: hasPCOPlan,
+                planPanelVisible: $planPanelVisible,
+                onChangePlan: {
+                    showingPopover = false
+                    engine.whenPCOConnected { showingPlanPicker = true }
+                },
+                onEventTimes: {
+                    showingPopover = false
+                    showingEventTimes = true
+                },
+                onOpenInPCO: {
+                    if let raw = engine.pcoPlanContext?.planningCenterURL, let url = URL(string: raw) { openURL(url) }
+                }
+            )
+            .environmentObject(engine)
+        }
+        .help("Plan and event time: switch event, rehearse, change the plan, or sync with Planning Center Live")
     }
 
     /// Rehearsal replaces the PCO Live tag: you are either rehearsing or in the event.
@@ -155,5 +112,163 @@ struct PlanHeaderMenu: View {
         let start = time.startsAt.map { engine.clockFormat.string(from: $0) }
         return [time.name, start].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
     }
+}
+
+private struct PlanPopover: View {
+    @EnvironmentObject var engine: CueEngine
+    let planName: String
+    let subtitle: String?
+    let hasPCOPlan: Bool
+    @Binding var planPanelVisible: Bool
+    let onChangePlan: () -> Void
+    let onEventTimes: () -> Void
+    let onOpenInPCO: () -> Void
+
+    private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(planName).font(.headline).lineLimit(2)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            if !engine.eventTimes.isEmpty {
+                section("Event") {
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(engine.eventTimes) { time in
+                            eventCard(time)
+                        }
+                    }
+                }
+            }
+
+            section("Rehearsal") {
+                if engine.rehearsalPlanTimes.isEmpty {
+                    Text("This plan has no rehearsal time in Planning Center.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(engine.rehearsalPlanTimes) { time in
+                            rehearsalCard(time)
+                        }
+                    }
+                }
+            }
+
+            if hasPCOPlan {
+                Divider()
+                Toggle(isOn: Binding(
+                    get: { engine.isPCOLiveSyncEnabled },
+                    set: { $0 ? engine.enablePCOLiveSync() : engine.disablePCOLiveSync() }
+                )) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Sync with PCO Live")
+                        Text(engine.isRehearsalMode ? "Off while rehearsing" : "Controls Planning Center Live")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(engine.isRehearsalMode)
+            }
+
+            Divider()
+            ChipFlowLayout {
+                Button(action: onChangePlan) {
+                    Label(engine.isPCOConnected ? "Change plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button(action: onEventTimes) {
+                    Label("Event times", systemImage: "clock")
+                }
+                Button { planPanelVisible.toggle() } label: {
+                    Label(planPanelVisible ? "Hide details" : "Details", systemImage: "sidebar.trailing")
+                }
+                if engine.pcoPlanContext?.planningCenterURL != nil {
+                    Button(action: onOpenInPCO) {
+                        Label("Planning Center", systemImage: "arrow.up.right.square")
+                    }
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(14)
+        .frame(width: 330)
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.8)
+            content()
+        }
+    }
+
+    private func eventCard(_ time: EventTime) -> some View {
+        let isSelected = !engine.isRehearsalMode && engine.liveEventTime?.id == time.id
+        return Button {
+            if engine.isRehearsalMode { engine.setRehearsalMode(false) }
+            if engine.liveEventTime?.id != time.id { engine.setLiveEventTime(id: time.id) }
+        } label: {
+            card(
+                day: time.day?.formatted ?? "",
+                time: time.startTime?.formatted(engine.clockFormat) ?? time.name ?? "Event",
+                badge: isSelected ? "LIVE" : nil,
+                tint: AppPalette.positive,
+                isSelected: isSelected
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(engine.isChangingEventTime)
+    }
+
+    private func rehearsalCard(_ time: PCOPlanTimeInfo) -> some View {
+        let isSelected = engine.isRehearsalMode && engine.rehearsalPlanTimeId == time.id
+        return Button {
+            engine.setRehearsalMode(true, planTimeId: time.id)
+        } label: {
+            card(
+                day: time.startsAt.map { Self.dayFormatter.string(from: $0) } ?? (time.name ?? ""),
+                time: time.startsAt.map { engine.clockFormat.string(from: $0) } ?? "Rehearsal",
+                badge: isSelected ? "REHEARSING" : nil,
+                tint: AppPalette.rehearsal,
+                isSelected: isSelected,
+                fill: AppPalette.rehearsalFill
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func card(day: String, time: String, badge: String?, tint: Color, isSelected: Bool, fill: Color? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(day)
+                .font(.caption)
+                .foregroundStyle(fill == nil ? Color.secondary : tint)
+                .lineLimit(1)
+            Text(time)
+                .font(.clock(.title3, weight: .semibold))
+            Text(badge ?? " ")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(tint)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(fill ?? Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSelected ? tint : Color.clear, lineWidth: 2))
+        .contentShape(Rectangle())
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
+        return formatter
+    }()
 }
 #endif
