@@ -24,7 +24,7 @@ public struct ProducerRootView: View {
                 #endif
                 .background(.regularMaterial)
 
-            Divider()
+            PlanProgressRail()
 
             adaptiveNavigation
         }

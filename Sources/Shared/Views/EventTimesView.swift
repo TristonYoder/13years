@@ -54,7 +54,9 @@ public struct EventTimesView: View {
                     if engine.rehearsalPlanTimes.isEmpty {
                         Text(isManagedByPCO
                             ? "This Planning Center plan has no rehearsal times."
-                            : "No rehearsal times yet. Add one to rehearse against: actual times aren't recorded while rehearsing.")
+                            : engine.isRemoteMirror
+                                ? "No rehearsal times on this Producer yet. Add them there."
+                                : "No rehearsal times yet. Add one to rehearse against: actual times aren't recorded while rehearsing.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(engine.rehearsalPlanTimes) { time in
@@ -64,7 +66,7 @@ public struct EventTimesView: View {
                     HStack {
                         Text("Rehearsals")
                         Spacer()
-                        if !isManagedByPCO {
+                        if !isManagedByPCO && !engine.isRemoteMirror {
                             Button {
                                 editorIsRehearsal = true
                                 editorTarget = .add

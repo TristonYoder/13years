@@ -112,6 +112,8 @@ public final class CueEngine: ObservableObject {
     @Published public var planTitle: String?
     /// Rehearsal times entered by hand; used when the plan is not managed by Planning Center.
     @Published public var manualRehearsalTimes: [EventTime] = []
+    /// On a remote mirror: the rehearsal times the host reports, which may be entered by hand there.
+    @Published var remoteRehearsalPlanTimes: [PCOPlanTimeInfo]?
     @Published public var sharedPhrases: [String] = CueEngine.defaultSharedPhrases
     public static let defaultSharedPhrases = ["Standby", "Copy", "Hold please", "Go ahead", "Need 30 seconds", "Say again"]
     @Published public var runSheetLayout = RunSheetLayoutSettings()

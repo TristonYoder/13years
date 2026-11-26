@@ -1458,6 +1458,7 @@ public final class ControlAPIRouter {
         ControlAPIState.LiveOpsStatus(
             isRehearsalMode: engine.isRehearsalMode,
             rehearsalPlanTimeId: engine.rehearsalPlanTimeId,
+            rehearsalTimes: engine.rehearsalPlanTimes,
             actualsEventTimeId: engine.actualsEventTimeId,
             actuals: engine.itemActualsIncludingLive,
             skippedItemIds: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]

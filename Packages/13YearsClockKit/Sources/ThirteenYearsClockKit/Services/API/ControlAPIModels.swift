@@ -145,6 +145,8 @@ public struct ControlAPIState: Codable, Sendable {
     public struct LiveOpsStatus: Codable, Sendable {
         public var isRehearsalMode: Bool
         public var rehearsalPlanTimeId: String?
+        /// The rehearsal times a client can choose from, so a remote Producer sees the same list as this one.
+        public var rehearsalTimes: [PCOPlanTimeInfo]?
         public var actualsEventTimeId: String?
         public var actuals: [ItemActual]
         public var skippedItemIds: [String: [String]]

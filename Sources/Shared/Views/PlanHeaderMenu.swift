@@ -151,6 +151,10 @@ private struct PlanPopover: View {
                         Text("This plan has no rehearsal time in Planning Center.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    } else if engine.isRemoteMirror {
+                        Text("No rehearsal times on this Producer. Add them there.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     } else {
                         Button(action: onEventTimes) {
                             Label("Add a rehearsal time", systemImage: "plus")

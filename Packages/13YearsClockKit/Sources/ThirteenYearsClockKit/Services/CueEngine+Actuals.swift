@@ -262,6 +262,7 @@ extension CueEngine {
 
     /// Rehearsal times for the current plan: Planning Center's when the plan is synced from there, otherwise the ones entered by hand.
     public var rehearsalPlanTimes: [PCOPlanTimeInfo] {
+        if isRemoteMirror, let remote = remoteRehearsalPlanTimes { return remote }
         if isEventTimesManagedByPCO {
             return pcoPlanContext?.times.filter { $0.timeType == "rehearsal" } ?? []
         }

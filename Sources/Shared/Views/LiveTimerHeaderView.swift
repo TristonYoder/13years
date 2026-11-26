@@ -40,25 +40,6 @@ public struct LiveTimerHeaderView: View {
 
     public init() {}
 
-    /// A hairline rail along the bottom edge that fills as the plan progresses. No labels.
-    private var progressRail: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.07))
-                Capsule()
-                    .fill((engine.isRehearsalMode ? AppPalette.rehearsal : AppPalette.positive).opacity(0.85))
-                    .frame(width: max(0, proxy.size.width * engine.planProgress))
-                    .animation(.linear(duration: 1), value: engine.planProgress)
-            }
-        }
-        .frame(height: 3)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 2)
-        .opacity(engine.planItems.contains(where: { !$0.isHeader }) ? 1 : 0)
-        .accessibilityHidden(true)
-        .allowsHitTesting(false)
-    }
-
     /// Errors sit in their own tinted banner. On macOS the leading inset keeps them clear of the window controls.
     private func headerError(_ text: String, systemImage: String, color: Color) -> some View {
         Label(text, systemImage: systemImage)
@@ -180,7 +161,6 @@ public struct LiveTimerHeaderView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-        .overlay(alignment: .bottom) { progressRail }
     }
 
     private var cueButtons: some View {
@@ -274,5 +254,30 @@ public struct LiveTimerHeaderView: View {
                     engine.setTimerRemainingTime(seconds: time.secondsUntil(now: Date()))
                 }
             }
+    }
+}
+
+/// The line between the header and the controls below it. It doubles as the plan's progress: the fill
+/// follows `planProgress`, green in the event and purple while rehearsing. No labels.
+struct PlanProgressRail: View {
+    @EnvironmentObject var engine: CueEngine
+
+    var body: some View {
+        let progress = engine.planProgress
+        let hasPlan = engine.planItems.contains(where: { !$0.isHeader })
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.primary.opacity(0.12))
+                if hasPlan {
+                    Rectangle()
+                        .fill((engine.isRehearsalMode ? AppPalette.rehearsal : AppPalette.positive).opacity(0.9))
+                        .frame(width: proxy.size.width * progress)
+                        // Ease rather than run linearly so a jump between items glides instead of snapping.
+                        .animation(.easeInOut(duration: 0.9), value: progress)
+                }
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
     }
 }
