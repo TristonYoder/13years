@@ -19,6 +19,8 @@ public struct PagerPresentationState: Equatable, Sendable {
     public var producerClockOffsetMs: Double?
     public var producerUTCOffsetSeconds: Int?
     public var nextItemStartDate: Date?
+    /// The color scale the producer sent for the active item. nil leaves pager text its normal color.
+    public var timerColors: TimerColorScale?
 
     public init(
         roles: [RoleCue],
@@ -35,7 +37,8 @@ public struct PagerPresentationState: Equatable, Sendable {
         receivedNextItem: PCOTimerItem? = nil,
         producerClockOffsetMs: Double? = nil,
         producerUTCOffsetSeconds: Int? = nil,
-        nextItemStartDate: Date? = nil
+        nextItemStartDate: Date? = nil,
+        timerColors: TimerColorScale? = nil
     ) {
         self.roles = roles
         self.planItems = planItems
@@ -52,6 +55,13 @@ public struct PagerPresentationState: Equatable, Sendable {
         self.producerClockOffsetMs = producerClockOffsetMs
         self.producerUTCOffsetSeconds = producerUTCOffsetSeconds
         self.nextItemStartDate = nextItemStartDate
+        self.timerColors = timerColors
+    }
+
+    /// Six hex digits for the countdown's current color, or nil for the normal text color.
+    public var timerColorHex: String? {
+        guard let item = activeTimerItem, !item.isHeader else { return nil }
+        return timerColors?.colorHex(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
     }
 
     public static func cueWordText(for state: CueState) -> String {

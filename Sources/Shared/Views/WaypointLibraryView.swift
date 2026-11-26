@@ -11,6 +11,7 @@ public struct WaypointLibraryView: View {
     @State private var renamingWaypointId: String?
     @State private var renameText: String = ""
     @State private var pendingDeleteWaypoint: Waypoint?
+    @State private var colorsWaypoint: Waypoint?
 
     public init() {}
 
@@ -24,6 +25,11 @@ public struct WaypointLibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .sheet(item: $colorsWaypoint) { waypoint in
+                TimerColorOverrideSheet(title: "\u{201C}\(waypoint.name)\u{201D}", current: waypoint.timerColors) { scale in
+                    engine.setWaypointTimerColors(id: waypoint.id, scale)
                 }
             }
             .alert("Rename Waypoint", isPresented: Binding(
@@ -107,7 +113,15 @@ public struct WaypointLibraryView: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer()
+            if waypoint.timerColors != nil {
+                Image(systemName: "paintpalette.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Has its own timer colors")
+            }
             #if os(macOS)
+            RowActionButton(systemImage: "paintpalette", label: "Timer colors\u{2026}") {
+                colorsWaypoint = waypoint
+            }
             RowActionButton(systemImage: "pencil", label: "Rename waypoint\u{2026}") {
                 renameText = waypoint.name
                 renamingWaypointId = waypoint.id
@@ -125,6 +139,12 @@ public struct WaypointLibraryView: View {
                 Label("Rename\u{2026}", systemImage: "pencil")
             }
             .tint(AppPalette.info)
+
+            Button {
+                colorsWaypoint = waypoint
+            } label: {
+                Label("Colors\u{2026}", systemImage: "paintpalette")
+            }
 
             Button(role: .destructive) {
                 pendingDeleteWaypoint = waypoint

@@ -83,6 +83,8 @@ public enum RemoteCommand: Equatable, Sendable {
     case loadDocument(body: Data)
     case hourFormat(String)
     case clockFormat(String)
+    case timerColors(TimerColorScale)
+    case waypointTimerColors(ref: String, TimerColorScale?)
 
     public var isIdempotent: Bool {
         switch self {
@@ -241,6 +243,11 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["hourFormatThreshold": raw]))
         case .clockFormat(let raw):
             return Request(method: "PUT", path: "/v1/settings", body: Self.json(["clockFormat": raw]))
+        case .timerColors(let scale):
+            return Request(method: "PUT", path: "/v1/settings", body: Self.encoded(["timerColors": scale]))
+        case .waypointTimerColors(let ref, let scale):
+            let body = scale.map { Self.encoded(["timerColors": $0]) } ?? Self.json(["clearTimerColors": true])
+            return Request(method: "PATCH", path: "/v1/waypoints/\(Self.segment(ref))", body: body)
         }
     }
 
@@ -250,6 +257,12 @@ public enum RemoteCommand: Equatable, Sendable {
 
     private static func post(_ path: String, _ fields: [String: Any]? = nil) -> Request {
         Request(method: "POST", path: "/v1/" + path, body: fields.map(json))
+    }
+
+    private static func encoded<T: Encodable>(_ fields: [String: T]) -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(fields)) ?? Data()
     }
 
     private static func json(_ fields: [String: Any]) -> Data {

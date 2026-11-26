@@ -88,6 +88,8 @@ public struct CuePacket: Codable, Sendable {
     public var roleCues: [RoleCue]?
     public var timerItem: PCOTimerItem?
     public var nextItem: CueNextItem?
+    /// The color scale for the active item, sent only when it differs from the standard one.
+    public var timerColors: TimerColorScale?
     public var message: InterTeamMessage?
     public var messages: [InterTeamMessage]?
     public var proto: Int?
@@ -107,7 +109,7 @@ public struct CuePacket: Codable, Sendable {
     public private(set) var anchorRejected = false
 
     private enum CodingKeys: String, CodingKey {
-        case type, timestamp, senderId, roleCues, timerItem, nextItem, message, messages
+        case type, timestamp, senderId, roleCues, timerItem, nextItem, timerColors, message, messages
         case proto, t0, t1, t2, rev, anchor, cueDeltas, digestMs, hashes, epoch, to, utcOffsetSeconds, clockFormat
     }
 
@@ -137,6 +139,7 @@ public struct CuePacket: Codable, Sendable {
         roleCues = try container.decodeIfPresent([RoleCue].self, forKey: .roleCues)
         timerItem = try container.decodeIfPresent(PCOTimerItem.self, forKey: .timerItem)
         nextItem = try? container.decodeIfPresent(CueNextItem.self, forKey: .nextItem)
+        timerColors = try? container.decodeIfPresent(TimerColorScale.self, forKey: .timerColors)
         message = try container.decodeIfPresent(InterTeamMessage.self, forKey: .message)
         messages = try container.decodeIfPresent([InterTeamMessage].self, forKey: .messages)
         proto = try container.decodeIfPresent(Int.self, forKey: .proto)
@@ -168,6 +171,7 @@ public struct CuePacket: Codable, Sendable {
         try container.encodeIfPresent(roleCues, forKey: .roleCues)
         try container.encodeIfPresent(timerItem, forKey: .timerItem)
         try container.encodeIfPresent(nextItem, forKey: .nextItem)
+        try container.encodeIfPresent(timerColors, forKey: .timerColors)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(messages, forKey: .messages)
         try container.encodeIfPresent(proto, forKey: .proto)

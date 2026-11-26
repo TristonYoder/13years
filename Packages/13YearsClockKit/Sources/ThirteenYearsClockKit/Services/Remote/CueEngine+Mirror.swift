@@ -9,7 +9,8 @@ extension CueEngine {
 
         assign(\.roles, state.roles)
         assign(\.selectedRoleIds, Set(state.selectedRoleIds))
-        assign(\.waypoints, state.waypoints.map { Waypoint(id: $0.id, name: $0.name) })
+        assign(\.waypoints, state.waypoints.map { Waypoint(id: $0.id, name: $0.name, timerColors: $0.timerColors) })
+        assign(\.timerColorScale, state.settings.timerColors ?? .standard)
         assign(\.serviceSchedules, state.schedules.entries.map { entry in
             ServiceSchedule(
                 id: entry.id,
@@ -60,6 +61,7 @@ extension CueEngine {
 
     public func apply(remoteTimer timer: ControlAPIState.ActiveTimer?) {
         guard isRemoteMirror else { return }
+        assign(\.receivedTimerColors, timer?.colors)
         if let timer {
             var item = timer.item
             if nextItem != timer.nextItem { nextItem = timer.nextItem }

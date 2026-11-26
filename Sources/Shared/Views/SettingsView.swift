@@ -13,6 +13,7 @@ public struct SettingsView: View {
     @State private var showingRoleNotes = false
     @State private var showingServiceSchedule = false
     @State private var showingWaypointLibrary = false
+    @State private var showingTimerColors = false
     @State private var connectTargetIP: String = ""
     @State private var connectPingSentAt: Date?
 
@@ -87,6 +88,16 @@ public struct SettingsView: View {
                 Text("Waypoints")
             } footer: {
                 Text("Reusable handles like \u{201C}Song 1\u{201D} that a Stream Deck or Companion button fires by name. Define them once here; each week, assign them to that week's items from the Run Sheet and every button keeps working.")
+            }
+
+            Section {
+                Button(action: { showingTimerColors = true }) {
+                    Label("Timer Colors", systemImage: "paintpalette")
+                }
+            } header: {
+                Text("Timer Colors")
+            } footer: {
+                Text("Color the countdown as time runs out, by seconds or percent of each item. It drives the readout, the progress bar and the text on pagers. An item or a waypoint can set its own.")
             }
 
             Section {
@@ -241,6 +252,9 @@ public struct SettingsView: View {
         }
         .sheet(isPresented: $showingWaypointLibrary) {
             WaypointLibraryView()
+        }
+        .sheet(isPresented: $showingTimerColors) {
+            TimerColorsSettingsView()
         }
         .sheet(isPresented: $showingServiceSchedule) {
             ServiceScheduleView()

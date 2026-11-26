@@ -54,6 +54,7 @@ public struct PlanItemEditorView: View {
     @State private var tab: EditorTab = .form
     @State private var importText = ""
     @State private var confirmingImport = false
+    @State private var showingTimerColors = false
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -306,6 +307,10 @@ public struct PlanItemEditorView: View {
                     cueRolesSection
                 }
 
+                if case .edit(let item) = mode, !item.isHeader {
+                    timerColorsSection(item)
+                }
+
                 if isManual {
                     placementSection
                 }
@@ -315,6 +320,30 @@ public struct PlanItemEditorView: View {
                 if case .edit(let item) = mode {
                     waypointsSection(itemId: item.id)
                 }
+    }
+
+    private func timerColorsSection(_ item: PCOTimerItem) -> some View {
+        let current = engine.planItems.first(where: { $0.id == item.id })?.timerColors
+        return Section {
+            Button {
+                showingTimerColors = true
+            } label: {
+                HStack {
+                    Label("Timer Colors", systemImage: "paintpalette")
+                    Spacer()
+                    Text(current == nil ? "Default" : "Custom")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showingTimerColors) {
+                TimerColorOverrideSheet(title: "this item", current: current) { scale in
+                    engine.setItemTimerColors(id: item.id, scale)
+                }
+            }
+        } footer: {
+            Text("Overrides the producer-wide timer colors, and its waypoints' colors, for this item.")
+        }
     }
 
     private var commandSection: some View {

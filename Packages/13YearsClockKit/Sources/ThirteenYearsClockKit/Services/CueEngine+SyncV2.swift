@@ -146,6 +146,7 @@ extension CueEngine {
         guard isMasterServer, !isRemoteMirror else { return }
         var packet = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
         packet.nextItem = syncV2.anchor == nil ? nil : nextItemForBroadcast
+        packet.timerColors = syncV2.anchor == nil ? nil : broadcastTimerColors
         stampUtcOffset(&packet)
         syncV2.lastNextItem = packet.nextItem
         packet.rev = nextRev()

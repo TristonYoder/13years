@@ -231,3 +231,7 @@ A producer (or any app) can point a pager at a clock server with one UDP datagra
 - `mode` (optional): `"introducer"` marks a packet whose `host` is not the sender, as when a Producer in a remote session introduces a pager to the remote clock server. Without it the pager only accepts a packet whose `host` equals the datagram's source address, so a third party cannot redirect it.
 
 The pager remembers the host and port and reconnects to them until it is told to forget the assignment. A Producer sends its own address (no `port`, no `mode`) when it serves the pager itself, including a remote session in Local Relay mode; in Introducer or Control Only mode it sends the remote server's IPv4, its `network.lanPort`, and `"mode":"introducer"`.
+
+### Timer colors (additive)
+
+The producer adds an optional `timerColors` to `TIMER_UPDATE` and `TIMER_ANCHOR`: the color scale in effect for the active item, `{"onTimeHex": "RRGGBB?", "stops": [{"id","value","unit":"seconds"|"percent","colorHex"}], "overtimeHex": "RRGGBB"}`. It is absent when the scale is the standard one (normal text, nothing sent), and receivers that do not know it ignore it. A pager colors its countdown and text with the color for its own remaining time: the stop with the smallest threshold that the remaining time has reached (a percent stop is that percent of `timerItem.lengthInSeconds`), `overtimeHex` once the remaining time is below zero, otherwise `onTimeHex` or the normal color. Full-screen cue styles that paint the whole screen keep their dark text.

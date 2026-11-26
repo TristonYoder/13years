@@ -30,6 +30,9 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
 
     public var cueRoleIds: [String]
 
+    /// Overrides the producer-wide timer color scale for this item.
+    public var timerColors: TimerColorScale?
+
     public init(
         id: String = UUID().uuidString,
         title: String,
@@ -47,7 +50,8 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         waypointIds: [String] = [],
         details: PCOItemDetails? = nil,
         trigger: ItemTrigger? = nil,
-        cueRoleIds: [String] = []
+        cueRoleIds: [String] = [],
+        timerColors: TimerColorScale? = nil
     ) {
         self.id = id
         self.title = title
@@ -66,6 +70,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         self.details = details
         self.trigger = trigger
         self.cueRoleIds = cueRoleIds
+        self.timerColors = timerColors
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -73,7 +78,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         case servicePlanTitle, notes, noteIds, pcoServiceTypeId, pcoPlanId, isDurationActual, waypointIds
         case tagIds
         case details
-        case trigger, cueRoleIds
+        case trigger, cueRoleIds, timerColors
     }
 
     public init(from decoder: Decoder) throws {
@@ -97,6 +102,7 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         details = try container.decodeIfPresent(PCOItemDetails.self, forKey: .details)
         trigger = try container.decodeIfPresent(ItemTrigger.self, forKey: .trigger)
         cueRoleIds = try container.decodeIfPresent([String].self, forKey: .cueRoleIds) ?? []
+        timerColors = try? container.decodeIfPresent(TimerColorScale.self, forKey: .timerColors)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -118,17 +124,20 @@ public struct PCOTimerItem: Identifiable, Codable, Equatable, Sendable {
         try container.encodeIfPresent(details, forKey: .details)
         try container.encodeIfPresent(trigger, forKey: .trigger)
         if !cueRoleIds.isEmpty { try container.encode(cueRoleIds, forKey: .cueRoleIds) }
+        try container.encodeIfPresent(timerColors, forKey: .timerColors)
     }
 
     public var broadcastTrimmed: PCOTimerItem {
         var slim = self
         slim.details = details?.broadcastTrimmed
+        slim.timerColors = nil
         return slim
     }
 
     public func broadcastTrimmed(fields: Set<PagerItemField>) -> PCOTimerItem {
         var slim = self
         slim.details = details?.broadcastTrimmed(fields: fields)
+        slim.timerColors = nil
         return slim
     }
 

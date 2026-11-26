@@ -214,6 +214,10 @@ public final class ControlAPIRouter {
                 }
                 engine.setClockFormat(format)
             }
+            if let colors = request.timerColors {
+                if let invalid = invalidTimerColors(colors) { return invalid }
+                engine.setTimerColorScale(colors)
+            }
             return json(settingsStatus())
 
         case "waypoints":
@@ -744,6 +748,12 @@ public final class ControlAPIRouter {
                     return Self.error(409, "A different waypoint already uses this name", detail: collision.name)
                 }
                 engine.renameWaypoint(id: waypoint.id, name: trimmed)
+            }
+            if request.clearTimerColors == true {
+                engine.setWaypointTimerColors(id: waypoint.id, nil)
+            } else if let colors = request.timerColors {
+                if let invalid = invalidTimerColors(colors) { return invalid }
+                engine.setWaypointTimerColors(id: waypoint.id, colors)
             }
             guard let updated = engine.waypoint(matching: waypoint.id) else {
                 return Self.error(404, "Unknown waypoint", detail: waypoint.id)
@@ -1386,7 +1396,8 @@ public final class ControlAPIRouter {
             isDurationActualForDisplay: engine.activeTimerActualForDisplay,
             anchor: anchor,
             nextItem: engine.derivedNextPlanItem,
-            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil
+            nextStartsAtMs: engine.broadcastPagerFields.contains(.startTime) ? engine.derivedNextPlanItem.flatMap { engine.projectedStartMs(ofItemId: $0.id) } : nil,
+            colors: engine.broadcastTimerColors
         )
     }
 
@@ -1489,8 +1500,21 @@ public final class ControlAPIRouter {
             slug: waypoint.slug,
             itemId: itemId,
             itemTitle: itemIndex.map { engine.planItems[$0].title },
-            itemIndex: itemIndex
+            itemIndex: itemIndex,
+            timerColors: waypoint.timerColors
         )
+    }
+
+    private func invalidTimerColors(_ scale: TimerColorScale) -> HTTPResponse? {
+        let hexes = [scale.onTimeHex].compactMap { $0 } + [scale.overtimeHex] + scale.stops.map(\.colorHex)
+        if let bad = hexes.first(where: { !TimerColorScale.isValidHex($0) }) {
+            return Self.error(400, "Invalid timer color", detail: "\(bad): use six hex digits, RRGGBB")
+        }
+        if scale.stops.count > 8 { return limitReached("timer color stops", 8) }
+        if scale.stops.contains(where: { $0.unit == .percent && $0.value > 100 }) {
+            return Self.error(400, "Invalid timer color stop", detail: "A percent stop is 0 to 100")
+        }
+        return nil
     }
 
     private func waypointStatuses() -> [ControlAPIState.WaypointStatus] {
@@ -1617,7 +1641,8 @@ public final class ControlAPIRouter {
             hourFormatThreshold: engine.hourFormatThreshold.rawValue,
             clockFormat: engine.clockFormat.rawValue,
             controlAPIPort: engine.controlAPIPort,
-            connectedAPIClients: connectedClientCount()
+            connectedAPIClients: connectedClientCount(),
+            timerColors: engine.timerColorScale.isStandard ? nil : engine.timerColorScale
         )
     }
 

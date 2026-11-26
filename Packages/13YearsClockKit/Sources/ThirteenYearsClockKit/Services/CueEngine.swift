@@ -110,6 +110,12 @@ public final class CueEngine: ObservableObject {
     @Published public var followByDefault = false
     /// Title of the current plan, stored once. Items no longer carry their own copy.
     @Published public var planTitle: String?
+    /// The producer-wide timer color scale. An item or waypoint can override it.
+    @Published public var timerColorScale = TimerColorScale.standard {
+        didSet { if timerColorScale != oldValue { timerColorsDidChange() } }
+    }
+    /// On a pager or remote mirror: the scale the producer sent for the active item. nil means no override.
+    @Published public internal(set) var receivedTimerColors: TimerColorScale?
     /// Rehearsal times entered by hand; used when the plan is not managed by Planning Center.
     @Published public var manualRehearsalTimes: [EventTime] = []
     /// On a remote mirror: the rehearsal times the host reports, which may be entered by hand there.
@@ -820,7 +826,8 @@ public final class CueEngine: ObservableObject {
                 clockFormat: clockFormat,
                 runSheetLayout: runSheetLayout.isDefault ? nil : runSheetLayout,
                 followByDefault: followByDefault ? true : nil,
-                sharedPhrases: sharedPhrases == Self.defaultSharedPhrases ? nil : sharedPhrases
+                sharedPhrases: sharedPhrases == Self.defaultSharedPhrases ? nil : sharedPhrases,
+                timerColors: timerColorScale.isStandard ? nil : timerColorScale
             )
         )
     }
@@ -872,6 +879,7 @@ public final class CueEngine: ObservableObject {
             ?? RunSheetLayoutSettings(hiddenColumns: legacyRunSheetHiddenColumns)
         pcoDefaultServiceTypeId = document.settings.pcoDefaultServiceTypeId
         followByDefault = document.settings.followByDefault ?? false
+        timerColorScale = document.settings.timerColors ?? .standard
         sharedPhrases = document.settings.sharedPhrases ?? Self.defaultSharedPhrases
     }
 
@@ -2592,6 +2600,7 @@ public final class CueEngine: ObservableObject {
         guard let item = activeTimerItemForBroadcast else { return }
         var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: item)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastTimerUpdate() — item=\"\(item.title, privacy: .private)\" remaining=\(item.remainingSeconds, privacy: .public)s isMasterServer=\(self.isMasterServer, privacy: .public)")
         if isMasterServer {
@@ -2684,6 +2693,9 @@ public final class CueEngine: ObservableObject {
         }
 
         let isV2Timer = !isMasterServer && syncV2.producerIsV2 && syncV2.held != nil
+        if !isMasterServer, !isRemoteMirror, packet.type == .timerUpdate || packet.type == .timerAnchor {
+            receivedTimerColors = packet.timerColors
+        }
 
         switch packet.type {
         case .cueUpdate:

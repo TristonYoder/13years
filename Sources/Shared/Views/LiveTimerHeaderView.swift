@@ -220,11 +220,16 @@ public struct LiveTimerHeaderView: View {
         .help("Actual is a temporary override for when you know the real time from outside the plan — e.g. a stream delay — Projected is the plan's own projection.")
     }
 
+    /// The countdown's color from the timer color scale; with none, overtime is red and everything else normal.
+    private func readoutColor(for item: PCOTimerItem) -> Color {
+        engine.timerColorHex(for: item).flatMap(Color.init(timerHex:)) ?? (item.isOvertime ? AppPalette.timerOvertime : .primary)
+    }
+
     @ViewBuilder
     private func remainingTimeControl(_ item: PCOTimerItem) -> some View {
         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold))
             .font(.inter(size: 52, weight: .black))
-            .foregroundStyle(isEditingTimer ? Color.primary : (item.isOvertime ? AppPalette.timerOvertime : .primary))
+            .foregroundStyle(isEditingTimer ? Color.primary : readoutColor(for: item))
             #if !os(tvOS)
             .contentTransition(.numericText())
             #endif
@@ -264,7 +269,9 @@ struct PlanProgressRail: View {
     @EnvironmentObject var engine: CueEngine
     @State private var shown: Double = 0
 
+    /// The scale's color for the active item; without one the rail is green (purple while rehearsing, amber over time).
     private var tint: Color {
+        if let item = engine.activeTimerItem, let hex = engine.timerColorHex(for: item), let color = Color(timerHex: hex) { return color }
         if engine.isRehearsalMode { return AppPalette.rehearsal }
         return engine.activeTimerItem?.isOvertime == true ? AppPalette.warning : AppPalette.positive
     }
@@ -294,8 +301,12 @@ struct PlanProgressRail: View {
             if new < old {
                 // A new item starts over: let the old fill drain away instead of snapping.
                 withAnimation(.easeOut(duration: 0.45)) { shown = new }
+            } else if (new - old) * Double(max(engine.activeTimerItem?.lengthInSeconds ?? 1, 1)) <= 1.5 {
+                // An ordinary one-second tick: glide at constant speed into the next, so the bar never lurches.
+                withAnimation(.linear(duration: 1.0)) { shown = new }
             } else {
-                withAnimation(.easeInOut(duration: 0.9)) { shown = new }
+                // A jump (skipping ahead, editing the length): ease.
+                withAnimation(.easeInOut(duration: 0.8)) { shown = new }
             }
         }
     }

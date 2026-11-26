@@ -51,6 +51,15 @@ public enum CueDisplayStyle: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+extension PagerPresentationState {
+    /// The countdown color to draw pager text in, or nil to leave it alone. Full-screen cues paint the whole
+    /// screen in the cue color with dark text, so the tint is skipped there to keep it readable.
+    func timerTint(style: CueDisplayStyle) -> Color? {
+        if style == .fullscreen && currentState != .off { return nil }
+        return timerColorHex.flatMap(Color.init(timerHex:))
+    }
+}
+
 struct PagerChromeSizes: Equatable {
     let timeFont: CGFloat
     let timeCaptionFont: CGFloat

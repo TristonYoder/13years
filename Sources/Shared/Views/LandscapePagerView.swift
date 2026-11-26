@@ -309,6 +309,7 @@ public struct LandscapePagerView<RoleMenu: View>: View {
         .padding(m.cardPadding)
         .frame(width: width)
         .frame(maxHeight: .infinity, alignment: .topLeading)
+        .colorMultiply(presentation.timerTint(style: style) ?? .white)
         .background(style.cardFill)
         .clipShape(RoundedRectangle(cornerRadius: m.cornerRadius, style: .continuous))
     }

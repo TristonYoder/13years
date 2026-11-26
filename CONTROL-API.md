@@ -348,7 +348,7 @@ One wrinkle worth knowing: PCO *header* items ("Pre Gathering", "Host Moment") a
 | `GET /v1/waypoints` | GET | List the waypoint library, each with this week's resolution (which item, if any, currently carries it). |
 | `POST /v1/waypoints` | POST | Add a waypoint to the library. Body: `{"name": "string"}`. Name is required, cannot be empty, and its slug must not collide with an existing waypoint's (409, case/punctuation-insensitive — "Song 1" and "song 1" collide). Returns the new waypoint (201). |
 | `GET /v1/waypoints/{ref}` | GET | Read one waypoint. |
-| `PATCH /v1/waypoints/{ref}` | PATCH | Rename a waypoint. Body: `{"name": "string"}`. The id never changes, so every existing assignment and every button already pointed at the id keeps working through a rename. Empty name is 400; a new slug colliding with a *different* waypoint is 409 (renaming a waypoint to a different casing of its own name is fine). |
+| `PATCH /v1/waypoints/{ref}` | PATCH | Rename a waypoint, and set or clear its own timer colors. Body: `{"name": "string?", "timerColors": {…}?, "clearTimerColors": boolean?}`. `timerColors` is a [timer color scale](#timer-colors) used for items at this waypoint; `clearTimerColors` drops it so they follow the producer-wide scale again. The id never changes, so every existing assignment and every button already pointed at the id keeps working through a rename. Empty name is 400; a new slug colliding with a *different* waypoint is 409 (renaming a waypoint to a different casing of its own name is fine). |
 | `DELETE /v1/waypoints/{ref}` | DELETE | Remove a waypoint from the library and strip it from every plan item's assignment. Returns the remaining waypoint list. |
 | `POST /v1/waypoints/{ref}/assign` | POST | Assign (or unassign) this waypoint for the week. Body: `{"itemId": "string?"}` — a null or absent `itemId` unassigns. Assigning steals the waypoint away from whatever other item held it, since a waypoint is on at most one item at a time. 404 if the waypoint or the item id doesn't exist. Returns the updated waypoint. |
 | `POST /v1/waypoints/next` | POST | Jump to the next item after the active one, in plan order, that carries any waypoint, with the same clock behaviour and optional `{"startTimer": boolean}` body as `/go`. **409** if no waypoint-carrying item is ahead. (A waypoint whose ref is literally `next` is only reachable by id for POST.) Returns the full state snapshot. |
@@ -478,7 +478,7 @@ Plotiphar is a companion app for lighting/scenic control. These routes manage pa
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `GET /v1/settings` | GET | App settings. |
-| `PATCH /v1/settings` | PATCH | Update settings. Body: `{"hourFormatThreshold": "string?", "clockFormat": "string?"}`. Valid `hourFormatThreshold` values are the `HourFormatThreshold` raw values — `over60Minutes`, `over90Minutes`, `never` — and anything else is a 400 listing them. (`never` means always `MM:SS`, however long the duration runs.) `clockFormat` is `twelveHour` or `twentyFourHour` (anything else is a 400 listing them); it sets how pagers display the producer clock unless a role overrides it. Returns the settings section of state. |
+| `PATCH /v1/settings` | PATCH | Update settings. Body: `{"hourFormatThreshold": "string?", "clockFormat": "string?", "timerColors": {…}?}`. Valid `hourFormatThreshold` values are the `HourFormatThreshold` raw values — `over60Minutes`, `over90Minutes`, `never` — and anything else is a 400 listing them. (`never` means always `MM:SS`, however long the duration runs.) `clockFormat` is `twelveHour` or `twentyFourHour` (anything else is a 400 listing them); it sets how pagers display the producer clock unless a role overrides it. Returns the settings section of state. `timerColors` is the producer-wide [timer color scale](#timer-colors); `{}` resets it. |
 
 ### Messages
 
@@ -735,3 +735,10 @@ Once connected, you'll receive the `hello` event. Then send a command:
 ```
 
 The server replies with the new state.
+
+
+## Timer colors
+
+The countdown can change color as time runs out. A scale is `{"onTimeHex": "RRGGBB?", "stops": [{"id","value","unit","colorHex"}], "overtimeHex": "RRGGBB"}`. `unit` is `seconds` or `percent`; a stop takes over once the time remaining falls to `value` seconds, or to that percent of the item's length. Of the stops reached, the one closest to zero wins; `overtimeHex` applies once the item is past its length; `onTimeHex` (absent for the normal text color) applies before the first stop. Colors are six hex digits with no `#`. At most 8 stops; a percent is 0 to 100; anything else is a 400. Missing fields take their defaults, so `{}` is the standard scale (normal text, red `CC1717` in overtime).
+
+An item can carry its own scale in `timerColors` (shown on `plan.items[]`, set in the Producer's item editor), and a waypoint can carry one (`waypoints[].timerColors`). The scale in effect is the item's, else its first waypoint's that has one, else `settings.timerColors`. The state's `timer.colors` is the scale in effect for the active item, omitted when it is the standard one. The producer readout, the run sheet progress bar and, when a scale was customized, the text on pagers use it. Pagers receive it as `timerColors` on `TIMER_UPDATE` and `TIMER_ANCHOR` and compute the color from their own remaining time.

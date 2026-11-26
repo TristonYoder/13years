@@ -157,6 +157,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                 ViewThatFits(in: .vertical) {
                     ForEach(Array(PortraitMetrics.fitScales.enumerated()), id: \.offset) { _, scale in
                         currentCard(m, item: item, scale: scale)
+                            .colorMultiply(presentation.timerTint(style: style) ?? .white)
                     }
                 }
             }
@@ -215,6 +216,7 @@ public struct PortraitPagerView<RoleMenu: View>: View {
             VStack(spacing: m.margin) {
                 if let next = presentation.nextItem {
                     nextCard(m, next: next)
+                        .colorMultiply(presentation.timerTint(style: style) ?? .white)
                 }
                 if let message = standingMessage {
                     PagerMessagePanel(
