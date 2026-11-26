@@ -13,7 +13,6 @@ enum RunSheetLayout: String {
 public struct ServiceFlowView: View {
     @EnvironmentObject var engine: CueEngine
     @State private var editorMode: PlanItemEditorView.Mode?
-    @State private var showingImportText = false
     @State private var expandedItemId: String?
     @State private var showingPlanPicker = false
     @State private var newWaypointTargetItemId: String?
@@ -84,11 +83,6 @@ public struct ServiceFlowView: View {
 
                 RunSheetActualsMenu()
 
-                Button(action: { showingImportText = true }) {
-                    Label("Import Text", systemImage: "text.badge.plus")
-                }
-                .help("Paste in a plain-text run sheet")
-
                 Button(action: { showingPlanPicker = true }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
@@ -152,10 +146,15 @@ public struct ServiceFlowView: View {
             pendingDeleteItem = engine.planItems.first { $0.id == id }
         }
         .onScreenshotTourSignal("runsheet.new-waypoint") { id in newWaypointTargetItemId = id }
-        .onScreenshotTourSignal("runsheet.import-text") { _ in showingImportText = true }
+        .onScreenshotTourSignal("runsheet.import-text") { _ in
+            UserDefaults.standard.set(PlanItemEditorView.EditorTab.importText.rawValue, forKey: "itemEditorTab")
+            editorMode = .add
+        }
         .onScreenshotTourSignal("runsheet.event-times") { _ in showingEventTimes = true }
         .sheet(item: $editorMode) { mode in
-            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, cueRoleIds, placement in
+            PlanItemEditorView(mode: mode, knownCategories: knownNoteCategories, onImport: { title, items in
+                engine.importFlow(title: title.isEmpty ? nil : title, items: items)
+            }) { id, title, itemType, lengthInSeconds, notes, isDurationActual, description, servicePosition, trigger, cueRoleIds, placement in
                 if let id {
                     engine.updatePlanItem(id: id, title: title, itemType: itemType, lengthInSeconds: lengthInSeconds, notes: notes, isDurationActual: isDurationActual, description: description, servicePosition: servicePosition)
                     engine.setItemTrigger(id: id, trigger)
@@ -180,11 +179,6 @@ public struct ServiceFlowView: View {
                         }
                     }
                 }
-            }
-        }
-        .sheet(isPresented: $showingImportText) {
-            ImportFlowTextView { title, items in
-                engine.importFlow(title: title.isEmpty ? nil : title, items: items)
             }
         }
         .sheet(isPresented: $showingPlanPicker) {

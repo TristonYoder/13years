@@ -26,6 +26,7 @@ public struct PlanItemEditorView: View {
     enum EditorTab: String, CaseIterable, Identifiable {
         case quick = "Quick add"
         case form = "Form"
+        case importText = "Import text"
         var id: String { rawValue }
     }
 
@@ -33,6 +34,7 @@ public struct PlanItemEditorView: View {
 
     let mode: Mode
     let knownCategories: [String]
+    let onImport: ((_ title: String, _ items: [PCOTimerItem]) -> Void)?
     let onSave: (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
 
     @EnvironmentObject var engine: CueEngine
@@ -50,6 +52,9 @@ public struct PlanItemEditorView: View {
     @FocusState private var commandFocused: Bool
     @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.quick.rawValue
     @State private var tab: EditorTab = .form
+    @State private var importTitle = ""
+    @State private var importText = ""
+    @State private var confirmingImport = false
     @State private var notes: [String: String]
     @State private var itemDescription: String
     @State private var servicePosition: PCOServicePosition
@@ -60,10 +65,12 @@ public struct PlanItemEditorView: View {
     public init(
         mode: Mode,
         knownCategories: [String] = [],
+        onImport: ((_ title: String, _ items: [PCOTimerItem]) -> Void)? = nil,
         onSave: @escaping (_ id: String?, _ title: String, _ itemType: String, _ lengthInSeconds: Int, _ notes: [String: String], _ isDurationActual: Bool, _ description: String?, _ servicePosition: PCOServicePosition?, _ trigger: ItemTrigger?, _ cueRoleIds: [String], _ placement: NewItemPlacement) -> Void
     ) {
         self.mode = mode
         self.knownCategories = knownCategories
+        self.onImport = onImport
         self.onSave = onSave
 
         switch mode {
@@ -100,9 +107,7 @@ public struct PlanItemEditorView: View {
                     Spacer()
                     Button("Cancel") { dismiss() }
                         .keyboardShortcut(.cancelAction)
-                    Button("Save") { save() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(!canSave)
+                    saveButton
                 }
                 .padding()
                 .background(.bar)
@@ -117,12 +122,32 @@ public struct PlanItemEditorView: View {
                         Button("Cancel") { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") { save() }
-                            .disabled(!canSave)
+                        saveButton
                     }
                 }
         }
         #endif
+    }
+
+    @ViewBuilder
+    private var saveButton: some View {
+        if isImporting {
+            Button("Import") {
+                if engine.planItems.isEmpty { performImport() } else { confirmingImport = true }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(importItems.isEmpty)
+            .confirmationDialog("Replace the current run sheet?", isPresented: $confirmingImport, titleVisibility: .visible) {
+                Button("Replace with \(importItems.count) Item\(importItems.count == 1 ? "" : "s")", role: .destructive) { performImport() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Importing replaces every item in the current flow.")
+            }
+        } else {
+            Button("Save") { save() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canSave)
+        }
     }
 
     private var canSave: Bool {
@@ -150,13 +175,15 @@ public struct PlanItemEditorView: View {
             Form {
                 if isAdding {
                     Picker("Editor", selection: $tab) {
-                        ForEach(EditorTab.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(availableTabs) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
                 }
-                if isAdding && tab == .quick {
+                if isAdding && tab == .importText {
+                    ImportFlowSections(planTitle: $importTitle, text: $importText)
+                } else if isAdding && tab == .quick {
                     commandSection
                     resultSection
                 } else {
@@ -165,8 +192,21 @@ public struct PlanItemEditorView: View {
             }
             .formStyle(.grouped)
             .onAppear {
-                if isAdding { tab = EditorTab(rawValue: lastTabRaw) ?? .quick }
+                if isAdding { tab = EditorTab(rawValue: lastTabRaw).flatMap { availableTabs.contains($0) ? $0 : nil } ?? .quick }
             }
+    }
+
+    private var availableTabs: [EditorTab] {
+        onImport == nil ? [.quick, .form] : EditorTab.allCases
+    }
+
+    private var isImporting: Bool { isAdding && tab == .importText }
+
+    private var importItems: [PCOTimerItem] { ImportFlowSections.parsedItems(importText) }
+
+    private func performImport() {
+        onImport?(importTitle, importItems)
+        dismiss()
     }
 
     @ViewBuilder

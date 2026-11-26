@@ -3,12 +3,10 @@
 
 import SwiftUI
 
-public struct ImportFlowTextView: View {
-    let onImport: (_ title: String, _ items: [PCOTimerItem]) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var planTitle: String = ""
-    @State private var text: String = ""
+/// The import fields, shared by the standalone sheet and the Import text tab of the item editor.
+struct ImportFlowSections: View {
+    @Binding var planTitle: String
+    @Binding var text: String
 
     private static let placeholder = """
     Pre-Service Countdown | Media | 5:00
@@ -17,53 +15,11 @@ public struct ImportFlowTextView: View {
     Message
     """
 
-    public init(onImport: @escaping (_ title: String, _ items: [PCOTimerItem]) -> Void) {
-        self.onImport = onImport
-    }
+    static func parsedItems(_ text: String) -> [PCOTimerItem] { ServiceFlowImporter.parse(text) }
 
-    private var parsedItems: [PCOTimerItem] {
-        ServiceFlowImporter.parse(text)
-    }
-
-    public var body: some View {
-        #if os(macOS)
-        importForm
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("Cancel") { dismiss() }
-                        .keyboardShortcut(.cancelAction)
-                    Button("Import") { performImport() }
-                        .disabled(parsedItems.isEmpty)
-                }
-                .padding()
-                .background(.bar)
-            }
-            .frame(minWidth: 460, minHeight: 480)
-        #else
-        NavigationStack {
-            importForm
-                .navigationTitle("Import Flow")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Import") { performImport() }
-                            .disabled(parsedItems.isEmpty)
-                    }
-                }
-        }
-        #endif
-    }
-
-    private func performImport() {
-        onImport(planTitle, parsedItems)
-        dismiss()
-    }
-
-    private var importForm: some View {
-            Form {
+    var body: some View {
+        let parsedItems = Self.parsedItems(text)
+        Group {
                 Section("Event Title") {
                     TextField("e.g. Sunday Morning", text: $planTitle)
                 }
@@ -103,7 +59,6 @@ public struct ImportFlowTextView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-            .formStyle(.grouped)
+        }
     }
 }
