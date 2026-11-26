@@ -36,53 +36,68 @@ extension Color {
 }
 
 #if os(macOS) || os(iOS)
-/// Edits a timer color scale: a color while there is plenty of time, stops that take over as time runs
-/// out (by seconds or percent of the item's length), and a color for overtime. Shows a preview of the
-/// colors across a five-minute item.
+/// Edits a timer color scale as a list of levels: one color while there is plenty of time, levels that take
+/// over as time runs out (by time or percent left), and levels for going over (by time or percent over).
 struct TimerColorScaleEditor: View {
     @Binding var scale: TimerColorScale
 
-    private static let maxStops = 8
+    private static let maxStops = 12
 
     var body: some View {
         Section {
             TimerColorPreview(scale: scale)
                 .listRowSeparator(.hidden)
-
-            Toggle("Color while on time", isOn: Binding(
-                get: { scale.onTimeHex != nil },
-                set: { scale.onTimeHex = $0 ? "34C759" : nil }
-            ))
-            if let hex = scale.onTimeHex {
-                colorRow("On time", hex: hex) { scale.onTimeHex = $0 }
-            }
         } header: {
             Text("Preview")
-        } footer: {
-            Text("Off keeps the normal text color until the first stop.")
         }
 
         Section {
-            ForEach($scale.stops) { $stop in
-                stopRow($stop)
+            Toggle(isOn: Binding(
+                get: { scale.onTimeHex != nil },
+                set: { scale.onTimeHex = $0 ? "34C759" : nil }
+            )) {
+                HStack {
+                    Text("On time")
+                    Spacer()
+                    if let hex = scale.onTimeHex {
+                        swatch(hex) { scale.onTimeHex = $0 }
+                    }
+                }
             }
-            .onDelete { offsets in scale.stops.remove(atOffsets: offsets) }
-
-            Button {
-                scale.stops.append(TimerColorStop(value: 60, unit: .seconds, colorHex: "FFD60A"))
-            } label: {
-                Label("Add Stop", systemImage: "plus")
-            }
-            .disabled(scale.stops.count >= Self.maxStops)
-
-            HStack(spacing: 10) {
-                colorRow("Overtime (default red)", hex: scale.overtimeHex) { scale.overtimeHex = $0 }
-                effectPicker($scale.overtimeEffect)
-            }
-        } header: {
-            Text("When time is running out")
         } footer: {
-            Text("A stop takes over once the time remaining falls to its value. With several stops reached, the one closest to zero wins. Overtime applies once the item runs past its length. Each can add an effect (Pulse, Blink, Flicker, Glitch) to the current item's countdown; None is standard.")
+            Text("Off keeps the normal text color until the first level.")
+        }
+
+        Section {
+            ForEach(indices(of: .remaining), id: \.self) { index in
+                levelRow($scale.stops[index])
+            }
+            addButton("Add Level", phase: .remaining)
+        } header: {
+            Text("Running out")
+        } footer: {
+            Text("A level takes over once the time left falls to its value. With several reached, the one closest to zero wins.")
+        }
+
+        Section {
+            HStack(spacing: 10) {
+                Text("Over time")
+                    .frame(width: 66, alignment: .leading)
+                Text("from 0:00")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                effectMenu($scale.overtimeEffect)
+                swatch(scale.overtimeHex) { scale.overtimeHex = $0 }
+            }
+            ForEach(indices(of: .overtime), id: \.self) { index in
+                levelRow($scale.stops[index])
+            }
+            addButton("Add Level", phase: .overtime)
+        } header: {
+            Text("Over time")
+        } footer: {
+            Text("Red is the default. Add deeper levels that take over once the item is that far over. Each level can add an effect (Pulse, Blink, Flicker, Glitch) to the current item's countdown; None is standard.")
         }
 
         Section {
@@ -91,37 +106,52 @@ struct TimerColorScaleEditor: View {
         }
     }
 
-    private func stopRow(_ stop: Binding<TimerColorStop>) -> some View {
-        HStack(spacing: 10) {
-            Text("At")
-                .foregroundStyle(.secondary)
-            TextField("Value", value: stop.value, format: .number)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 56)
-                #if os(macOS)
-                .textFieldStyle(.roundedBorder)
-                #endif
-            Picker("Unit", selection: stop.unit) {
-                Text("sec left").tag(TimerColorStop.Unit.seconds)
-                Text("% left").tag(TimerColorStop.Unit.percent)
-            }
-            .labelsHidden()
-            .fixedSize()
-            Spacer()
-            effectPicker(stop.effect)
-            ColorPicker("Color", selection: Binding(
-                get: { Color(timerHex: stop.wrappedValue.colorHex) ?? .yellow },
-                set: { stop.wrappedValue.colorHex = $0.timerHex }
-            ), supportsOpacity: false)
-            .labelsHidden()
+    private func indices(of phase: TimerColorStop.Phase) -> [Int] {
+        scale.stops.indices.filter { scale.stops[$0].phase == phase }
+    }
+
+    private func addButton(_ title: String, phase: TimerColorStop.Phase) -> some View {
+        Button {
+            scale.stops.append(phase == .remaining
+                ? TimerColorStop(phase: .remaining, value: 60, unit: .seconds, colorHex: "FFD60A")
+                : TimerColorStop(phase: .overtime, value: 60, unit: .seconds, colorHex: "FF3B30"))
+        } label: {
+            Label(title, systemImage: "plus")
         }
-        .onChange(of: stop.wrappedValue.value) { _, value in
-            let limit = stop.wrappedValue.unit == .percent ? 100 : 86_400
-            if value < 0 || value > limit { stop.wrappedValue.value = min(max(value, 0), limit) }
+        .disabled(scale.stops.count >= Self.maxStops)
+    }
+
+    private func levelRow(_ stop: Binding<TimerColorStop>) -> some View {
+        HStack(spacing: 10) {
+            TimerLevelValueField(value: stop.value, unit: stop.wrappedValue.unit)
+                .frame(width: 66)
+            Picker("Unit", selection: stop.unit) {
+                Text("mm:ss").tag(TimerColorStop.Unit.seconds)
+                Text("%").tag(TimerColorStop.Unit.percent)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 92)
+            Text(stop.wrappedValue.phase == .remaining ? "left" : "over")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
+            effectMenu(stop.effect)
+            swatch(stop.wrappedValue.colorHex) { stop.wrappedValue.colorHex = $0 }
+            Button {
+                let id = stop.wrappedValue.id
+                scale.stops.removeAll { $0.id == id }
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove this level")
+            .accessibilityLabel("Remove level")
         }
     }
 
-    private func effectPicker(_ effect: Binding<TimerEffect>) -> some View {
+    private func effectMenu(_ effect: Binding<TimerEffect>) -> some View {
         Picker("Effect", selection: effect) {
             ForEach(TimerEffect.allCases, id: \.self) { Text($0.title).tag($0) }
         }
@@ -130,40 +160,89 @@ struct TimerColorScaleEditor: View {
         .help("An effect on the countdown to grab attention. None is standard.")
     }
 
-    private func colorRow(_ title: String, hex: String, set: @escaping (String) -> Void) -> some View {
-        ColorPicker(title, selection: Binding(
+    private func swatch(_ hex: String, set: @escaping (String) -> Void) -> some View {
+        ColorPicker("Color", selection: Binding(
             get: { Color(timerHex: hex) ?? .white },
             set: { set($0.timerHex) }
         ), supportsOpacity: false)
+        .labelsHidden()
+        .frame(width: 40)
     }
 }
 
-/// A strip showing the scale across a five-minute item, then a little overtime.
+/// A level's value: minutes and seconds ("1:30", or plain seconds) or a percent, committed on Return or when focus leaves.
+private struct TimerLevelValueField: View {
+    @Binding var value: Int
+    let unit: TimerColorStop.Unit
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $text)
+            .multilineTextAlignment(.trailing)
+            .font(.clock(.body, weight: .regular))
+            .focused($focused)
+            #if os(macOS)
+            .textFieldStyle(.roundedBorder)
+            #endif
+            .onAppear { text = formatted }
+            .onSubmit(commit)
+            .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+            .onChange(of: value) { _, _ in if !focused { text = formatted } }
+            .onChange(of: unit) { _, _ in text = formatted }
+    }
+
+    private var formatted: String {
+        unit == .percent ? "\(value)" : TimeFormatting.string(forSeconds: value, threshold: .never)
+    }
+
+    private func commit() {
+        let parsed = Self.parse(text, unit: unit) ?? value
+        value = unit == .percent ? min(max(parsed, 0), 100) : min(max(parsed, 0), 86_400)
+        text = formatted
+    }
+
+    /// "1:30" is a minute and a half, "1:05:00" an hour and five minutes, and a bare number is seconds (or percent).
+    static func parse(_ raw: String, unit: TimerColorStop.Unit) -> Int? {
+        let cleaned = raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "")
+        guard !cleaned.isEmpty else { return nil }
+        if unit == .percent { return Int(cleaned) }
+        let parts = cleaned.split(separator: ":", omittingEmptySubsequences: false).map { Int($0) }
+        guard !parts.contains(where: { $0 == nil }) else { return nil }
+        return parts.compactMap { $0 }.reduce(0) { $0 * 60 + $1 }
+    }
+}
+
+/// A strip showing the scale across a five-minute item and two minutes of overtime.
 struct TimerColorPreview: View {
     let scale: TimerColorScale
     private let length = 300
-    private let overtime = 30
+    private let overtime = 120
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
                     ForEach(0..<(length + overtime), id: \.self) { second in
-                        Rectangle().fill(color(forRemaining: second < length ? length - second : -(second - length + 1)))
+                        Rectangle()
+                            .fill(color(forRemaining: second < length ? length - second : -(second - length + 1)))
                             .frame(width: proxy.size.width / CGFloat(length + overtime))
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .frame(height: 14)
-            HStack {
-                Text("5:00").font(.clock(.caption, weight: .regular))
-                Spacer()
-                Text("0:00").font(.clock(.caption, weight: .regular))
-                Spacer()
-                Text("+0:30").font(.clock(.caption, weight: .regular))
+            GeometryReader { proxy in
+                let zeroX = proxy.size.width * CGFloat(length) / CGFloat(length + overtime)
+                ZStack(alignment: .leading) {
+                    Text("5:00").position(x: 14, y: 6)
+                    Text("0:00").position(x: zeroX, y: 6)
+                    Text("+2:00").position(x: proxy.size.width - 16, y: 6)
+                }
+                .font(.clock(.caption, weight: .regular))
+                .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.secondary)
+            .frame(height: 14)
         }
     }
 

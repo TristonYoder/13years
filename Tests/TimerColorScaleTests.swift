@@ -58,6 +58,27 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertFalse(String(data: try JSONEncoder().encode(TimerColorScale.standard), encoding: .utf8)!.contains("Effect"))
     }
 
+    func testOvertimeLevelsTakeOverTheDeeperTheItemRuns() throws {
+        let scale = TimerColorScale(
+            stops: [
+                TimerColorStop(phase: .overtime, value: 60, unit: .seconds, colorHex: "FF3B30", effect: .blink),
+                TimerColorStop(phase: .overtime, value: 50, unit: .percent, colorHex: "8E0000", effect: .glitch)
+            ],
+            overtimeHex: "CC1717"
+        )
+        // 5:00 item: 50% over is 150 s.
+        XCTAssertEqual(scale.style(remainingSeconds: -10, lengthSeconds: 300).colorHex, "CC1717")
+        XCTAssertEqual(scale.style(remainingSeconds: -60, lengthSeconds: 300).colorHex, "FF3B30")
+        XCTAssertEqual(scale.style(remainingSeconds: -60, lengthSeconds: 300).effect, .blink)
+        XCTAssertEqual(scale.style(remainingSeconds: -150, lengthSeconds: 300).colorHex, "8E0000")
+        XCTAssertEqual(scale.style(remainingSeconds: -150, lengthSeconds: 300).effect, .glitch)
+        // Lead-up behaviour is untouched by overtime levels.
+        XCTAssertNil(scale.colorHex(remainingSeconds: 5, lengthSeconds: 300))
+
+        let decoded = try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(scale))
+        XCTAssertEqual(decoded.stops.map(\.phase), [.overtime, .overtime])
+    }
+
     func testEmptyJSONDecodesAsTheStandardScale() throws {
         let decoded = try JSONDecoder().decode(TimerColorScale.self, from: Data("{}".utf8))
         XCTAssertEqual(decoded, .standard)

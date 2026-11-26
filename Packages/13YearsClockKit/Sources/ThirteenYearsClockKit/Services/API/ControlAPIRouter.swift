@@ -1510,7 +1510,7 @@ public final class ControlAPIRouter {
         if let bad = hexes.first(where: { !TimerColorScale.isValidHex($0) }) {
             return Self.error(400, "Invalid timer color", detail: "\(bad): use six hex digits, RRGGBB")
         }
-        if scale.stops.count > 8 { return limitReached("timer color stops", 8) }
+        if scale.stops.count > 12 { return limitReached("timer color stops", 12) }
         if scale.stops.contains(where: { $0.unit == .percent && $0.value > 100 }) {
             return Self.error(400, "Invalid timer color stop", detail: "A percent stop is 0 to 100")
         }

@@ -74,10 +74,10 @@ public struct SettingsView: View {
             rolesSection
             quickPhrasesSection
             waypointsSection
-            timerColorsSection
         case .display:
             hourFormatSection
             clockSection
+            timerColorsSection
         case .network:
             remoteProducerSection
             controlAPISection
@@ -217,7 +217,7 @@ public struct SettingsView: View {
         } header: {
             Text("Timer Colors")
         } footer: {
-            Text("Color the countdown as time runs out, by seconds or percent of each item. It drives the readout, the progress bar and the text on pagers. An item or a waypoint can set its own.")
+            Text("Color the countdown, with an optional effect, as time runs out and again as it goes over, by time or percent of each item. It drives the readout, the progress bar and the countdown on pagers. An item or a waypoint can set its own.")
         }
         #endif
     }
