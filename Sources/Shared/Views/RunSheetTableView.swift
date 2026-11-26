@@ -333,6 +333,7 @@ struct RunSheetTableView: View {
         .frame(maxWidth: .infinity, minHeight: Self.rowHeight, alignment: .leading)
         .opacity(isDimmed(item) ? 0.5 : 1)
         .background(rowBackground(item, tint: nil))
+        .commandItemNumber(item.id)
         .modifier(RunSheetRowInteraction(
             item: item,
             selection: $selection,

@@ -245,6 +245,37 @@ struct CommandBarView: View {
     }
 }
 
+#endif
+
+struct CommandItemNumber: ViewModifier {
+    @EnvironmentObject var engine: CueEngine
+    let itemId: String
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .leading) {
+            if engine.isCommandBarOpen, let index = engine.planItems.firstIndex(where: { $0.id == itemId }) {
+                Text(String(index + 1))
+                    .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor, in: Capsule())
+                    .padding(.leading, 2)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .accessibilityLabel("Item \(index + 1)")
+            }
+        }
+    }
+}
+
+extension View {
+    func commandItemNumber(_ itemId: String) -> some View {
+        modifier(CommandItemNumber(itemId: itemId))
+    }
+}
+
+#if os(macOS) || os(iOS)
 #if os(macOS)
 struct CommandBarKeyCapture: NSViewRepresentable {
     let isEnabled: Bool
