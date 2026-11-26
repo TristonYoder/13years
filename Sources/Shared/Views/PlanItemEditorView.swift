@@ -24,8 +24,8 @@ public struct PlanItemEditorView: View {
     }
 
     enum EditorTab: String, CaseIterable, Identifiable {
-        case quick = "Quick add"
         case form = "Form"
+        case quick = "Quick add"
         case importText = "Import text"
         var id: String { rawValue }
     }
@@ -50,7 +50,7 @@ public struct PlanItemEditorView: View {
     @State private var commandResult = ItemCommandParser.parse("")
     @State private var placement = NewItemPlacement.atEnd
     @FocusState private var commandFocused: Bool
-    @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.quick.rawValue
+    @AppStorage("itemEditorTab") private var lastTabRaw = EditorTab.form.rawValue
     @State private var tab: EditorTab = .form
     @State private var importTitle = ""
     @State private var importText = ""
@@ -71,6 +71,10 @@ public struct PlanItemEditorView: View {
         self.mode = mode
         self.knownCategories = knownCategories
         self.onImport = onImport
+        if case .add = mode {
+            let stored = UserDefaults.standard.string(forKey: "itemEditorTab").flatMap(EditorTab.init(rawValue:))
+            _tab = State(initialValue: stored.flatMap { ($0 != .importText || onImport != nil) ? $0 : nil } ?? .form)
+        }
         self.onSave = onSave
 
         switch mode {
@@ -171,33 +175,52 @@ public struct PlanItemEditorView: View {
         dismiss()
     }
 
+    @ViewBuilder
     private var editorForm: some View {
+        if isAdding {
+            #if os(macOS)
+            TabView(selection: $tab) {
+                ForEach(availableTabs) { entry in
+                    Form { tabContent(entry) }
+                        .formStyle(.grouped)
+                        .tabItem { Text(entry.rawValue) }
+                        .tag(entry)
+                }
+            }
+            .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
+            #else
             Form {
-                if isAdding {
-                    Picker("Editor", selection: $tab) {
-                        ForEach(availableTabs) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
+                Picker("Editor", selection: $tab) {
+                    ForEach(availableTabs) { Text($0.rawValue).tag($0) }
                 }
-                if isAdding && tab == .importText {
-                    ImportFlowSections(planTitle: $importTitle, text: $importText)
-                } else if isAdding && tab == .quick {
-                    commandSection
-                    resultSection
-                } else {
-                formSections
-                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
+                tabContent(tab)
             }
             .formStyle(.grouped)
-            .onAppear {
-                if isAdding { tab = EditorTab(rawValue: lastTabRaw).flatMap { availableTabs.contains($0) ? $0 : nil } ?? .quick }
-            }
+            #endif
+        } else {
+            Form { formSections }
+                .formStyle(.grouped)
+        }
+    }
+
+    @ViewBuilder
+    private func tabContent(_ entry: EditorTab) -> some View {
+        switch entry {
+        case .form:
+            formSections
+        case .quick:
+            commandSection
+            resultSection
+        case .importText:
+            ImportFlowSections(planTitle: $importTitle, text: $importText)
+        }
     }
 
     private var availableTabs: [EditorTab] {
-        onImport == nil ? [.quick, .form] : EditorTab.allCases
+        onImport == nil ? [.form, .quick] : EditorTab.allCases
     }
 
     private var isImporting: Bool { isAdding && tab == .importText }
