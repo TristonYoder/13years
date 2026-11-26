@@ -42,6 +42,10 @@ struct TimerColorScaleEditor: View {
     @Binding var scale: TimerColorScale
 
     private static let maxStops = 12
+    private static let valueWidth: CGFloat = 64
+    private static let unitWidth: CGFloat = 70
+    private static let captionWidth: CGFloat = 34
+    private static let removeWidth: CGFloat = 18
 
     var body: some View {
         Section {
@@ -80,15 +84,20 @@ struct TimerColorScaleEditor: View {
         }
 
         Section {
-            HStack(spacing: 10) {
-                Text("Over time")
-                    .frame(width: 66, alignment: .leading)
-                Text("from 0:00")
+            HStack(spacing: 8) {
+                Text("0:00")
+                    .font(.clock(.body, weight: .regular))
+                    .frame(width: Self.valueWidth, alignment: .trailing)
+                    .padding(.trailing, 8)
+                Color.clear.frame(width: Self.unitWidth, height: 1)
+                Text("over")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .frame(width: Self.captionWidth, alignment: .leading)
                 Spacer()
                 effectMenu($scale.overtimeEffect)
                 swatch(scale.overtimeHex) { scale.overtimeHex = $0 }
+                Color.clear.frame(width: Self.removeWidth, height: 1)
             }
             ForEach(indices(of: .overtime), id: \.self) { index in
                 levelRow($scale.stops[index])
@@ -122,19 +131,20 @@ struct TimerColorScaleEditor: View {
     }
 
     private func levelRow(_ stop: Binding<TimerColorStop>) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             TimerLevelValueField(value: stop.value, unit: stop.wrappedValue.unit)
-                .frame(width: 66)
+                .frame(width: Self.valueWidth + 16)
             Picker("Unit", selection: stop.unit) {
                 Text("mm:ss").tag(TimerColorStop.Unit.seconds)
                 Text("%").tag(TimerColorStop.Unit.percent)
             }
-            .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 92)
+            .pickerStyle(.menu)
+            .frame(width: Self.unitWidth, alignment: .leading)
             Text(stop.wrappedValue.phase == .remaining ? "left" : "over")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .frame(width: Self.captionWidth, alignment: .leading)
             Spacer()
             effectMenu(stop.effect)
             swatch(stop.wrappedValue.colorHex) { stop.wrappedValue.colorHex = $0 }
@@ -146,6 +156,7 @@ struct TimerColorScaleEditor: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .frame(width: Self.removeWidth)
             .help("Remove this level")
             .accessibilityLabel("Remove level")
         }
@@ -156,7 +167,9 @@ struct TimerColorScaleEditor: View {
             ForEach(TimerEffect.allCases, id: \.self) { Text($0.title).tag($0) }
         }
         .labelsHidden()
+        .pickerStyle(.menu)
         .fixedSize()
+        .frame(minWidth: 84, alignment: .trailing)
         .help("An effect on the countdown to grab attention. None is standard.")
     }
 
@@ -182,9 +195,10 @@ private struct TimerLevelValueField: View {
             .multilineTextAlignment(.trailing)
             .font(.clock(.body, weight: .regular))
             .focused($focused)
-            #if os(macOS)
-            .textFieldStyle(.roundedBorder)
-            #endif
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .onAppear { text = formatted }
             .onSubmit(commit)
             .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
@@ -193,7 +207,13 @@ private struct TimerLevelValueField: View {
     }
 
     private var formatted: String {
-        unit == .percent ? "\(value)" : TimeFormatting.string(forSeconds: value, threshold: .never)
+        unit == .percent ? "\(value)" : Self.clock(value)
+    }
+
+    /// 1:30, or 1:05:00 from an hour up; no leading zero on the first figure.
+    static func clock(_ seconds: Int) -> String {
+        let hours = seconds / 3600, minutes = (seconds % 3600) / 60, secs = seconds % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
     }
 
     private func commit() {
@@ -271,7 +291,7 @@ struct TimerColorsSettingsView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 500, minHeight: 520, idealHeight: 600)
+        .frame(minWidth: 480, idealWidth: 520, minHeight: 560, idealHeight: 700)
         #endif
     }
 }
@@ -327,7 +347,7 @@ struct TimerColorOverrideSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 500, minHeight: 420, idealHeight: 600)
+        .frame(minWidth: 480, idealWidth: 520, minHeight: 480, idealHeight: 700)
         #endif
     }
 }
