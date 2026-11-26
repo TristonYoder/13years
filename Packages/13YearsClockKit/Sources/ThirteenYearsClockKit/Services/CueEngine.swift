@@ -80,7 +80,9 @@ public final class CueEngine: ObservableObject {
     @Published public var nextItemStartsAtMs: Int?
     @Published var isActiveTimerActualOverride: Bool = false
     var actualOverrideItemId: String?
-    @Published public var isPCOConnected: Bool = false
+    @Published public var isPCOConnected: Bool = false {
+        didSet { if isPCOConnected && !oldValue { refreshPCOPlanTimesForCurrentPlan() } }
+    }
     @Published public var pcoUserName: String? {
         didSet { write(pcoUserName, forKey: Self.pcoUserNameDefaultsKey) }
     }
@@ -1408,11 +1410,25 @@ public final class CueEngine: ObservableObject {
         }
     }
 
-    private func refreshPCOPlanTimes(serviceTypeId: String, planId: String) async {
+    /// Reloads the current plan's service times from Planning Center. Run when the connection comes up
+    /// (launch with a saved plan, or signing in) and when the plan panel is refreshed, so event times follow
+    /// Planning Center without opening Event Times.
+    func refreshPCOPlanTimesForCurrentPlan() {
+        guard !isRemoteMirror, isPCOConnected,
+              let serviceTypeId = currentPCOServiceTypeId, let planId = currentPCOPlanId else { return }
+        Task { await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId) }
+    }
+
+    func refreshPCOPlanTimes(serviceTypeId: String, planId: String) async {
         do {
             let times = try await pcoClient.fetchPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
                 .filter(\.isService)
-            guard currentPCOPlanId == planId, !times.isEmpty else { return }
+            guard currentPCOPlanId == planId else { return }
+            guard !times.isEmpty else {
+                eventTimes.removeAll { $0.pcoPlanTimeId != nil }
+                liveEventTimeId = nil
+                return
+            }
             let previousLive = liveEventTime?.pcoPlanTimeId
             eventTimes = times.map { time in
                 EventTime(
@@ -1426,6 +1442,7 @@ public final class CueEngine: ObservableObject {
             liveEventTimeId = eventTimes.first(where: { $0.pcoPlanTimeId == previousLive })?.id
         } catch {
             AppLog.cue.error("CueEngine: fetchPlanTimes error: \(error.localizedDescription, privacy: .private)")
+            if currentPCOPlanId == planId { pcoLastError = error.localizedDescription }
         }
     }
 
