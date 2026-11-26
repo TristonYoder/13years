@@ -514,17 +514,28 @@ struct RunSheetRow: View {
     let onDelete: () -> Void
     let onNewWaypoint: () -> Void
 
+    private var commandNumber: Int? {
+        guard engine.isCommandBarOpen, let index = engine.planItems.firstIndex(where: { $0.id == item.id }) else { return nil }
+        return index + 1
+    }
+
     private var isExcluded: Bool { entry?.isExcluded ?? false }
     private var isSkipped: Bool { entry?.isSkipped ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 3)
-                    .accessibilityHidden(true)
+                ZStack {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .opacity(commandNumber == nil ? 1 : 0)
+                        .accessibilityHidden(true)
+                    if let commandNumber {
+                        CommandItemBadge(number: commandNumber)
+                    }
+                }
+                .frame(width: 14)
 
                 if showsStart {
                     startColumn

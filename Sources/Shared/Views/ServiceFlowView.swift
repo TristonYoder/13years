@@ -510,7 +510,6 @@ public struct ServiceFlowView: View {
                 newWaypointTargetItemId = item.id
             }
         )
-        .commandItemNumber(item.id)
         .padding(.top, position.roundsTop ? RunSheetCardPosition.gap : 0)
         .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position, timerColorHex: isActive ? engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) } : nil))
         #if !os(tvOS)

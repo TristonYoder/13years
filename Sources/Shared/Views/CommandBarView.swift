@@ -247,6 +247,21 @@ struct CommandBarView: View {
 
 #endif
 
+struct CommandItemBadge: View {
+    let number: Int
+
+    var body: some View {
+        Text(String(number))
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.white)
+            .fixedSize()
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(Color.accentColor, in: Capsule())
+            .accessibilityLabel("Item \(number)")
+    }
+}
+
 struct CommandItemNumber: ViewModifier {
     @EnvironmentObject var engine: CueEngine
     let itemId: String
@@ -254,16 +269,9 @@ struct CommandItemNumber: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .leading) {
             if engine.isCommandBarOpen, let index = engine.planItems.firstIndex(where: { $0.id == itemId }) {
-                Text(String(index + 1))
-                    .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor, in: Capsule())
-                    .padding(.leading, 2)
+                CommandItemBadge(number: index + 1)
+                    .padding(.leading, 4)
                     .allowsHitTesting(false)
-                    .transition(.opacity)
-                    .accessibilityLabel("Item \(index + 1)")
             }
         }
     }
