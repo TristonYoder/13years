@@ -24,10 +24,15 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertEqual(scale.colorHex(remainingSeconds: -1, lengthSeconds: 300), "CC1717")
     }
 
-    func testStandardKeepsNormalTextUntilOvertime() {
-        XCTAssertNil(TimerColorScale.standard.colorHex(remainingSeconds: 5, lengthSeconds: 300))
-        XCTAssertEqual(TimerColorScale.standard.colorHex(remainingSeconds: -3, lengthSeconds: 300), "CC1717")
-        XCTAssertTrue(TimerColorScale.standard.isStandard)
+    func testStandardIsYellowAtTenPercentThenRedFlickerThenPulse() {
+        let standard = TimerColorScale.standard
+        XCTAssertNil(standard.colorHex(remainingSeconds: 200, lengthSeconds: 300))
+        XCTAssertEqual(standard.style(remainingSeconds: 30, lengthSeconds: 300).colorHex, "FFD60A")
+        XCTAssertEqual(standard.style(remainingSeconds: 30, lengthSeconds: 300).effect, TimerEffect.none)
+        XCTAssertEqual(standard.style(remainingSeconds: -1, lengthSeconds: 300).colorHex, "CC1717")
+        XCTAssertEqual(standard.style(remainingSeconds: -1, lengthSeconds: 300).effect, .flicker)
+        XCTAssertEqual(standard.style(remainingSeconds: -3, lengthSeconds: 300).effect, .pulse)
+        XCTAssertTrue(standard.isStandard)
     }
 
     func testPercentThresholdsScaleWithItemLength() {
@@ -55,7 +60,10 @@ final class TimerColorScaleTests: XCTestCase {
         let legacy = try JSONDecoder().decode(TimerColorScale.self, from: Data(old.utf8))
         XCTAssertEqual(legacy.stops.first?.effect, TimerEffect.none)
         XCTAssertEqual(legacy.overtimeEffect, TimerEffect.none)
-        XCTAssertFalse(String(data: try JSONEncoder().encode(TimerColorScale.standard), encoding: .utf8)!.contains("Effect"))
+        // A scale whose effects are None must not read back as the default flicker.
+        let quiet = TimerColorScale(stops: [], overtimeHex: "CC1717", overtimeEffect: .none)
+        XCTAssertEqual(try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(quiet)), quiet)
+        XCTAssertEqual(try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(TimerColorScale.standard)), .standard)
     }
 
     func testOvertimeLevelsTakeOverTheDeeperTheItemRuns() throws {
@@ -82,6 +90,8 @@ final class TimerColorScaleTests: XCTestCase {
     func testEmptyJSONDecodesAsTheStandardScale() throws {
         let decoded = try JSONDecoder().decode(TimerColorScale.self, from: Data("{}".utf8))
         XCTAssertEqual(decoded, .standard)
+        let emptyLists = try JSONDecoder().decode(TimerColorScale.self, from: Data(#"{"stops":[]}"#.utf8))
+        XCTAssertTrue(emptyLists.stops.isEmpty)
     }
 
     func testItemOverrideBeatsWaypointBeatsGlobal() throws {

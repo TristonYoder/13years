@@ -61,7 +61,7 @@ public struct TimerColorStop: Codable, Equatable, Hashable, Sendable, Identifiab
         try container.encode(value, forKey: .value)
         try container.encode(unit, forKey: .unit)
         try container.encode(colorHex, forKey: .colorHex)
-        if effect != .none { try container.encode(effect, forKey: .effect) }
+        try container.encode(effect, forKey: .effect)
     }
 
     /// The remaining time, in seconds, at which this stop takes over for an item of the given length.
@@ -95,10 +95,13 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
     /// Missing fields take their defaults, so `{}` is the standard scale.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        // A missing field takes the standard value, so `{}` is the standard scale and an explicit empty list stays empty.
         onTimeHex = try container.decodeIfPresent(String.self, forKey: .onTimeHex)
-        stops = try container.decodeIfPresent([TimerColorStop].self, forKey: .stops) ?? []
-        overtimeHex = try container.decodeIfPresent(String.self, forKey: .overtimeHex) ?? "CC1717"
-        overtimeEffect = (try? container.decodeIfPresent(TimerEffect.self, forKey: .overtimeEffect)) ?? .none
+        stops = try container.decodeIfPresent([TimerColorStop].self, forKey: .stops) ?? Self.standard.stops
+        overtimeHex = try container.decodeIfPresent(String.self, forKey: .overtimeHex) ?? Self.standard.overtimeHex
+        // A stored scale predating effects has none; only a missing overtime color means "the standard scale".
+        let fallbackEffect: TimerEffect = container.contains(.overtimeHex) ? .none : Self.standard.overtimeEffect
+        overtimeEffect = (try? container.decodeIfPresent(TimerEffect.self, forKey: .overtimeEffect)) ?? fallbackEffect
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -106,11 +109,20 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
         try container.encodeIfPresent(onTimeHex, forKey: .onTimeHex)
         try container.encode(stops, forKey: .stops)
         try container.encode(overtimeHex, forKey: .overtimeHex)
-        if overtimeEffect != .none { try container.encode(overtimeEffect, forKey: .overtimeEffect) }
+        try container.encode(overtimeEffect, forKey: .overtimeEffect)
     }
 
-    /// Normal text until the item goes over, then red. Matches how the readout behaved before scales existed.
-    public static let standard = TimerColorScale()
+    /// The default: normal text, yellow at 10% left, then red from zero, flickering, and a deeper pulsing
+    /// level three seconds over. Ids are fixed so an untouched scale compares equal to this one.
+    public static let standard = TimerColorScale(
+        onTimeHex: nil,
+        stops: [
+            TimerColorStop(id: "standard-warning", phase: .remaining, value: 10, unit: .percent, colorHex: "FFD60A", effect: .none),
+            TimerColorStop(id: "standard-overtime-deep", phase: .overtime, value: 3, unit: .seconds, colorHex: "CC1717", effect: .pulse)
+        ],
+        overtimeHex: "CC1717",
+        overtimeEffect: .flicker
+    )
 
     public var isStandard: Bool { self == .standard }
 

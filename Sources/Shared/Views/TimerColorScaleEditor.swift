@@ -84,21 +84,24 @@ struct TimerColorScaleEditor: View {
         }
 
         Section {
-            HStack(spacing: 8) {
-                Text("0:00")
-                    .font(.clock(.body, weight: .regular))
-                    .frame(width: Self.valueWidth, alignment: .trailing)
-                    .padding(.trailing, 8)
-                Text("time over")
+            HStack(spacing: 10) {
+                TimerLevelCard(
+                    value: .constant(0),
+                    unit: .seconds,
+                    caption: "time over",
+                    tint: Color(timerHex: scale.overtimeHex) ?? .secondary,
+                    effect: scale.overtimeEffect,
+                    isEditable: false
+                )
+                Text("from zero")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 8)
-                    .frame(width: Self.unitWidth + Self.captionWidth, alignment: .leading)
                 Spacer()
                 effectMenu($scale.overtimeEffect)
                 swatch(scale.overtimeHex) { scale.overtimeHex = $0 }
                 Color.clear.frame(width: Self.removeWidth, height: 1)
             }
+            .padding(.vertical, 2)
             ForEach(indices(of: .overtime), id: \.self) { index in
                 levelRow($scale.stops[index])
             }
@@ -131,18 +134,23 @@ struct TimerColorScaleEditor: View {
     }
 
     private func levelRow(_ stop: Binding<TimerColorStop>) -> some View {
-        HStack(spacing: 8) {
-            TimerLevelValueField(value: stop.value, unit: stop.wrappedValue.unit)
-                .frame(width: Self.valueWidth + 16)
-            let word = stop.wrappedValue.phase == .remaining ? "left" : "over"
+        let word = stop.wrappedValue.phase == .remaining ? "left" : "over"
+        return HStack(spacing: 10) {
+            TimerLevelCard(
+                value: stop.value,
+                unit: stop.wrappedValue.unit,
+                caption: "\(stop.wrappedValue.unit == .percent ? "%" : "time") \(word)",
+                tint: Color(timerHex: stop.wrappedValue.colorHex) ?? .secondary,
+                effect: stop.wrappedValue.effect
+            )
             Picker("Unit", selection: stop.unit) {
-                Text("time \(word)").tag(TimerColorStop.Unit.seconds)
-                Text("% \(word)").tag(TimerColorStop.Unit.percent)
+                Text("time").tag(TimerColorStop.Unit.seconds)
+                Text("%").tag(TimerColorStop.Unit.percent)
             }
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
-            .frame(width: Self.unitWidth + Self.captionWidth, alignment: .leading)
+            .help("Enter this level as a time or as a percent of the item's length")
             Spacer()
             effectMenu(stop.effect)
             swatch(stop.wrappedValue.colorHex) { stop.wrappedValue.colorHex = $0 }
@@ -158,6 +166,7 @@ struct TimerColorScaleEditor: View {
             .help("Remove this level")
             .accessibilityLabel("Remove level")
         }
+        .padding(.vertical, 2)
     }
 
     private func effectMenu(_ effect: Binding<TimerEffect>) -> some View {
@@ -181,53 +190,86 @@ struct TimerColorScaleEditor: View {
     }
 }
 
-/// A level's value: minutes and seconds ("1:30", or plain seconds) or a percent, committed on Return or when focus leaves.
-private struct TimerLevelValueField: View {
+/// A level as a card, in the same format as the event cards in the header's plan popover: a small caption, the
+/// value large in the clock font, and a bold line beneath, outlined in the level's color. A time opens the app's
+/// standard time entry popover, as the item editor's length does; a percent is a small number field.
+private struct TimerLevelCard: View {
+    @EnvironmentObject var engine: CueEngine
     @Binding var value: Int
     let unit: TimerColorStop.Unit
-    @State private var text = ""
+    let caption: String
+    let tint: Color
+    let effect: TimerEffect
+    var isEditable = true
+    @State private var isEditingTime = false
+    @State private var percentText = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("", text: $text)
-            .multilineTextAlignment(.trailing)
-            .font(.clock(.body, weight: .regular))
-            .focused($focused)
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .onAppear { text = formatted }
-            .onSubmit(commit)
-            .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
-            .onChange(of: value) { _, _ in if !focused { text = formatted } }
-            .onChange(of: unit) { _, _ in text = formatted }
+        VStack(alignment: .leading, spacing: 1) {
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            valueView
+                .font(.clock(.title3, weight: .semibold))
+            Text(effect == .none ? " " : effect.title.uppercased())
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(tint)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 104, alignment: .leading)
+        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint, lineWidth: 2))
+        .contentShape(Rectangle())
+        .onChange(of: unit) { _, newUnit in
+            if newUnit == .percent { value = min(value, 100); percentText = "\(value)" }
+        }
     }
 
-    private var formatted: String {
-        unit == .percent ? "\(value)" : Self.clock(value)
+    @ViewBuilder
+    private var valueView: some View {
+        if !isEditable {
+            Text(Self.clock(value))
+        } else if unit == .percent {
+            TextField("", text: $percentText)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onSubmit(commitPercent)
+                .onChange(of: focused) { _, isFocused in if !isFocused { commitPercent() } }
+                .onChange(of: value) { _, _ in if !focused { percentText = "\(value)" } }
+                .onAppear { percentText = "\(value)" }
+        } else {
+            Text(Self.clock(value))
+                .contentShape(Rectangle())
+                .onTapGesture { isEditingTime = true }
+                .timeEntryPopover(
+                    isPresented: $isEditingTime,
+                    previewBaseSeconds: value,
+                    hourFormatThreshold: engine.hourFormatThreshold,
+                    clockFormat: engine.clockFormat,
+                    allowsEndAt: false
+                ) { action in
+                    switch action {
+                    case .setAbsolute(let seconds): value = min(max(seconds, 0), 86_400)
+                    case .adjustRelative(let delta): value = min(max(value + delta, 0), 86_400)
+                    case .endAt: break
+                    }
+                }
+                .help("Click to enter a time")
+        }
+    }
+
+    private func commitPercent() {
+        let parsed = Int(percentText.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "")) ?? value
+        value = min(max(parsed, 0), 100)
+        percentText = "\(value)"
     }
 
     /// 1:30, or 1:05:00 from an hour up; no leading zero on the first figure.
     static func clock(_ seconds: Int) -> String {
         let hours = seconds / 3600, minutes = (seconds % 3600) / 60, secs = seconds % 60
         return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
-    }
-
-    private func commit() {
-        let parsed = Self.parse(text, unit: unit) ?? value
-        value = unit == .percent ? min(max(parsed, 0), 100) : min(max(parsed, 0), 86_400)
-        text = formatted
-    }
-
-    /// "1:30" is a minute and a half, "1:05:00" an hour and five minutes, and a bare number is seconds (or percent).
-    static func parse(_ raw: String, unit: TimerColorStop.Unit) -> Int? {
-        let cleaned = raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "")
-        guard !cleaned.isEmpty else { return nil }
-        if unit == .percent { return Int(cleaned) }
-        let parts = cleaned.split(separator: ":", omittingEmptySubsequences: false).map { Int($0) }
-        guard !parts.contains(where: { $0 == nil }) else { return nil }
-        return parts.compactMap { $0 }.reduce(0) { $0 * 60 + $1 }
     }
 }
 
