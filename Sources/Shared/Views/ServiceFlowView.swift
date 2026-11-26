@@ -76,23 +76,25 @@ public struct ServiceFlowView: View {
                 Button(action: { planPanelVisible.toggle() }) {
                     Label("Plan", systemImage: "sidebar.trailing")
                 }
-                .help("Show or hide the Planning Center plan details: notes, times and team")
+                .headerActionPrimary()
+                .help("Plan name, Sync PCO and Event Times, plus the Planning Center notes, times and team")
                 #endif
 
                 RehearsalBadge()
 
                 RunSheetActualsMenu()
 
+                #if !(os(macOS) || os(iOS))
                 Button(action: { showingPlanPicker = true }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .headerActionPrimary()
                 .help("Pick a Planning Center plan type and plan to sync")
 
                 Button(action: { showingEventTimes = true }) {
                     Label("Event Times", systemImage: "clock")
                 }
                 .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
+                #endif
 
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")
@@ -125,7 +127,11 @@ public struct ServiceFlowView: View {
             }
         }
         #if os(macOS) || os(iOS)
-        .modifier(RunSheetPlanInspectorModifier(isPresented: $planPanelVisible))
+        .modifier(RunSheetPlanInspectorModifier(
+            isPresented: $planPanelVisible,
+            onChangePlan: { showingPlanPicker = true },
+            onEventTimes: { showingEventTimes = true }
+        ))
         #endif
         #if os(macOS) || os(iOS)
         .environment(\.runSheetReferencePresenter, RunSheetReferencePresenter { referenceRequest = $0 })
@@ -243,8 +249,16 @@ public struct ServiceFlowView: View {
             ContentUnavailableView(
                 "No Run Sheet",
                 systemImage: "list.bullet.rectangle",
-                description: Text("Sync from Planning Center, paste in a run sheet, or add items below.")
+                description: Text("Sync a Planning Center plan from the Plan tab, or use Add Item to add items one at a time or paste in a whole run sheet.")
             )
+            #if os(macOS) || os(iOS)
+            Button {
+                planPanelVisible = true
+            } label: {
+                Label("Open Plan", systemImage: "sidebar.trailing")
+            }
+            .buttonStyle(.borderedProminent)
+            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
