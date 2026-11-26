@@ -110,6 +110,8 @@ public final class CueEngine: ObservableObject {
     @Published public var followByDefault = false
     /// Title of the current plan, stored once. Items no longer carry their own copy.
     @Published public var planTitle: String?
+    /// What a schedule that loads a Planning Center plan still has to do once the plan is in.
+    var pendingScheduleFollowUp: (target: ServiceSchedule.TimeTarget?, startsFirstItem: Bool)?
     /// The producer-wide timer color scale. An item or waypoint can override it.
     @Published public var timerColorScale = TimerColorScale.standard {
         didSet { if timerColorScale != oldValue { timerColorsDidChange() } }
@@ -593,7 +595,12 @@ public final class CueEngine: ObservableObject {
                 self.pcoNoteCategories = (try? await pcoClient.fetchItemNoteCategories(serviceTypeId: serviceTypeId, planId: planId)) ?? []
                 await refreshPCOPlanTimes(serviceTypeId: serviceTypeId, planId: planId)
                 await refreshPCOPlanContext(serviceTypeId: serviceTypeId, planId: planId)
+                if let followUp = pendingScheduleFollowUp {
+                    pendingScheduleFollowUp = nil
+                    runScheduleFollowUp(followUp)
+                }
             } catch {
+                pendingScheduleFollowUp = nil
                 pcoLastError = error.localizedDescription
                 AppLog.cue.error("CueEngine: PCO sync error: \(error.localizedDescription, privacy: .private)")
             }
@@ -1263,7 +1270,9 @@ public final class CueEngine: ObservableObject {
         pcoServiceTypeId: String? = nil,
         pcoPlanId: String? = nil,
         recurrence: ServiceSchedule.Recurrence = .once,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        target: ServiceSchedule.TimeTarget? = nil,
+        startsFirstItem: Bool = false
     ) -> ServiceSchedule? {
         if isRemoteMirror {
             let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1277,6 +1286,8 @@ public final class CueEngine: ObservableObject {
             ]
             if let pcoServiceTypeId { fields["pcoServiceTypeId"] = pcoServiceTypeId }
             if let pcoPlanId { fields["pcoPlanId"] = pcoPlanId }
+            if let target { fields["targetKind"] = target.kind.rawValue; fields["targetId"] = target.id }
+            fields["startsFirstItem"] = startsFirstItem
             remoteCommands?.send(.scheduleCreate(body: RemoteCommand.body(fields)))
             return nil
         }
@@ -1289,7 +1300,9 @@ public final class CueEngine: ObservableObject {
             pcoServiceTypeId: pcoServiceTypeId,
             pcoPlanId: pcoPlanId,
             recurrence: recurrence,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            target: target,
+            startsFirstItem: startsFirstItem
         )
         serviceSchedules = sortedByStartsAt(serviceSchedules + [schedule])
         AppLog.cue.info("addServiceSchedule(\"\(trimmed, privacy: .private)\") -> \(schedule.id, privacy: .public)")
@@ -1304,10 +1317,17 @@ public final class CueEngine: ObservableObject {
         pcoServiceTypeId: String?? = nil,
         pcoPlanId: String?? = nil,
         recurrence: ServiceSchedule.Recurrence? = nil,
-        isEnabled: Bool? = nil
+        isEnabled: Bool? = nil,
+        target: ServiceSchedule.TimeTarget?? = nil,
+        startsFirstItem: Bool? = nil
     ) {
         if isRemoteMirror {
             var fields: [String: Any] = [:]
+            if let target {
+                fields["targetKind"] = target?.kind.rawValue ?? ""
+                fields["targetId"] = target?.id ?? ""
+            }
+            if let startsFirstItem { fields["startsFirstItem"] = startsFirstItem }
             if let title { fields["title"] = title }
             if let startsAt { fields["startsAt"] = ISO8601DateFormatter().string(from: startsAt) }
             if let goLiveOffsetSeconds { fields["goLiveOffsetSeconds"] = goLiveOffsetSeconds }
@@ -1337,6 +1357,8 @@ public final class CueEngine: ObservableObject {
         if let pcoPlanId { schedule.pcoPlanId = pcoPlanId }
         if let recurrence { schedule.recurrence = recurrence }
         if let isEnabled { schedule.isEnabled = isEnabled }
+        if let target { schedule.target = target }
+        if let startsFirstItem { schedule.startsFirstItem = startsFirstItem }
         if timingChanged { schedule.lastFiredAt = nil }
         var updated = serviceSchedules
         updated[index] = schedule
@@ -1371,8 +1393,14 @@ public final class CueEngine: ObservableObject {
 
         schedule.lastFiredAt = now
 
+        let followUp = (target: schedule.target, startsFirstItem: schedule.startsFirstItem)
+        let hasFollowUp = followUp.target != nil || followUp.startsFirstItem
         if let serviceTypeId = schedule.pcoServiceTypeId, let planId = schedule.pcoPlanId {
+            // The plan arrives asynchronously, and the times and first item are only there once it has.
+            if hasFollowUp { pendingScheduleFollowUp = followUp }
             fetchPCOPlan(serviceTypeId: serviceTypeId, planId: planId)
+        } else if hasFollowUp {
+            runScheduleFollowUp(followUp)
         }
         appMode = .producerControl
 

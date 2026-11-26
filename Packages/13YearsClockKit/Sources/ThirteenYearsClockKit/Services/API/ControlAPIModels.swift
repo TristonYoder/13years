@@ -191,6 +191,9 @@ public struct ControlAPIState: Codable, Sendable {
             public var recurrence: String
             public var isEnabled: Bool
             public var lastFiredAt: Date?
+            public var targetKind: String? = nil
+            public var targetId: String? = nil
+            public var startsFirstItem: Bool? = nil
         }
     }
 }
@@ -584,6 +587,9 @@ public enum ControlAPIRequests {
         public var pcoPlanId: String?
         public var recurrence: String?
         public var isEnabled: Bool?
+        public var targetKind: String?
+        public var targetId: String?
+        public var startsFirstItem: Bool?
     }
 
     public struct ScheduleUpdateBody: Decodable, Sendable {
@@ -595,6 +601,9 @@ public enum ControlAPIRequests {
         public var pcoPlanId: String?
         public var recurrence: String?
         public var isEnabled: Bool?
+        public var targetKind: String?
+        public var targetId: String?
+        public var startsFirstItem: Bool?
     }
 }
 

@@ -21,6 +21,7 @@ public struct ServiceScheduleView: View {
 
     @State private var editorTarget: Target?
     @State private var pendingDeleteSchedule: ServiceSchedule?
+    @State private var showingImport = false
 
     public init() {}
 
@@ -42,7 +43,11 @@ public struct ServiceScheduleView: View {
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { editorTarget = .add }) {
+                    Menu {
+                        Button("New Schedule\u{2026}") { editorTarget = .add }
+                        Button("From Event & Rehearsal Times\u{2026}") { showingImport = true }
+                            .disabled(engine.eventTimes.isEmpty && engine.rehearsalPlanTimes.isEmpty)
+                    } label: {
                         Label("Add Schedule", systemImage: "plus")
                     }
                 }
@@ -50,6 +55,9 @@ public struct ServiceScheduleView: View {
             .onScreenshotTourSignal("settings.add-schedule") { _ in editorTarget = .add }
             .sheet(item: $editorTarget) { target in
                 ServiceScheduleEditorView(target: target)
+            }
+            .sheet(isPresented: $showingImport) {
+                ScheduleImportSheet()
             }
             .confirmationDialog(
                 "Delete this schedule?",
@@ -210,6 +218,8 @@ private struct ServiceScheduleEditorView: View {
     @State private var isEnabled: Bool
     @State private var pcoServiceTypeId: String?
     @State private var pcoPlanId: String?
+    @State private var timeTarget: ServiceSchedule.TimeTarget?
+    @State private var startsFirstItem: Bool
 
     init(target: ServiceScheduleView.Target) {
         self.target = target
@@ -228,6 +238,8 @@ private struct ServiceScheduleEditorView: View {
         _isEnabled = State(initialValue: schedule?.isEnabled ?? true)
         _pcoServiceTypeId = State(initialValue: schedule?.pcoServiceTypeId ?? nil)
         _pcoPlanId = State(initialValue: schedule?.pcoPlanId ?? nil)
+        _timeTarget = State(initialValue: schedule?.target)
+        _startsFirstItem = State(initialValue: schedule?.startsFirstItem ?? false)
     }
 
     var body: some View {
@@ -246,6 +258,7 @@ private struct ServiceScheduleEditorView: View {
                     #endif
                 }
 
+                runSection
                 leadTimeSection
                 recurrenceSection
                 pcoPlanSection
@@ -321,6 +334,63 @@ private struct ServiceScheduleEditorView: View {
             Text("Go-Live Timing")
         } footer: {
             Text("Live at \(engine.clockFormat.string(from: resolvedGoLiveAt)).")
+        }
+    }
+
+    /// Which event or rehearsal time this makes current, and whether it starts the first item.
+    private var runSection: some View {
+        Section {
+            Picker("Time", selection: Binding(
+                get: { timeTarget.map { "\($0.kind.rawValue):\($0.id)" } ?? "" },
+                set: { pickTarget($0) }
+            )) {
+                Text("None \u{2014} keep the current time").tag("")
+                if !engine.eventTimes.isEmpty {
+                    Section("Events") {
+                        ForEach(engine.eventTimes) { time in
+                            Text(time.displayName(engine.clockFormat)).tag("event:\(time.id)")
+                        }
+                    }
+                }
+                if !engine.rehearsalPlanTimes.isEmpty {
+                    Section("Rehearsals") {
+                        ForEach(engine.rehearsalPlanTimes) { time in
+                            Text(Self.rehearsalLabel(time, engine.clockFormat)).tag("rehearsal:\(time.id)")
+                        }
+                    }
+                }
+            }
+            Toggle("Start the first item", isOn: $startsFirstItem)
+        } header: {
+            Text("When It Goes Live")
+        } footer: {
+            Text("Makes that event or rehearsal the current one. Starting the first item runs its timer by itself, for a pre-show countdown that fires without anyone pressing play.")
+        }
+    }
+
+    static func rehearsalLabel(_ time: PCOPlanTimeInfo, _ format: ClockFormat) -> String {
+        [time.name, time.startsAt.map { format.string(from: $0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
+    }
+
+    /// Choosing a time fills in an empty title and, when adding, the start, so the schedule matches it.
+    private func pickTarget(_ raw: String) {
+        guard !raw.isEmpty, let separator = raw.firstIndex(of: ":"),
+              let kind = ServiceSchedule.TimeTarget.Kind(rawValue: String(raw[..<separator])) else {
+            timeTarget = nil
+            return
+        }
+        let id = String(raw[raw.index(after: separator)...])
+        timeTarget = ServiceSchedule.TimeTarget(kind: kind, id: id)
+        guard isAdding else { return }
+        switch kind {
+        case .event:
+            guard let time = engine.eventTime(id: id) else { return }
+            if title.trimmingCharacters(in: .whitespaces).isEmpty { title = time.name ?? time.displayName(engine.clockFormat) }
+            if let start = CueEngine.nextStart(day: time.day, time: time.startTime) { startsAt = start }
+        case .rehearsal:
+            guard let time = engine.rehearsalPlanTimes.first(where: { $0.id == id }) else { return }
+            if title.trimmingCharacters(in: .whitespaces).isEmpty { title = time.name ?? "Rehearsal" }
+            if let start = time.startsAt { startsAt = start }
         }
     }
 
@@ -417,7 +487,9 @@ private struct ServiceScheduleEditorView: View {
                 pcoServiceTypeId: pcoServiceTypeId,
                 pcoPlanId: pcoPlanId,
                 recurrence: recurrence,
-                isEnabled: isEnabled
+                isEnabled: isEnabled,
+                target: timeTarget,
+                startsFirstItem: startsFirstItem
             )
         case .edit(let existing):
             engine.updateServiceSchedule(
@@ -428,7 +500,9 @@ private struct ServiceScheduleEditorView: View {
                 pcoServiceTypeId: .some(pcoServiceTypeId),
                 pcoPlanId: .some(pcoPlanId),
                 recurrence: recurrence,
-                isEnabled: isEnabled
+                isEnabled: isEnabled,
+                target: .some(timeTarget),
+                startsFirstItem: startsFirstItem
             )
         }
         dismiss()
@@ -438,5 +512,127 @@ private struct ServiceScheduleEditorView: View {
 private extension ClockFormat {
     func dateTime(_ date: Date) -> String {
         "\(date.formatted(date: .abbreviated, time: .omitted)), \(string(from: date))"
+    }
+}
+
+/// Turns event and rehearsal times into schedules in one go.
+private struct ScheduleImportSheet: View {
+    @EnvironmentObject var engine: CueEngine
+    @Environment(\.dismiss) private var dismiss
+
+    private struct Candidate: Identifiable {
+        let id: String
+        let target: ServiceSchedule.TimeTarget
+        let title: String
+        let detail: String
+        let startsAt: Date
+        let recurrence: ServiceSchedule.Recurrence
+    }
+
+    private static let leadPresets = [0, 5, 10, 15, 30, 45, 60, 90]
+
+    @State private var chosen: Set<String> = []
+    @State private var leadMinutes = 30
+    @State private var startsFirstItem = false
+    @State private var seeded = false
+
+    private var candidates: [Candidate] {
+        let taken = Set(engine.serviceSchedules.compactMap(\.target))
+        var result: [Candidate] = []
+        for time in engine.eventTimes {
+            guard let start = CueEngine.nextStart(day: time.day, time: time.startTime) else { continue }
+            let target = ServiceSchedule.TimeTarget(kind: .event, id: time.id)
+            guard !taken.contains(target) else { continue }
+            var weekly = false
+            if case .weekday? = time.day { weekly = true }
+            result.append(Candidate(
+                id: "event:\(time.id)", target: target,
+                title: time.name ?? time.displayName(engine.clockFormat),
+                detail: "Event \u{00B7} \(engine.clockFormat.dateTime(start))",
+                startsAt: start, recurrence: weekly ? .weekly : .once
+            ))
+        }
+        for time in engine.rehearsalPlanTimes {
+            guard let start = time.startsAt else { continue }
+            let target = ServiceSchedule.TimeTarget(kind: .rehearsal, id: time.id)
+            guard !taken.contains(target) else { continue }
+            result.append(Candidate(
+                id: "rehearsal:\(time.id)", target: target,
+                title: time.name.flatMap { $0.isEmpty ? nil : $0 } ?? "Rehearsal",
+                detail: "Rehearsal \u{00B7} \(engine.clockFormat.dateTime(start))",
+                startsAt: start, recurrence: .once
+            ))
+        }
+        return result
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if candidates.isEmpty {
+                        Text("Every event and rehearsal time with a start already has a schedule.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(candidates) { candidate in
+                        Toggle(isOn: Binding(
+                            get: { chosen.contains(candidate.id) },
+                            set: { if $0 { chosen.insert(candidate.id) } else { chosen.remove(candidate.id) } }
+                        )) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(candidate.title)
+                                Text(candidate.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Times")
+                } footer: {
+                    Text("Each becomes a schedule that makes that time the current one when it goes live. A weekday event repeats weekly.")
+                }
+
+                Section {
+                    Picker("Go live", selection: $leadMinutes) {
+                        ForEach(Self.leadPresets, id: \.self) { minutes in
+                            Text(minutes == 0 ? "At the start" : "\(minutes) min before").tag(minutes)
+                        }
+                    }
+                    Toggle("Start the first item", isOn: $startsFirstItem)
+                } header: {
+                    Text("For all of them")
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Add from Times")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add \(chosen.count)") { importChosen() }
+                        .disabled(chosen.isEmpty)
+                }
+            }
+            .onAppear {
+                guard !seeded else { return }
+                seeded = true
+                chosen = Set(candidates.map(\.id))
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 440, idealWidth: 480, minHeight: 440, idealHeight: 520)
+        #endif
+    }
+
+    private func importChosen() {
+        for candidate in candidates where chosen.contains(candidate.id) {
+            engine.addServiceSchedule(
+                title: candidate.title,
+                startsAt: candidate.startsAt,
+                goLiveOffsetSeconds: leadMinutes * 60,
+                recurrence: candidate.recurrence,
+                target: candidate.target,
+                startsFirstItem: startsFirstItem
+            )
+        }
+        dismiss()
     }
 }

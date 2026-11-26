@@ -323,7 +323,9 @@ public final class ControlAPIRouter {
                 pcoServiceTypeId: request.pcoServiceTypeId,
                 pcoPlanId: request.pcoPlanId,
                 recurrence: recurrence,
-                isEnabled: request.isEnabled ?? true
+                isEnabled: request.isEnabled ?? true,
+                target: scheduleTarget(kind: request.targetKind, id: request.targetId),
+                startsFirstItem: request.startsFirstItem ?? false
             ) else {
                 return Self.error(400, "Could not create schedule", detail: "Title must be non-empty and the lead time must not be negative.")
             }
@@ -824,7 +826,9 @@ public final class ControlAPIRouter {
                 pcoServiceTypeId: pcoServiceTypeId,
                 pcoPlanId: pcoPlanId,
                 recurrence: recurrence,
-                isEnabled: request.isEnabled
+                isEnabled: request.isEnabled,
+                target: request.targetKind == nil && request.targetId == nil ? nil : .some(scheduleTarget(kind: request.targetKind, id: request.targetId)),
+                startsFirstItem: request.startsFirstItem
             )
             guard let updated = engine.serviceSchedule(id: scheduleId) else {
                 return Self.error(404, "Unknown schedule id", detail: scheduleId)
@@ -1552,8 +1556,17 @@ public final class ControlAPIRouter {
             pcoPlanId: schedule.pcoPlanId,
             recurrence: schedule.recurrence.rawValue,
             isEnabled: schedule.isEnabled,
-            lastFiredAt: schedule.lastFiredAt
+            lastFiredAt: schedule.lastFiredAt,
+            targetKind: schedule.target?.kind.rawValue,
+            targetId: schedule.target?.id,
+            startsFirstItem: schedule.startsFirstItem
         )
+    }
+
+    /// `targetKind` is `event` or `rehearsal` with the time's id; empty or unknown clears it.
+    private func scheduleTarget(kind: String?, id: String?) -> ServiceSchedule.TimeTarget? {
+        guard let kind, let id, !id.isEmpty, let parsed = ServiceSchedule.TimeTarget.Kind(rawValue: kind) else { return nil }
+        return ServiceSchedule.TimeTarget(kind: parsed, id: id)
     }
 
     private func liveOpsStatus() -> ControlAPIState.LiveOpsStatus {

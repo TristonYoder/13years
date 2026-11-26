@@ -13,6 +13,25 @@ public struct ServiceSchedule: Identifiable, Codable, Equatable, Sendable {
     public var recurrence: Recurrence
     public var isEnabled: Bool
     public var lastFiredAt: Date?
+    /// An event or rehearsal time to make current when this goes live.
+    public var target: TimeTarget?
+    /// Start the first item when this goes live, so a pre-show countdown fires by itself.
+    public var startsFirstItem: Bool
+
+    public struct TimeTarget: Codable, Equatable, Hashable, Sendable {
+        public enum Kind: String, Codable, Sendable {
+            case event
+            case rehearsal
+        }
+
+        public var kind: Kind
+        public var id: String
+
+        public init(kind: Kind, id: String) {
+            self.kind = kind
+            self.id = id
+        }
+    }
 
     public enum Recurrence: String, Codable, CaseIterable, Sendable {
         case once
@@ -28,7 +47,9 @@ public struct ServiceSchedule: Identifiable, Codable, Equatable, Sendable {
         pcoPlanId: String? = nil,
         recurrence: Recurrence = .once,
         isEnabled: Bool = true,
-        lastFiredAt: Date? = nil
+        lastFiredAt: Date? = nil,
+        target: TimeTarget? = nil,
+        startsFirstItem: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -39,6 +60,27 @@ public struct ServiceSchedule: Identifiable, Codable, Equatable, Sendable {
         self.recurrence = recurrence
         self.isEnabled = isEnabled
         self.lastFiredAt = lastFiredAt
+        self.target = target
+        self.startsFirstItem = startsFirstItem
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, startsAt, goLiveOffsetSeconds, pcoServiceTypeId, pcoPlanId, recurrence, isEnabled, lastFiredAt, target, startsFirstItem
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        startsAt = try container.decode(Date.self, forKey: .startsAt)
+        goLiveOffsetSeconds = try container.decode(Int.self, forKey: .goLiveOffsetSeconds)
+        pcoServiceTypeId = try container.decodeIfPresent(String.self, forKey: .pcoServiceTypeId)
+        pcoPlanId = try container.decodeIfPresent(String.self, forKey: .pcoPlanId)
+        recurrence = try container.decode(Recurrence.self, forKey: .recurrence)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        lastFiredAt = try container.decodeIfPresent(Date.self, forKey: .lastFiredAt)
+        target = try? container.decodeIfPresent(TimeTarget.self, forKey: .target)
+        startsFirstItem = (try? container.decodeIfPresent(Bool.self, forKey: .startsFirstItem)) ?? false
     }
 
     public var goLiveAt: Date {

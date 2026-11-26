@@ -17,7 +17,7 @@ struct PlanHeaderMenu: View {
     @State private var addingTime: PlanTimeKind?
 
     private var planName: String {
-        engine.pcoPlanContext?.title ?? engine.planTitle ?? (engine.planItems.isEmpty ? "No plan" : "Untitled plan")
+        engine.pcoPlanContext?.title ?? engine.planTitle ?? "Unnamed Run Sheet"
     }
 
     private var hasPCOPlan: Bool { engine.planItems.first?.pcoPlanId != nil }
@@ -409,7 +409,7 @@ private struct PlanNameField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("Name this plan", text: $draft)
+        TextField("Name this run sheet", text: $draft)
             .textFieldStyle(.plain)
             .font(.headline)
             .focused($focused)
@@ -417,7 +417,7 @@ private struct PlanNameField: View {
             .onSubmit { engine.setPlanTitle(draft) }
             .onChange(of: focused) { _, isFocused in if !isFocused { engine.setPlanTitle(draft) } }
             .onChange(of: engine.planTitle) { _, title in if !focused { draft = title ?? "" } }
-            .help("Name this plan")
+            .help("Name this run sheet")
     }
 }
 #endif

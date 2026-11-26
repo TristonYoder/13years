@@ -220,7 +220,7 @@ struct EventTimeEditorView: View {
                     }
                 }
                 Section {
-                    TextField(isRehearsal ? "Name (optional), e.g. Band Rehearsal" : "Name (optional), e.g. Early Service", text: $name)
+                    TextField("Name (optional)", text: $name, prompt: Text(isRehearsal ? "Band Rehearsal" : "Early Service"))
                     Toggle("Start Time", isOn: $hasStartTime)
                     if hasStartTime {
                         #if os(tvOS)
@@ -276,7 +276,7 @@ struct EventTimeEditorView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 360, idealWidth: 400, minHeight: 320, idealHeight: 360)
+        .frame(minWidth: 400, idealWidth: 440, minHeight: 540, idealHeight: 560)
         #endif
     }
 

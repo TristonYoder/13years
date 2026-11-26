@@ -147,3 +147,76 @@ final class PlanTitleEditingTests: XCTestCase {
         XCTAssertEqual(engine.planTitle, "Wednesday")
     }
 }
+
+@MainActor
+final class ScheduleTargetTests: XCTestCase {
+    func testGoingLiveMakesTheTargetTimeCurrentAndCanStartTheFirstItem() throws {
+        let engine = CueEngine()
+        engine.importFlow(title: nil, items: [
+            PCOTimerItem(id: "h", title: "Pre-Service", itemType: "header", lengthInSeconds: 0),
+            PCOTimerItem(id: "a", title: "Countdown", itemType: "Item", lengthInSeconds: 300),
+            PCOTimerItem(id: "b", title: "Welcome", itemType: "Item", lengthInSeconds: 60)
+        ])
+        let early = try XCTUnwrap(engine.addEventTime(name: "Early", day: nil, startTime: TimeOfDay(hour: 9, minute: 0)))
+        let late = try XCTUnwrap(engine.addEventTime(name: "Late", day: nil, startTime: TimeOfDay(hour: 11, minute: 0)))
+        engine.setLiveEventTime(id: early.id)
+        let schedule = try XCTUnwrap(engine.addServiceSchedule(
+            title: "Late", startsAt: Date().addingTimeInterval(3600), recurrence: .once,
+            target: ServiceSchedule.TimeTarget(kind: .event, id: late.id), startsFirstItem: true
+        ))
+        engine.goLiveWithSchedule(id: schedule.id)
+        XCTAssertEqual(engine.liveEventTime?.id, late.id)
+        XCTAssertEqual(engine.activeTimerItem?.id, "a")
+        XCTAssertEqual(engine.activeTimerItem?.isRunning, true)
+    }
+
+    func testARehearsalTargetEntersRehearsalAndAMissingTimeIsSkipped() throws {
+        let engine = CueEngine()
+        engine.importFlow(title: nil, items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60)])
+        let rehearsal = try XCTUnwrap(engine.addRehearsalTime(name: "Band", day: nil, startTime: TimeOfDay(hour: 18, minute: 0)))
+        let schedule = try XCTUnwrap(engine.addServiceSchedule(
+            title: "Band", startsAt: Date().addingTimeInterval(3600), recurrence: .once,
+            target: ServiceSchedule.TimeTarget(kind: .rehearsal, id: rehearsal.id)
+        ))
+        engine.goLiveWithSchedule(id: schedule.id)
+        XCTAssertTrue(engine.isRehearsalMode)
+        engine.setRehearsalMode(false)
+        let missing = try XCTUnwrap(engine.addServiceSchedule(
+            title: "Gone", startsAt: Date().addingTimeInterval(7200), recurrence: .once,
+            target: ServiceSchedule.TimeTarget(kind: .event, id: "nope")
+        ))
+        engine.goLiveWithSchedule(id: missing.id)
+        XCTAssertFalse(engine.isRehearsalMode)
+    }
+
+    func testOlderSchedulesDecodeWithoutATargetAndRoundTripTheNewFields() throws {
+        let old = #"{"id":"s","title":"Sunday","startsAt":0,"goLiveOffsetSeconds":1800,"recurrence":"weekly","isEnabled":true}"#
+        let decoded = try JSONDecoder().decode(ServiceSchedule.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.target)
+        XCTAssertFalse(decoded.startsFirstItem)
+        var schedule = decoded
+        schedule.target = ServiceSchedule.TimeTarget(kind: .rehearsal, id: "r")
+        schedule.startsFirstItem = true
+        XCTAssertEqual(try JSONDecoder().decode(ServiceSchedule.self, from: JSONEncoder().encode(schedule)), schedule)
+    }
+
+    func testNextStartRollsAWeekdayForwardAndNeedsATime() {
+        let now = Date()
+        XCTAssertNil(CueEngine.nextStart(day: nil, time: nil, after: now))
+        let start = CueEngine.nextStart(day: .weekday(1), time: TimeOfDay(hour: 9, minute: 30), after: now)
+        XCTAssertNotNil(start)
+        XCTAssertGreaterThan(start!, now)
+        XCTAssertLessThanOrEqual(start!.timeIntervalSince(now), 7 * 86_400 + 1)
+    }
+
+    func testTheScheduleTargetIsSetThroughTheControlAPI() throws {
+        let engine = CueEngine()
+        let router = ControlAPIRouter(engine: engine)
+        let body = #"{"title":"Band","startsAt":"2030-01-01T18:00:00Z","targetKind":"rehearsal","targetId":"r1","startsFirstItem":true}"#
+        let reply = router.handle(HTTPRequest(method: "POST", path: "/v1/schedules", body: Data(body.utf8)))
+        XCTAssertEqual(reply.status, 201)
+        let created = try XCTUnwrap(engine.serviceSchedules.first(where: { $0.target?.id == "r1" }))
+        XCTAssertEqual(created.target, ServiceSchedule.TimeTarget(kind: .rehearsal, id: "r1"))
+        XCTAssertTrue(created.startsFirstItem)
+    }
+}

@@ -21,7 +21,9 @@ extension CueEngine {
                 pcoPlanId: entry.pcoPlanId,
                 recurrence: ServiceSchedule.Recurrence(rawValue: entry.recurrence) ?? .once,
                 isEnabled: entry.isEnabled,
-                lastFiredAt: entry.lastFiredAt
+                lastFiredAt: entry.lastFiredAt,
+                target: entry.targetKind.flatMap { ServiceSchedule.TimeTarget.Kind(rawValue: $0) }.flatMap { kind in entry.targetId.map { ServiceSchedule.TimeTarget(kind: kind, id: $0) } },
+                startsFirstItem: entry.startsFirstItem ?? false
             )
         })
         assign(\.eventTimes, (state.eventTimes?.entries ?? []).map {
