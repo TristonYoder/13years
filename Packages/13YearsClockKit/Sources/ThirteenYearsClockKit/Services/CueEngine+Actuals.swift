@@ -279,16 +279,24 @@ extension CueEngine {
 
     @discardableResult
     public func addRehearsalTime(name: String?, day: EventDay?, startTime: TimeOfDay?) -> EventTime? {
-        guard !isRemoteMirror, !isEventTimesManagedByPCO, manualRehearsalTimes.count < Self.maxEventTimes else { return nil }
+        guard !isEventTimesManagedByPCO, manualRehearsalTimes.count < Self.maxEventTimes else { return nil }
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeCreate(name: name?.trimmingCharacters(in: .whitespacesAndNewlines), day: day?.string, startTime: startTime?.string))
+            return nil
+        }
         let time = EventTime(name: name?.trimmingCharacters(in: .whitespacesAndNewlines), day: day, startTime: startTime)
         manualRehearsalTimes = EventTime.sorted(manualRehearsalTimes + [time])
         return time
     }
 
     public func updateRehearsalTime(id: String, name: String?, day: EventDay?, startTime: TimeOfDay?) {
-        guard !isRemoteMirror, let index = manualRehearsalTimes.firstIndex(where: { $0.id == id }) else { return }
-        var updated = manualRehearsalTimes
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeUpdate(id: id, name: trimmed ?? "", day: day?.string ?? "", startTime: startTime?.string ?? ""))
+            return
+        }
+        guard let index = manualRehearsalTimes.firstIndex(where: { $0.id == id }) else { return }
+        var updated = manualRehearsalTimes
         updated[index].name = trimmed.flatMap { $0.isEmpty ? nil : $0 }
         updated[index].day = day
         updated[index].startTime = startTime
@@ -296,19 +304,18 @@ extension CueEngine {
     }
 
     public func removeRehearsalTime(id: String) {
-        guard !isRemoteMirror else { return }
+        if isRemoteMirror {
+            remoteCommands?.send(.rehearsalTimeDelete(id: id))
+            return
+        }
         manualRehearsalTimes.removeAll { $0.id == id }
         if rehearsalPlanTimeId == id { setRehearsalMode(false) }
     }
 
-    /// How far through the plan's planned length the run is, 0...1: finished items plus the active item's elapsed time.
-    public var planProgress: Double {
-        let items = planItems.filter { !$0.isHeader }
-        let total = items.reduce(0) { $0 + $1.lengthInSeconds }
-        guard total > 0, planItems.indices.contains(activeItemIndex) else { return 0 }
-        let finished = planItems[..<activeItemIndex].filter { !$0.isHeader }.reduce(0) { $0 + $1.lengthInSeconds }
-        let current = min(Double(activeTimerItem?.elapsedSeconds ?? 0), Double(activeTimerItem?.lengthInSeconds ?? 0))
-        return min(1, max(0, (Double(finished) + current) / Double(total)))
+    /// How far through the current item the timer is, 0...1. Runs past the end read as full.
+    public var itemProgress: Double {
+        guard let item = activeTimerItem, item.lengthInSeconds > 0 else { return 0 }
+        return min(1, max(0, Double(item.elapsedSeconds) / Double(item.lengthInSeconds)))
     }
 
     public var rehearsalLabel: String {

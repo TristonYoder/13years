@@ -75,6 +75,9 @@ public enum RemoteCommand: Equatable, Sendable {
     case eventTimeCreate(name: String?, day: String?, startTime: String?)
     case eventTimeUpdate(id: String, name: String, day: String, startTime: String)
     case eventTimeDelete(id: String)
+    case rehearsalTimeCreate(name: String?, day: String?, startTime: String?)
+    case rehearsalTimeUpdate(id: String, name: String, day: String, startTime: String)
+    case rehearsalTimeDelete(id: String)
     case eventTimeLive(id: String)
     case eventTimeNext
     case loadDocument(body: Data)
@@ -84,7 +87,7 @@ public enum RemoteCommand: Equatable, Sendable {
     public var isIdempotent: Bool {
         switch self {
         case .planNext, .planPrevious, .timerAdjust, .message, .roleCreate, .scheduleCreate, .planItemAdd,
-             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .eventTimeCreate, .eventTimeNext, .planImport, .loadDocument:
+             .waypointCreate, .waypointCreateAndAssign, .waypointNext, .planNextService, .eventTimeCreate, .rehearsalTimeCreate, .eventTimeNext, .planImport, .loadDocument:
             return false
         default:
             return true
@@ -222,6 +225,12 @@ public enum RemoteCommand: Equatable, Sendable {
             return Request(method: "PATCH", path: "/v1/event-times/\(Self.segment(id))", body: Self.json(["name": name, "day": day, "startTime": startTime]))
         case .eventTimeDelete(let id):
             return Request(method: "DELETE", path: "/v1/event-times/\(Self.segment(id))", body: nil)
+        case .rehearsalTimeCreate(let name, let day, let startTime):
+            return Self.post("rehearsal-times", ["name": name ?? NSNull(), "day": day ?? NSNull(), "startTime": startTime ?? NSNull()])
+        case .rehearsalTimeUpdate(let id, let name, let day, let startTime):
+            return Request(method: "PATCH", path: "/v1/rehearsal-times/\(Self.segment(id))", body: Self.json(["name": name, "day": day, "startTime": startTime]))
+        case .rehearsalTimeDelete(let id):
+            return Request(method: "DELETE", path: "/v1/rehearsal-times/\(Self.segment(id))", body: nil)
         case .eventTimeLive(let id):
             return Self.post("event-times/live", ["id": id])
         case .eventTimeNext:

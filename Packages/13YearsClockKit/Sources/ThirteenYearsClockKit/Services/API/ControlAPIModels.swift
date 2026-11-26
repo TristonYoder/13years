@@ -147,6 +147,8 @@ public struct ControlAPIState: Codable, Sendable {
         public var rehearsalPlanTimeId: String?
         /// The rehearsal times a client can choose from, so a remote Producer sees the same list as this one.
         public var rehearsalTimes: [PCOPlanTimeInfo]?
+        /// Rehearsal times entered by hand, with day and start time, so a client can edit them.
+        public var manualRehearsalTimes: [EventTime]?
         public var actualsEventTimeId: String?
         public var actuals: [ItemActual]
         public var skippedItemIds: [String: [String]]
@@ -496,6 +498,11 @@ public enum ControlAPIRequests {
         public var name: String?
         public var day: String?
         public var startTime: String?
+    }
+
+    public struct RehearsalTimesStatus: Codable, Sendable {
+        public var managedByPCO: Bool
+        public var entries: [ControlAPIState.EventTimeStatus.Entry]
     }
 
     public struct IdBody: Decodable, Sendable {

@@ -257,27 +257,46 @@ public struct LiveTimerHeaderView: View {
     }
 }
 
-/// The line between the header and the controls below it. It doubles as the plan's progress: the fill
-/// follows `planProgress`, green in the event and purple while rehearsing. No labels.
+/// The line between the header and the controls below it. It doubles as the current item's progress:
+/// a soft comet that grows with the item's elapsed time, tinted green in the event and purple while
+/// rehearsing, amber once the item runs over. No labels.
 struct PlanProgressRail: View {
     @EnvironmentObject var engine: CueEngine
+    @State private var shown: Double = 0
+
+    private var tint: Color {
+        if engine.isRehearsalMode { return AppPalette.rehearsal }
+        return engine.activeTimerItem?.isOvertime == true ? AppPalette.warning : AppPalette.positive
+    }
 
     var body: some View {
-        let progress = engine.planProgress
-        let hasPlan = engine.planItems.contains(where: { !$0.isHeader })
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Rectangle().fill(Color.primary.opacity(0.12))
-                if hasPlan {
+                Rectangle().fill(Color.primary.opacity(0.10))
+                if engine.activeTimerItem != nil {
+                    let width = proxy.size.width * shown
                     Rectangle()
-                        .fill((engine.isRehearsalMode ? AppPalette.rehearsal : AppPalette.positive).opacity(0.9))
-                        .frame(width: proxy.size.width * progress)
-                        // Ease rather than run linearly so a jump between items glides instead of snapping.
-                        .animation(.easeInOut(duration: 0.9), value: progress)
+                        .fill(LinearGradient(colors: [tint.opacity(0), tint.opacity(0.5)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: width)
+                        .overlay(alignment: .trailing) {
+                            // A short, slightly brighter head so the leading edge reads without a hard line.
+                            Rectangle()
+                                .fill(LinearGradient(colors: [tint.opacity(0), tint.opacity(0.85)], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: min(width, 36))
+                        }
+                        .animation(.easeInOut(duration: 0.4), value: tint)
                 }
             }
         }
         .frame(height: 3)
         .accessibilityHidden(true)
+        .onChange(of: engine.itemProgress, initial: true) { old, new in
+            if new < old {
+                // A new item starts over: let the old fill drain away instead of snapping.
+                withAnimation(.easeOut(duration: 0.45)) { shown = new }
+            } else {
+                withAnimation(.easeInOut(duration: 0.9)) { shown = new }
+            }
+        }
     }
 }

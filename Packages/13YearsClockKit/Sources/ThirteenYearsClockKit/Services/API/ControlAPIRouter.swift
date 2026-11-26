@@ -258,6 +258,31 @@ public final class ControlAPIRouter {
             }
             return json(eventTimeEntry(created), status: 201)
 
+        case "rehearsal-times":
+            if allows(method, "GET") { return json(rehearsalTimesStatus()) }
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard !engine.isEventTimesManagedByPCO else { return rehearsalTimesManagedByPCO() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name?.trimmingCharacters(in: .whitespaces)
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Rehearsal time name") { return tooLong }
+            guard engine.manualRehearsalTimes.count < CueEngine.maxEventTimes else { return limitReached("rehearsal times", CueEngine.maxEventTimes) }
+            var day: EventDay?
+            var startTime: TimeOfDay?
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .keep, .clear: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .keep, .clear: break
+            }
+            guard let created = engine.addRehearsalTime(name: name, day: day, startTime: startTime) else {
+                return Self.error(400, "Could not create rehearsal time")
+            }
+            return json(eventTimeEntry(created), status: 201)
+
         case "schedules":
             if allows(method, "GET") { return json(scheduleStatus()) }
             guard allows(method, "POST") else { return methodNotAllowed() }
@@ -623,6 +648,40 @@ public final class ControlAPIRouter {
             }
             engine.advanceToNextEventTime()
             return json(snapshot())
+
+        case ("rehearsal-times", let rehearsalId):
+            guard let existing = engine.manualRehearsalTimes.first(where: { $0.id == rehearsalId }) else {
+                return Self.error(404, "Unknown rehearsal time id", detail: rehearsalId)
+            }
+            if allows(method, "GET") { return json(eventTimeEntry(existing)) }
+            guard !engine.isEventTimesManagedByPCO else { return rehearsalTimesManagedByPCO() }
+            if allows(method, "DELETE") {
+                engine.removeRehearsalTime(id: rehearsalId)
+                return json(rehearsalTimesStatus())
+            }
+            guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.EventTimeBody.self, body) else { return badBody() }
+            let name = request.name.map { $0.trimmingCharacters(in: .whitespaces) } ?? existing.name
+            if let tooLong = tooLong(name ?? "", ContentLimits.name, "Rehearsal time name") { return tooLong }
+            var day = existing.day
+            var startTime = existing.startTime
+            switch eventTimeField(request.day, EventDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): day = value
+            case .clear: day = nil
+            case .keep: break
+            }
+            switch eventTimeField(request.startTime, TimeOfDay.init(string:)) {
+            case .invalid: return invalidEventTimeField()
+            case .set(let value): startTime = value
+            case .clear: startTime = nil
+            case .keep: break
+            }
+            engine.updateRehearsalTime(id: rehearsalId, name: name, day: day, startTime: startTime)
+            guard let updated = engine.manualRehearsalTimes.first(where: { $0.id == rehearsalId }) else {
+                return Self.error(404, "Unknown rehearsal time id", detail: rehearsalId)
+            }
+            return json(eventTimeEntry(updated))
 
         case ("event-times", let eventTimeId):
             guard let existing = engine.eventTime(id: eventTimeId) else {
@@ -1459,6 +1518,7 @@ public final class ControlAPIRouter {
             isRehearsalMode: engine.isRehearsalMode,
             rehearsalPlanTimeId: engine.rehearsalPlanTimeId,
             rehearsalTimes: engine.rehearsalPlanTimes,
+            manualRehearsalTimes: engine.manualRehearsalTimes.isEmpty ? nil : engine.manualRehearsalTimes,
             actualsEventTimeId: engine.actualsEventTimeId,
             actuals: engine.itemActualsIncludingLive,
             skippedItemIds: ItemActuals.sortedSkips(engine.skippedItemIds) ?? [:]
@@ -1495,6 +1555,17 @@ public final class ControlAPIRouter {
             liveId: engine.liveEventTime?.id,
             nextId: engine.nextEventTime?.id
         )
+    }
+
+    private func rehearsalTimesStatus() -> ControlAPIRequests.RehearsalTimesStatus {
+        ControlAPIRequests.RehearsalTimesStatus(
+            managedByPCO: engine.isEventTimesManagedByPCO,
+            entries: engine.manualRehearsalTimes.map(eventTimeEntry)
+        )
+    }
+
+    private func rehearsalTimesManagedByPCO() -> HTTPResponse {
+        Self.error(409, "Rehearsal times are managed by Planning Center", detail: "A Planning Center plan is loaded, so its rehearsal times are used and add, edit and delete are refused.")
     }
 
     private func eventTimeEntry(_ time: EventTime) -> ControlAPIState.EventTimeStatus.Entry {

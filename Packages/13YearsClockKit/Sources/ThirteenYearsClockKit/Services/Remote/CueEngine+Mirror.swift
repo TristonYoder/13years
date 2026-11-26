@@ -31,6 +31,7 @@ extension CueEngine {
         assign(\.skippedItemIds, (state.liveOps?.skippedItemIds ?? [:]).mapValues(Set.init))
         assign(\.rehearsalPlanTimeId, state.liveOps?.rehearsalPlanTimeId)
         assign(\.remoteRehearsalPlanTimes, state.liveOps?.rehearsalTimes)
+        assign(\.manualRehearsalTimes, state.liveOps?.manualRehearsalTimes ?? [])
         assign(\.isRehearsalMode, state.liveOps?.isRehearsalMode ?? false)
         assign(\.planTitle, state.plan.title)
         assign(\.planItems, state.plan.items)
