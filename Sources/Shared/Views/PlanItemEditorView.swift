@@ -179,13 +179,11 @@ public struct PlanItemEditorView: View {
     private var editorForm: some View {
         if isAdding {
             #if os(macOS)
-            TabView(selection: $tab) {
-                ForEach(availableTabs) { entry in
-                    Form { tabContent(entry) }
-                        .formStyle(.grouped)
-                        .tabItem { Text(entry.rawValue) }
-                        .tag(entry)
-                }
+            VStack(spacing: 0) {
+                tabStrip
+                Divider()
+                Form { tabContent(tab) }
+                    .formStyle(.grouped)
             }
             .onChange(of: tab) { _, newTab in lastTabRaw = newTab.rawValue }
             #else
@@ -205,6 +203,33 @@ public struct PlanItemEditorView: View {
                 .formStyle(.grouped)
         }
     }
+
+    #if os(macOS)
+    /// Tabs sit outside the scrolling form so they stay put and never truncate (a native TabView squeezed them to "F…").
+    private var tabStrip: some View {
+        HStack(spacing: 4) {
+            ForEach(availableTabs) { entry in
+                Button { tab = entry } label: {
+                    Text(entry.rawValue)
+                        .font(.callout.weight(tab == entry ? .semibold : .regular))
+                        .foregroundStyle(tab == entry ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(tab == entry ? Color.accentColor : Color.clear)
+                                .frame(height: 2)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(tab == entry ? [.isSelected, .isButton] : .isButton)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+    }
+    #endif
 
     @ViewBuilder
     private func tabContent(_ entry: EditorTab) -> some View {
