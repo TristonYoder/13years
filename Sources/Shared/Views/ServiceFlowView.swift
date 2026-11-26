@@ -486,7 +486,7 @@ public struct ServiceFlowView: View {
             }
         )
         .padding(.top, position.roundsTop ? RunSheetCardPosition.gap : 0)
-        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position))
+        .listRowBackground(RunSheetRowBackground(item: item, activeItem: engine.activeTimerItem, isActive: isActive, isSelected: isSelected, position: position, timerColorHex: isActive ? engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) } : nil))
         #if !os(tvOS)
         .listRowSeparator(.hidden)
         #endif

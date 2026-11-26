@@ -220,9 +220,9 @@ public struct LiveTimerHeaderView: View {
         .help("Actual is a temporary override for when you know the real time from outside the plan — e.g. a stream delay — Projected is the plan's own projection.")
     }
 
-    /// The countdown's color from the timer color scale; with none, overtime is red and everything else normal.
+    /// The countdown's color comes from the timer color scale alone; nil is the normal text color.
     private func readoutColor(for item: PCOTimerItem) -> Color {
-        engine.timerColorHex(for: item).flatMap(Color.init(timerHex:)) ?? (item.isOvertime ? AppPalette.timerOvertime : .primary)
+        engine.timerColorHex(for: item).flatMap(Color.init(timerHex:)) ?? .primary
     }
 
     @ViewBuilder
@@ -263,17 +263,14 @@ public struct LiveTimerHeaderView: View {
 }
 
 /// The line between the header and the controls below it. It doubles as the current item's progress:
-/// a soft comet that grows with the item's elapsed time, tinted green in the event and purple while
-/// rehearsing, amber once the item runs over. No labels.
+/// a soft comet that grows with the item's elapsed time, in the timer color scale's color. No labels.
 struct PlanProgressRail: View {
     @EnvironmentObject var engine: CueEngine
     @State private var shown: Double = 0
 
-    /// The scale's color for the active item; without one the rail is green (purple while rehearsing, amber over time).
+    /// The scale's color for the active item; with none, a neutral tone.
     private var tint: Color {
-        if let item = engine.activeTimerItem, let hex = engine.timerColorHex(for: item), let color = Color(timerHex: hex) { return color }
-        if engine.isRehearsalMode { return AppPalette.rehearsal }
-        return engine.activeTimerItem?.isOvertime == true ? AppPalette.warning : AppPalette.positive
+        engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) }.flatMap(Color.init(timerHex:)) ?? Color.primary
     }
 
     var body: some View {

@@ -570,7 +570,7 @@ struct RunSheetTableView: View {
                     if let live {
                         ProgressView(value: Double(min(live.elapsedSeconds, max(live.lengthInSeconds, 1))), total: Double(max(live.lengthInSeconds, 1)))
                             .progressViewStyle(.linear)
-                            .tint(live.isOvertime ? AppPalette.warning : AppPalette.timerOnTime)
+                            .tint(engine.timerColorHex(for: live).flatMap(Color.init(timerHex:)) ?? AppPalette.timerOnTime)
                     }
                 }
                 .help(timeHelp(entry))

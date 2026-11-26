@@ -289,6 +289,8 @@ struct RunSheetRowBackground: View {
     let isActive: Bool
     let isSelected: Bool
     var position: RunSheetCardPosition = .only
+    /// The active item's color from the timer color scale; nil pulses in the on-time accent.
+    var timerColorHex: String?
 
     var body: some View {
         let radius = RunSheetCardPosition.cornerRadius
@@ -329,14 +331,10 @@ struct RunSheetRowBackground: View {
         .padding(.horizontal, RunSheetCardPosition.horizontalInset)
     }
 
+    /// The pulse takes its color from the timer color scale and pulses harder once the item is over.
     private func overrunStyle(for item: PCOTimerItem) -> (color: Color, min: Double, max: Double) {
-        if item.isOvertime {
-            return (AppPalette.timerOvertime, 0.28, 0.55)
-        }
-        if item.lengthInSeconds > 0, Double(item.remainingSeconds) <= Double(item.lengthInSeconds) * 0.1 {
-            return (AppPalette.timerWarning, 0.14, 0.34)
-        }
-        return (AppPalette.timerOnTime, 0.12, 0.30)
+        let color = timerColorHex.flatMap(Color.init(timerHex:)) ?? AppPalette.timerOnTime
+        return item.isOvertime ? (color, 0.28, 0.55) : (color, 0.12, 0.30)
     }
 }
 

@@ -19,7 +19,7 @@ public struct PagerPresentationState: Equatable, Sendable {
     public var producerClockOffsetMs: Double?
     public var producerUTCOffsetSeconds: Int?
     public var nextItemStartDate: Date?
-    /// The color scale the producer sent for the active item. nil leaves pager text its normal color.
+    /// The color scale the producer sent for the active item. nil means the standard scale.
     public var timerColors: TimerColorScale?
 
     public init(
@@ -61,7 +61,7 @@ public struct PagerPresentationState: Equatable, Sendable {
     /// Six hex digits for the countdown's current color, or nil for the normal text color.
     public var timerColorHex: String? {
         guard let item = activeTimerItem, !item.isHeader else { return nil }
-        return timerColors?.colorHex(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
+        return (timerColors ?? .standard).colorHex(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
     }
 
     public static func cueWordText(for state: CueState) -> String {

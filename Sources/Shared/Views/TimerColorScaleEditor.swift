@@ -74,7 +74,7 @@ struct TimerColorScaleEditor: View {
             }
             .disabled(scale.stops.count >= Self.maxStops)
 
-            colorRow("Overtime", hex: scale.overtimeHex) { scale.overtimeHex = $0 }
+            colorRow("Overtime (default red)", hex: scale.overtimeHex) { scale.overtimeHex = $0 }
         } header: {
             Text("When time is running out")
         } footer: {
@@ -125,7 +125,7 @@ struct TimerColorScaleEditor: View {
 }
 
 /// A strip showing the scale across a five-minute item, then a little overtime.
-private struct TimerColorPreview: View {
+struct TimerColorPreview: View {
     let scale: TimerColorScale
     private let length = 300
     private let overtime = 30
@@ -135,7 +135,6 @@ private struct TimerColorPreview: View {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
                     ForEach(0..<(length + overtime), id: \.self) { second in
-                        let remaining = length - second - (second < length ? 0 : 1)
                         Rectangle().fill(color(forRemaining: second < length ? length - second : -(second - length + 1)))
                             .frame(width: proxy.size.width / CGFloat(length + overtime))
                     }
@@ -212,10 +211,14 @@ struct TimerColorOverrideSheet: View {
                             if on && current == nil { draft = engine.timerColorScale }
                         }
                 } footer: {
-                    Text(isCustom ? "These colors replace the producer-wide scale for \\(title)." : "\\(title) follows the producer-wide timer colors from Settings.")
+                    Text(isCustom ? "These colors replace the producer-wide scale for \(title)." : "\(title) follows the producer-wide timer colors from Settings, shown here.")
                 }
                 if isCustom {
                     TimerColorScaleEditor(scale: $draft)
+                } else {
+                    Section("Inherited") {
+                        TimerColorPreview(scale: engine.timerColorScale)
+                    }
                 }
             }
             .formStyle(.grouped)

@@ -92,3 +92,25 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertEqual(bad.status, 400)
     }
 }
+
+final class PagerTimerColorTests: XCTestCase {
+    private func state(item: PCOTimerItem, colors: TimerColorScale? = nil) -> PagerPresentationState {
+        PagerPresentationState(
+            roles: [], planItems: [item], activeItemIndex: 0, activeTimerItem: item, recentMessages: [],
+            selectedRoleId: "host", isProducerLive: true, isLANConnected: true, connectedMasterName: nil,
+            hourFormatThreshold: .never, clockFormat: .twelveHour, timerColors: colors
+        )
+    }
+
+    func testPagersWithNoScaleUseTheStandardOvertimeRed() {
+        let over = PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, elapsedSeconds: 70)
+        let under = PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, elapsedSeconds: 10)
+        XCTAssertEqual(state(item: over).timerColorHex, "CC1717")
+        XCTAssertNil(state(item: under).timerColorHex)
+    }
+
+    func testAnOverridingScaleReplacesTheStandardOne() {
+        let over = PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, elapsedSeconds: 70)
+        XCTAssertEqual(state(item: over, colors: TimerColorScale(overtimeHex: "FF00FF")).timerColorHex, "FF00FF")
+    }
+}
