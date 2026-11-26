@@ -134,8 +134,15 @@ public enum CommandLine {
         }
         if machine.expectsValue { suggestions = [] }
 
-        let status = machine.status(hasPartial: hasPartial, isEmpty: tokens.isEmpty && !hasPartial)
-        let statement: CommandStatement? = status.isReady ? machine.statement : nil
+        var status = machine.status(hasPartial: hasPartial, isEmpty: tokens.isEmpty && !hasPartial)
+        var statement: CommandStatement? = status.isReady ? machine.statement : nil
+        if hasPartial, partial?.quoted == false {
+            let finished = analyze(raw + " ", context: context)
+            if finished.status.isReady {
+                status = finished.status
+                statement = finished.statement
+            }
+        }
         return CommandLineAnalysis(
             raw: raw,
             pieces: pieces,

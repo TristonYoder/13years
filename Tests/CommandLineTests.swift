@@ -257,3 +257,28 @@ final class CommandLineActionExecutionTests: XCTestCase {
         XCTAssertEqual(received, .save)
     }
 }
+
+final class CommandLinePartialSubmitTests: XCTestCase {
+    private let context = CommandLineContext(itemCount: 6)
+
+    func testAUniquePartialWordCountsAsFinished() {
+        let result = CommandLine.analyze("vi p", context: context)
+        XCTAssertEqual(result.status, .ready)
+        XCTAssertEqual(result.statement?.action, .view(.producerControl))
+    }
+
+    func testATrailingNumberCountsAsFinished() {
+        let result = CommandLine.analyze("delete item 4", context: context)
+        XCTAssertEqual(result.status, .ready)
+        XCTAssertEqual(result.statement?.position, 4)
+    }
+
+    func testAnAmbiguousPartialStaysBlocked() {
+        XCTAssertNil(CommandLine.analyze("p", context: context).statement)
+        XCTAssertNil(CommandLine.analyze("item 4 t", context: context).statement)
+    }
+
+    func testAnIncompleteLineStaysIncomplete() {
+        XCTAssertNil(CommandLine.analyze("vi", context: context).statement)
+    }
+}
