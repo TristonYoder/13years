@@ -86,16 +86,20 @@ struct TimerColorScaleEditor: View {
         Section {
             HStack(spacing: 10) {
                 TimerLevelCard(
-                    value: .constant(0),
-                    unit: .seconds,
-                    caption: "time over",
+                    value: $scale.overtimeStartValue,
+                    unit: scale.overtimeStartUnit,
+                    caption: "\(scale.overtimeStartUnit == .percent ? "%" : "time") over",
                     tint: Color(timerHex: scale.overtimeHex) ?? .secondary,
-                    effect: scale.overtimeEffect,
-                    isEditable: false
+                    effect: scale.overtimeEffect
                 )
-                Text("from zero")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Picker("Unit", selection: $scale.overtimeStartUnit) {
+                    Text("time").tag(TimerColorStop.Unit.seconds)
+                    Text("%").tag(TimerColorStop.Unit.percent)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+                .help("When going over starts to count: after this much time or this percent of the item's length")
                 Spacer()
                 effectMenu($scale.overtimeEffect)
                 swatch(scale.overtimeHex) { scale.overtimeHex = $0 }
@@ -200,7 +204,6 @@ private struct TimerLevelCard: View {
     let caption: String
     let tint: Color
     let effect: TimerEffect
-    var isEditable = true
     @State private var isEditingTime = false
     @State private var percentText = ""
     @FocusState private var focused: Bool
@@ -222,16 +225,32 @@ private struct TimerLevelCard: View {
         .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint, lineWidth: 2))
         .contentShape(Rectangle())
+        .onTapGesture {
+            // Anywhere on the card, not only on the number.
+            if unit == .seconds { isEditingTime = true } else { focused = true }
+        }
+        .timeEntryPopover(
+            isPresented: $isEditingTime,
+            previewBaseSeconds: value,
+            hourFormatThreshold: engine.hourFormatThreshold,
+            clockFormat: engine.clockFormat,
+            allowsEndAt: false
+        ) { action in
+            switch action {
+            case .setAbsolute(let seconds): value = min(max(seconds, 0), 86_400)
+            case .adjustRelative(let delta): value = min(max(value + delta, 0), 86_400)
+            case .endAt: break
+            }
+        }
         .onChange(of: unit) { _, newUnit in
             if newUnit == .percent { value = min(value, 100); percentText = "\(value)" }
         }
+        .help(unit == .seconds ? "Click to enter a time" : "Click to enter a percent")
     }
 
     @ViewBuilder
     private var valueView: some View {
-        if !isEditable {
-            Text(Self.clock(value))
-        } else if unit == .percent {
+        if unit == .percent {
             TextField("", text: $percentText)
                 .textFieldStyle(.plain)
                 .focused($focused)
@@ -241,22 +260,6 @@ private struct TimerLevelCard: View {
                 .onAppear { percentText = "\(value)" }
         } else {
             Text(Self.clock(value))
-                .contentShape(Rectangle())
-                .onTapGesture { isEditingTime = true }
-                .timeEntryPopover(
-                    isPresented: $isEditingTime,
-                    previewBaseSeconds: value,
-                    hourFormatThreshold: engine.hourFormatThreshold,
-                    clockFormat: engine.clockFormat,
-                    allowsEndAt: false
-                ) { action in
-                    switch action {
-                    case .setAbsolute(let seconds): value = min(max(seconds, 0), 86_400)
-                    case .adjustRelative(let delta): value = min(max(value + delta, 0), 86_400)
-                    case .endAt: break
-                    }
-                }
-                .help("Click to enter a time")
         }
     }
 

@@ -82,15 +82,26 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
     public var stops: [TimerColorStop]
     public var overtimeHex: String
     public var overtimeEffect: TimerEffect
+    /// How far over the item must be before the overtime color and effect begin (0 is straight away). Until then
+    /// the lead-up levels keep applying, so an item can stay yellow or plain for a while after zero.
+    public var overtimeStartValue: Int
+    public var overtimeStartUnit: TimerColorStop.Unit
 
-    public init(onTimeHex: String? = nil, stops: [TimerColorStop] = [], overtimeHex: String = "CC1717", overtimeEffect: TimerEffect = .none) {
+    public init(onTimeHex: String? = nil, stops: [TimerColorStop] = [], overtimeHex: String = "CC1717", overtimeEffect: TimerEffect = .none, overtimeStartValue: Int = 0, overtimeStartUnit: TimerColorStop.Unit = .seconds) {
         self.onTimeHex = onTimeHex
         self.stops = stops
         self.overtimeHex = overtimeHex
         self.overtimeEffect = overtimeEffect
+        self.overtimeStartValue = max(0, overtimeStartValue)
+        self.overtimeStartUnit = overtimeStartUnit
     }
 
-    private enum CodingKeys: String, CodingKey { case onTimeHex, stops, overtimeHex, overtimeEffect }
+    private enum CodingKeys: String, CodingKey { case onTimeHex, stops, overtimeHex, overtimeEffect, overtimeStart }
+
+    private struct StartCoding: Codable {
+        var value: Int
+        var unit: TimerColorStop.Unit
+    }
 
     /// Missing fields take their defaults, so `{}` is the standard scale.
     public init(from decoder: Decoder) throws {
@@ -102,6 +113,9 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
         // A stored scale predating effects has none; only a missing overtime color means "the standard scale".
         let fallbackEffect: TimerEffect = container.contains(.overtimeHex) ? .none : Self.standard.overtimeEffect
         overtimeEffect = (try? container.decodeIfPresent(TimerEffect.self, forKey: .overtimeEffect)) ?? fallbackEffect
+        let start = try? container.decodeIfPresent(StartCoding.self, forKey: .overtimeStart)
+        overtimeStartValue = max(0, start?.value ?? Self.standard.overtimeStartValue)
+        overtimeStartUnit = start?.unit ?? Self.standard.overtimeStartUnit
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -110,6 +124,7 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
         try container.encode(stops, forKey: .stops)
         try container.encode(overtimeHex, forKey: .overtimeHex)
         try container.encode(overtimeEffect, forKey: .overtimeEffect)
+        try container.encode(StartCoding(value: overtimeStartValue, unit: overtimeStartUnit), forKey: .overtimeStart)
     }
 
     /// The default: normal text, yellow at 10% left, then red from zero, flickering, and a deeper pulsing
@@ -130,8 +145,12 @@ public struct TimerColorScale: Codable, Equatable, Hashable, Sendable {
     /// Of the lead-up stops reached, the one closest to zero wins; of the overtime stops, the deepest.
     public func style(remainingSeconds: Int, lengthSeconds: Int) -> (colorHex: String?, effect: TimerEffect) {
         if remainingSeconds < 0 {
-            // Past zero: the deepest overtime level reached wins, else the base overtime color.
             let over = Double(-remainingSeconds)
+            // Not over by enough yet: keep the lead-up look, as if exactly at zero.
+            let startThreshold = TimerColorStop(value: overtimeStartValue, unit: overtimeStartUnit, colorHex: "000000")
+                .thresholdSeconds(lengthSeconds: lengthSeconds)
+            if over < startThreshold { return style(remainingSeconds: 0, lengthSeconds: lengthSeconds) }
+            // Past zero: the deepest overtime level reached wins, else the base overtime color.
             let deepest = stops
                 .filter { $0.phase == .overtime }
                 .map { (stop: $0, threshold: $0.thresholdSeconds(lengthSeconds: lengthSeconds)) }

@@ -454,6 +454,10 @@ struct PagerCache {
   String msgId;
   String msgText;
   bool layoutDirty = true;
+  // What the countdown label is currently drawn with from the timer color scale; reset when the theme repaints it.
+  uint32_t tcKey = 0xFFFFFFFFu;
+  uint8_t tcOpacity = 255;
+  int16_t tcOffsetX = 0;
 };
 
 static PagerCache pc;
@@ -501,6 +505,7 @@ static void applyTheme(CueState state, pagersync::CueDisplay display) {
   lv_obj_t *labels[] = {clockLabel, clockCaption, noConnLabel, roleBtnLabel, itemTitleLabel, timerLabel,
                         projActualLabel, nextTitleLabel, nextLenLabel, itemDetailsLabel, nextDetailsLabel};
   for (lv_obj_t *l : labels) lv_obj_set_style_text_color(l, ink, 0);
+  pc.tcKey = 0xFFFFFFFFu;  // the countdown was just repainted in the ink; re-apply any timer color
   lv_obj_set_style_bg_color(itemDividerLine, ink, 0);
   lv_obj_set_style_img_recolor(roleBtnChevron, ink, 0);
   lv_obj_set_style_img_recolor_opa(roleBtnChevron, LV_OPA_COVER, 0);
@@ -543,6 +548,29 @@ static void addNoteSpans(lv_obj_t *sg, const char *category, const char *text, b
   lv_span_set_text(b, body.c_str());
   lv_style_set_text_font(&b->style, &inter_regular_14);
   lv_style_set_text_color(&b->style, color);
+}
+
+static lv_color_t currentInk();
+
+// Colors and animates the countdown from the producer's timer color scale. Without a scale it keeps the ink.
+// A full-screen cue paints the whole screen, so its dark text is left alone to stay readable.
+static void applyTimerStyle(cue::Engine &engine, int remaining) {
+  bool fullCue = pc.display == pagersync::CueDisplay::Fullscreen && pc.state != CueState::Off;
+  pagersync::TimerStyle style = fullCue ? pagersync::TimerStyle() : pagersync::evaluateTimerColors(engine.timerColors(), remaining, engine.timerLengthSeconds());
+  uint32_t key = style.hasColor ? (0x1000000u | (style.rgb & 0xFFFFFFu)) : 0u;
+  if (key != pc.tcKey) {
+    pc.tcKey = key;
+    lv_obj_set_style_text_color(timerLabel, style.hasColor ? lv_color_hex(style.rgb) : currentInk(), 0);
+  }
+  pagersync::TimerEffectFrame frame = pagersync::timerEffectFrame(style.effect, millis());
+  if (frame.opacity != pc.tcOpacity) {
+    pc.tcOpacity = frame.opacity;
+    lv_obj_set_style_text_opa(timerLabel, frame.opacity, 0);
+  }
+  if (frame.offsetX != pc.tcOffsetX) {
+    pc.tcOffsetX = frame.offsetX;
+    lv_obj_set_style_translate_x(timerLabel, frame.offsetX, 0);
+  }
 }
 
 static lv_color_t currentInk() {
@@ -662,6 +690,7 @@ static void refreshPagerScreen(cue::Engine &engine, bool linkLost) {
         snprintf(buf, sizeof(buf), "%s%02d:%02d", remaining < 0 ? "+" : "", absRemaining / 60, absRemaining % 60);
         lv_label_set_text(timerLabel, buf);
       }
+      applyTimerStyle(engine, remaining);
       if (!pc.valid || !pc.actualValid || actual != pc.actual) {
         pc.actual = actual;
         pc.actualValid = true;

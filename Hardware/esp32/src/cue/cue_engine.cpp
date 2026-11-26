@@ -208,6 +208,7 @@ static JsonDocument &packetFilter() {
     pagersync::buildTimerItemFilter(filter["timerItem"].to<JsonObject>());
     filter["anchor"] = true;
     pagersync::buildNextItemFilter(filter["nextItem"].to<JsonObject>());
+    filter["timerColors"] = true;
     filter["hashes"] = true;
     filter["cueDeltas"] = true;
     filter["message"] = true;
@@ -325,6 +326,7 @@ void Engine::handlePacketJson(const char *json, size_t len) {
     if (anchorOk) {
       if (doc["timerItem"].is<JsonObjectConst>()) {
         applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), hasAnchor || !(anchored_ && producerV2_));
+        applyTimerColors(doc["timerColors"]);
       }
       if (hasAnchor) applyAnchor(doc["anchor"]);
       if (hasAnchor || doc["timerItem"].is<JsonObjectConst>() || !doc["nextItem"].isNull()) applyNextItem(doc["nextItem"]);
@@ -344,12 +346,16 @@ void Engine::handlePacketJson(const char *json, size_t len) {
       return;
     }
     if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>(), false);
+    applyTimerColors(doc["timerColors"]);
     applyAnchor(doc["anchor"]);
     applyNextItem(doc["nextItem"]);
   } else if (isDelta) {
     if (doc["cueDeltas"].is<JsonArrayConst>()) applyCueDeltas(doc["cueDeltas"].as<JsonArrayConst>());
   } else if (isTimerUpdate) {
-    if (doc["timerItem"].is<JsonObjectConst>()) applyTimerItem(doc["timerItem"].as<JsonObjectConst>());
+    if (doc["timerItem"].is<JsonObjectConst>()) {
+      applyTimerItem(doc["timerItem"].as<JsonObjectConst>());
+      applyTimerColors(doc["timerColors"]);
+    }
     applyNextItem(doc["nextItem"]);
   } else if (strcmp(type, "MESSAGE") == 0) {
     if (doc["message"].is<JsonObjectConst>()) addOneMessage(doc["message"].as<JsonObjectConst>());

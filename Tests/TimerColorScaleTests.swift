@@ -66,6 +66,26 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(TimerColorScale.standard)), .standard)
     }
 
+    func testOvertimeCanStartLateAndTheLeadUpLookCarriesOn() throws {
+        let scale = TimerColorScale(
+            stops: [TimerColorStop(value: 30, unit: .seconds, colorHex: "FFD60A")],
+            overtimeHex: "CC1717",
+            overtimeEffect: .blink,
+            overtimeStartValue: 10,
+            overtimeStartUnit: .seconds
+        )
+        XCTAssertEqual(scale.style(remainingSeconds: -5, lengthSeconds: 300).colorHex, "FFD60A")
+        XCTAssertEqual(scale.style(remainingSeconds: -5, lengthSeconds: 300).effect, TimerEffect.none)
+        XCTAssertEqual(scale.style(remainingSeconds: -10, lengthSeconds: 300).colorHex, "CC1717")
+        XCTAssertEqual(scale.style(remainingSeconds: -10, lengthSeconds: 300).effect, .blink)
+        let decoded = try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(scale))
+        XCTAssertEqual(decoded, scale)
+        // Percent of the item's length: 10% of 5:00 is 30 s.
+        let percent = TimerColorScale(overtimeHex: "CC1717", overtimeStartValue: 10, overtimeStartUnit: .percent)
+        XCTAssertNil(percent.colorHex(remainingSeconds: -29, lengthSeconds: 300))
+        XCTAssertEqual(percent.colorHex(remainingSeconds: -30, lengthSeconds: 300), "CC1717")
+    }
+
     func testOvertimeLevelsTakeOverTheDeeperTheItemRuns() throws {
         let scale = TimerColorScale(
             stops: [

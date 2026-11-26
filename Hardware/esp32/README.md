@@ -479,6 +479,10 @@ fonts (regular and bold 14 and 18, black 32; no new sizes were generated).
 Layout fit on the real panel (font widths, line counts, card heights) is
 unverified without hardware.
 
+## Timer colors
+
+The producer's timer color scale (`timerColors`, see `Server/PROTOCOL-V2.md`) colors and animates the countdown text of the current item. `src/sync/timer_colors.h` holds the logic (parse, evaluate, effect frames) and runs in the native test (`tools/test_sync.cpp`). Up to 12 stops are kept; stops with a bad color are skipped. With no scale received the countdown keeps its normal ink: the pager never makes one up. A full-screen cue keeps its dark text. Effects (pulse, blink, flicker, glitch) change the label's text opacity, and glitch also its horizontal offset, from `millis()` on every UI update.
+
 ## Colors — two deliberate deviations from the iPhone app
 
 Both found and fixed against real hardware photos, not guessed at:
