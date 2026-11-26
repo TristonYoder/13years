@@ -74,12 +74,12 @@ public struct MessagesView: View {
             get: { selectedThreadId },
             set: { if let newValue = $0 { selectedThreadId = newValue } }
         )) {
-            Label("Everyone", systemImage: "person.3.fill")
+            threadRow(id: "all", name: "Everyone", symbol: "person.3.fill")
                 .tag("all")
 
             Section("Direct Messages") {
                 ForEach(engine.roles) { role in
-                    Label(role.name, systemImage: "person.fill")
+                    threadRow(id: role.id, name: role.name, symbol: nil)
                         .tag(role.id)
                 }
             }
@@ -87,7 +87,43 @@ public struct MessagesView: View {
         #if os(macOS)
         .listStyle(.sidebar)
         #endif
-        .frame(minWidth: 180, idealWidth: 200, maxWidth: 240)
+        .frame(minWidth: 220, idealWidth: 250, maxWidth: 300)
+    }
+
+    /// Avatar, name, the last message as a preview, its time, and an unread dot.
+    private func threadRow(id: String, name: String, symbol: String?) -> some View {
+        let latest = engine.recentMessages.first(where: { $0.targetRoleId == (id == "all" ? nil : id) })
+        let hasUnread = id != "all" && engine.hasUnreadMessage(forRoleId: id)
+        return HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(Color.primary.opacity(0.12))
+                if let symbol {
+                    Image(systemName: symbol).font(.caption)
+                } else {
+                    Text(String(name.prefix(1)).uppercased()).font(.caption.weight(.bold))
+                }
+            }
+            .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).fontWeight(hasUnread ? .bold : .medium).lineLimit(1)
+                Text(latest.map { ($0.senderRoleId == nil ? "You: " : "") + $0.text } ?? "No messages")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 3) {
+                if let latest {
+                    Text(latest.timestamp, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if hasUnread {
+                    Circle().fill(AppPalette.info).frame(width: 9, height: 9)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private var messageList: some View {
@@ -231,5 +267,7 @@ public struct MessagesView: View {
         guard !trimmed.isEmpty else { return }
         engine.sendMessage(trimmed, targetRoleId: targetRoleId, isHighPriority: isHighPriority)
         messageText = ""
+        // Priority is for the one message it was set on; it should not stay on for the next.
+        isHighPriority = false
     }
 }
