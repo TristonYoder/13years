@@ -14,6 +14,7 @@ struct PlanHeaderMenu: View {
     @State private var showingEventTimes = false
     @State private var showingPopover = false
     @State private var confirmingUnlink = false
+    @State private var addingTime: PlanTimeKind?
 
     private var planName: String {
         engine.pcoPlanContext?.title ?? engine.planTitle ?? (engine.planItems.isEmpty ? "No plan" : "Untitled plan")
@@ -33,6 +34,9 @@ struct PlanHeaderMenu: View {
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
+        .sheet(item: $addingTime) { kind in
+            EventTimeEditorView(target: .add, isRehearsal: kind == .rehearsal)
+        }
         .confirmationDialog("Run this plan only in 13 Years?", isPresented: $confirmingUnlink, titleVisibility: .visible) {
             Button("Unlink from Planning Center", role: .destructive) { engine.unlinkPCOPlan() }
             Button("Cancel", role: .cancel) {}
@@ -143,6 +147,10 @@ struct PlanHeaderMenu: View {
                     showingPopover = false
                     showingEventTimes = true
                 },
+                onAddTime: { kind in
+                    showingPopover = false
+                    addingTime = kind
+                },
                 onUnlink: {
                     showingPopover = false
                     confirmingUnlink = true
@@ -185,6 +193,7 @@ private struct PlanPopover: View {
     @Binding var planPanelVisible: Bool
     let onChangePlan: () -> Void
     let onEventTimes: () -> Void
+    let onAddTime: (PlanTimeKind) -> Void
     let onUnlink: () -> Void
     let onOpenInPCO: () -> Void
 
@@ -193,7 +202,7 @@ private struct PlanPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                if isLinked || engine.planItems.isEmpty {
+                if isLinked {
                     Text(planName).font(.headline).lineLimit(2)
                 } else {
                     PlanNameField()
@@ -203,8 +212,10 @@ private struct PlanPopover: View {
                 }
             }
 
-            if !engine.eventTimes.isEmpty {
-                section("Event") {
+            section("Event", addKind: .event) {
+                if engine.eventTimes.isEmpty {
+                    emptyNote(isLinked ? "This plan has no service times in Planning Center." : "No event times yet.")
+                } else {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(engine.eventTimes) { time in
                             eventCard(time)
@@ -213,19 +224,9 @@ private struct PlanPopover: View {
                 }
             }
 
-            section("Rehearsal") {
+            section("Rehearsal", addKind: .rehearsal) {
                 if engine.rehearsalPlanTimes.isEmpty {
-                    if engine.isEventTimesManagedByPCO {
-                        Text("This plan has no rehearsal time in Planning Center.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Button(action: onEventTimes) {
-                            Label("Add a rehearsal time", systemImage: "plus")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+                    emptyNote(isLinked ? "This plan has no rehearsal time in Planning Center." : "No rehearsal times yet.")
                 } else {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(engine.rehearsalPlanTimes) { time in
@@ -282,14 +283,32 @@ private struct PlanPopover: View {
         .frame(width: 330)
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, addKind: PlanTimeKind, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.8)
+            HStack {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.8)
+                Spacer()
+                if !isLinked {
+                    Button { onAddTime(addKind) } label: {
+                        Image(systemName: "plus")
+                            .font(.caption.weight(.bold))
+                    }
+                    .buttonStyle(.plain)
+                    .help(addKind == .event ? "Add an event time" : "Add a rehearsal time")
+                    .accessibilityLabel(addKind == .event ? "Add event time" : "Add rehearsal time")
+                }
+            }
             content()
         }
+    }
+
+    private func emptyNote(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private func eventCard(_ time: EventTime) -> some View {
@@ -334,6 +353,13 @@ private struct PlanPopover: View {
         formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
         return formatter
     }()
+}
+
+/// Which kind of time to add from the plan popover. Both open the same editor.
+enum PlanTimeKind: String, Identifiable {
+    case event
+    case rehearsal
+    var id: String { rawValue }
 }
 
 /// An event or rehearsal time as a card: the name or day small on top, the time large in the clock font and a
