@@ -62,6 +62,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoSelectServiceType(id: String?)
     case pcoRefreshServiceTypes
     case pcoSignOut
+    case pcoUnlink
     case pcoAuthorize
     case pcoAuthorizeComplete(code: String, state: String)
     case pcoRefreshPlans
@@ -199,6 +200,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/service-type", ["id": id ?? NSNull()])
         case .pcoSignOut:
             return Self.post("pco/sign-out")
+        case .pcoUnlink:
+            return Self.post("pco/unlink")
         case .pcoAuthorize:
             return Self.post("pco/authorize")
         case .pcoAuthorizeComplete(let code, let state):

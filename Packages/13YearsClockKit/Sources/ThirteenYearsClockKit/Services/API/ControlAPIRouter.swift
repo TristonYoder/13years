@@ -533,6 +533,14 @@ public final class ControlAPIRouter {
             engine.signOutOfPCO()
             return json(pcoStatus())
 
+        case ("pco", "unlink"):
+            guard allows(method, "POST") else { return methodNotAllowed() }
+            guard engine.isLinkedToPCOPlan else {
+                return Self.error(409, "No Planning Center plan is linked", detail: "The loaded plan is already running in 13 Years.")
+            }
+            engine.unlinkPCOPlan()
+            return json(snapshot())
+
         case ("pco", "service-types"):
             guard allows(method, "GET") else { return methodNotAllowed() }
             return json(engine.pcoServiceTypes.map { ControlAPIState.IdentifiedName(id: $0.id, name: $0.name) })

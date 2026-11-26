@@ -13,6 +13,7 @@ struct PlanHeaderMenu: View {
     @State private var showingPlanPicker = false
     @State private var showingEventTimes = false
     @State private var showingPopover = false
+    @State private var confirmingUnlink = false
 
     private var planName: String {
         engine.pcoPlanContext?.title ?? engine.planTitle ?? "No plan"
@@ -32,6 +33,12 @@ struct PlanHeaderMenu: View {
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
+        .confirmationDialog("Run this plan only in 13 Years?", isPresented: $confirmingUnlink, titleVisibility: .visible) {
+            Button("Unlink from Planning Center", role: .destructive) { engine.unlinkPCOPlan() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Items, notes, event times and rehearsal times stay and become yours to edit here. Planning Center changes stop syncing, and Live control and saving actual lengths back end. Sync a plan again to relink.")
+        }
     }
 
     /// The running event or rehearsal, in the same card the plan popover shows. Click it to change.
@@ -135,6 +142,10 @@ struct PlanHeaderMenu: View {
                     showingPopover = false
                     showingEventTimes = true
                 },
+                onUnlink: {
+                    showingPopover = false
+                    confirmingUnlink = true
+                },
                 onOpenInPCO: {
                     if let raw = engine.pcoPlanContext?.planningCenterURL, let url = URL(string: raw) { openURL(url) }
                 }
@@ -172,6 +183,7 @@ private struct PlanPopover: View {
     @Binding var planPanelVisible: Bool
     let onChangePlan: () -> Void
     let onEventTimes: () -> Void
+    let onUnlink: () -> Void
     let onOpenInPCO: () -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
@@ -249,6 +261,12 @@ private struct PlanPopover: View {
                     Button(action: onOpenInPCO) {
                         Label("Planning Center", systemImage: "arrow.up.right.square")
                     }
+                }
+                if engine.isLinkedToPCOPlan {
+                    Button(role: .destructive, action: onUnlink) {
+                        Label("Unlink", systemImage: "link.badge.minus")
+                    }
+                    .help("Stop syncing with Planning Center and run this plan only in 13 Years")
                 }
             }
             .buttonStyle(.bordered)

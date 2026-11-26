@@ -74,3 +74,45 @@ final class RehearsalTimesTests: XCTestCase {
         XCTAssertEqual(call("GET", "/v1/rehearsal-times/\(id)").status, 404)
     }
 }
+
+@MainActor
+final class PCOUnlinkTests: XCTestCase {
+    func testUnlinkingKeepsTheContentAndHandsTheTimesToThisApp() throws {
+        let engine = CueEngine()
+        engine.importFlow(title: "Easter", items: [
+            PCOTimerItem(id: "a", title: "Song", itemType: "Item", lengthInSeconds: 60, noteIds: ["Lights": "n1"], pcoServiceTypeId: "st", pcoPlanId: "p")
+        ])
+        engine.eventTimes = [EventTime(id: "t1", name: "Early", day: .weekday(1), startTime: TimeOfDay(hour: 9, minute: 30), pcoPlanTimeId: "t1")]
+        engine.pcoPlanContext = PCOPlanContext(
+            planId: "p", serviceTypeId: "st", title: "Easter",
+            times: [PCOPlanTimeInfo(id: "r1", name: "Band", timeType: "rehearsal", startsAt: Date(timeIntervalSince1970: 1_700_000_000))],
+            fetchedAt: Date()
+        )
+        XCTAssertTrue(engine.isLinkedToPCOPlan)
+        XCTAssertTrue(engine.isEventTimesManagedByPCO)
+
+        engine.unlinkPCOPlan()
+
+        XCTAssertFalse(engine.isLinkedToPCOPlan)
+        XCTAssertFalse(engine.isEventTimesManagedByPCO)
+        XCTAssertNil(engine.pcoPlanContext)
+        XCTAssertEqual(engine.planItems.map(\.title), ["Song"])
+        XCTAssertNil(engine.planItems[0].pcoPlanId)
+        XCTAssertTrue(engine.planItems[0].noteIds.isEmpty)
+        XCTAssertEqual(engine.planTitle, "Easter")
+        XCTAssertEqual(engine.eventTimes.map(\.id), ["t1"])
+        XCTAssertNil(engine.eventTimes[0].pcoPlanTimeId)
+        XCTAssertEqual(engine.manualRehearsalTimes.map(\.id), ["r1"])
+        XCTAssertEqual(engine.rehearsalPlanTimes.map(\.name), ["Band"])
+        // Now editable here.
+        XCTAssertNotNil(engine.addEventTime(name: "Late", day: nil, startTime: TimeOfDay(hour: 11, minute: 0)))
+    }
+
+    func testUnlinkingARunSheetThatIsNotLinkedDoesNothing() {
+        let engine = CueEngine()
+        engine.importFlow(title: nil, items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60)])
+        XCTAssertFalse(engine.isLinkedToPCOPlan)
+        engine.unlinkPCOPlan()
+        XCTAssertEqual(engine.planItems.count, 1)
+    }
+}
