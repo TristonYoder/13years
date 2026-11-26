@@ -1406,7 +1406,9 @@ public final class CueEngine: ObservableObject {
 
         switch schedule.recurrence {
         case .weekly:
-            if let next = schedule.nextOccurrence(after: now) {
+            // Roll to the occurrence after the one that just fired. Rolling from `now` left startsAt alone whenever the
+            // lead time fired it before the start, so the schedule fired again on every check.
+            if let next = schedule.nextOccurrence(after: max(now, schedule.startsAt)) {
                 schedule.startsAt = next
             }
             schedule.lastFiredAt = nil

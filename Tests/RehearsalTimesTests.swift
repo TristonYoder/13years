@@ -220,3 +220,18 @@ final class ScheduleTargetTests: XCTestCase {
         XCTAssertTrue(created.startsFirstItem)
     }
 }
+
+@MainActor
+final class WeeklyScheduleFiringTests: XCTestCase {
+    func testAWeeklyScheduleFiredDuringItsLeadTimeMovesToNextWeekAndDoesNotFireAgain() throws {
+        let engine = CueEngine()
+        let start = Date().addingTimeInterval(600)
+        let schedule = try XCTUnwrap(engine.addServiceSchedule(title: "Weekly \(UUID().uuidString.prefix(6))", startsAt: start, goLiveOffsetSeconds: 1800, recurrence: .weekly))
+        XCTAssertTrue(schedule.shouldFire(at: Date()))
+        engine.goLiveWithSchedule(id: schedule.id)
+        let after = try XCTUnwrap(engine.serviceSchedule(id: schedule.id))
+        XCTAssertFalse(after.shouldFire(at: Date()))
+        XCTAssertEqual(after.startsAt.timeIntervalSince(start), 7 * 86_400, accuracy: 3700)
+        engine.removeServiceSchedule(id: schedule.id)
+    }
+}
