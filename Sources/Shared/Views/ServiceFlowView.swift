@@ -18,10 +18,15 @@ public struct ServiceFlowView: View {
     @State private var newWaypointTargetItemId: String?
     @State private var newWaypointName: String = ""
     @State private var pendingDeleteItem: PCOTimerItem?
-    @State private var selectedItemId: String?
+    private var selectedItemBinding: Binding<String?> {
+        Binding(get: { engine.selectedPlanItemId }, set: { engine.selectedPlanItemId = $0 })
+    }
+
+    private var selectedItemId: String? {
+        get { engine.selectedPlanItemId }
+        nonmutating set { engine.selectedPlanItemId = newValue }
+    }
     @State private var showingEventTimes = false
-    @State private var commandActive = false
-    @State private var commandText = ""
     #if os(macOS) || os(iOS)
     @State private var referenceRequest: RunSheetReferenceRequest?
     #endif
@@ -109,7 +114,7 @@ public struct ServiceFlowView: View {
                 #endif
 
                 #if os(macOS) || os(iOS)
-                Button(action: { commandActive.toggle() }) {
+                Button(action: { engine.isCommandBarOpen.toggle() }) {
                     Label("Command", systemImage: "terminal")
                 }
                 .headerActionPrimary()
@@ -151,22 +156,6 @@ public struct ServiceFlowView: View {
             }
         }
         #if os(macOS) || os(iOS)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if commandActive {
-                CommandBarView(text: $commandText, selectedItemId: $selectedItemId) {
-                    commandActive = false
-                    commandText = ""
-                }
-            }
-        }
-        #if os(macOS)
-        .background(CommandBarKeyCapture(isEnabled: !commandActive) { handleTypedStart($0) })
-        #else
-        .onKeyPress(phases: .down) { press in
-            guard !commandActive, let typed = CommandBarKeys.startingText(for: press) else { return .ignored }
-            return handleTypedStart(typed) ? .handled : .ignored
-        }
-        #endif
         .modifier(RunSheetPlanInspectorModifier(
             isPresented: $planPanelVisible,
             onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
@@ -187,8 +176,8 @@ public struct ServiceFlowView: View {
         .onScreenshotTourSignal("runsheet.add-item") { _ in editorMode = .add }
         #if os(macOS) || os(iOS)
         .onScreenshotTourSignal("runsheet.command-bar") { _ in
-            commandText = "sto it 3 "
-            commandActive = true
+            engine.commandBarText = "sto it 3 "
+            engine.isCommandBarOpen = true
         }
         #endif
         .onScreenshotTourSignal("runsheet.edit-item") { id in
@@ -276,19 +265,6 @@ public struct ServiceFlowView: View {
         }
     }
 
-    #if os(macOS) || os(iOS)
-    private func handleTypedStart(_ typed: String) -> Bool {
-        if CommandBarKeys.isTimeEntryStart(typed) {
-            guard engine.activeTimerItem != nil else { return false }
-            engine.timeEntrySeed = typed
-        } else {
-            commandText = typed
-            commandActive = true
-        }
-        return true
-    }
-    #endif
-
     private var knownNoteCategories: [String] {
         var set = Set(engine.pcoNoteCategories.map(\.name))
         for item in engine.planItems {
@@ -330,7 +306,7 @@ public struct ServiceFlowView: View {
             VStack(spacing: 0) {
                 RunSheetTableView(
                     schedule: schedule,
-                    selection: $selectedItemId,
+                    selection: selectedItemBinding,
                     knownCategories: knownNoteCategories,
                     excludedLabel: engine.liveEventTimeLabel,
                     compact: nowNextPane,
@@ -430,7 +406,7 @@ public struct ServiceFlowView: View {
 
     private func flowList(_ schedule: RunSheetSchedule) -> some View {
         #if os(macOS)
-        List(selection: $selectedItemId) {
+        List(selection: selectedItemBinding) {
             flowListContent(schedule)
         }
         .onDeleteCommand {

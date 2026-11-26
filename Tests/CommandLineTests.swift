@@ -198,3 +198,62 @@ final class CommandLineExecutionTests: XCTestCase {
         XCTAssertEqual(engine.planItems[0].title, "Greeting")
     }
 }
+
+final class CommandLineActionTests: XCTestCase {
+    private func analyze(_ text: String, documents: Bool = false) -> CommandLineAnalysis {
+        CommandLine.analyze(text, context: CommandLineContext(itemCount: 4, documentActions: documents))
+    }
+
+    func testViewResolvesATabByPrefix() {
+        let result = analyze("vi ru ")
+        XCTAssertEqual(result.status, .ready)
+        XCTAssertEqual(result.statement?.action, .view(.serviceFlow))
+        XCTAssertEqual(result.pieces.map(\.text), ["View", "Run Sheet"])
+    }
+
+    func testViewNeedsATab() {
+        guard case .incomplete = analyze("view ").status else { return XCTFail("expected incomplete") }
+        XCTAssertEqual(analyze("view ").suggestions.map(\.word), ["Pagers", "Run Sheet", "Messages", "Settings"])
+    }
+
+    func testPlaybackWordsAreReadyAlone() {
+        XCTAssertEqual(analyze("pla ").statement?.action, .play)
+        XCTAssertEqual(analyze("pau ").statement?.action, .pause)
+        XCTAssertEqual(analyze("ne ").statement?.action, .next)
+        XCTAssertEqual(analyze("reset ").statement?.action, .reset)
+    }
+
+    func testAmbiguousPrefixBlocks() {
+        guard case .ambiguous = analyze("p ").status else { return XCTFail("expected ambiguous") }
+    }
+
+    func testDocumentWordsNeedAHandler() {
+        guard case .invalid = analyze("save ").status else { return XCTFail("expected invalid") }
+        XCTAssertEqual(analyze("save ", documents: true).statement?.action, .save)
+        XCTAssertFalse(analyze("").suggestions.map(\.word).contains("Save"))
+        XCTAssertTrue(analyze("", documents: true).suggestions.map(\.word).contains("Save"))
+    }
+
+    func testNothingFollowsAnAction() {
+        guard case .invalid = analyze("play item 3 ").status else { return XCTFail("expected invalid") }
+    }
+}
+
+@MainActor
+final class CommandLineActionExecutionTests: XCTestCase {
+    func testViewSwitchesTheTab() {
+        let engine = CueEngine()
+        let statement = CommandLine.analyze("view mess ", context: engine.commandLineContext(selectedItemId: nil)).statement!
+        engine.runCommand(statement, selectedItemId: nil)
+        XCTAssertEqual(engine.appMode, .messages)
+    }
+
+    func testDocumentActionsGoToTheHandler() {
+        let engine = CueEngine()
+        var received: CommandAction?
+        engine.documentCommandHandler = { received = $0 }
+        let statement = CommandLine.analyze("save ", context: engine.commandLineContext(selectedItemId: nil)).statement!
+        engine.runCommand(statement, selectedItemId: nil)
+        XCTAssertEqual(received, .save)
+    }
+}

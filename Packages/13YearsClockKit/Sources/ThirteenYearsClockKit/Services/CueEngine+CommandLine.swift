@@ -18,7 +18,8 @@ extension CueEngine {
             itemTypes: types,
             roles: roles.map(\.name),
             itemCount: planItems.count,
-            hasSelection: selectedItemId.flatMap { id in planItems.contains { $0.id == id } } ?? false
+            hasSelection: selectedItemId.flatMap { id in planItems.contains { $0.id == id } } ?? false,
+            documentActions: documentCommandHandler != nil
         )
     }
 
@@ -41,9 +42,11 @@ extension CueEngine {
 
     @discardableResult
     public func runCommand(_ statement: CommandStatement, selectedItemId: String?) -> CommandOutcome? {
+        if statement.verb == .action { return runAction(statement.action) }
         guard !isRemoteMirror else { return nil }
         let targets = commandTargetIds(statement, selectedItemId: selectedItemId)
         switch statement.verb {
+        case .action: return nil
         case .store: return storeItems(statement)
         case .edit:
             if statement.changesAttributes {
@@ -72,6 +75,34 @@ extension CueEngine {
         case .go:
             if let first = targets.first { goItem(id: first) }
             return CommandOutcome(message: "Go", selectItemId: nil)
+        }
+    }
+
+    private func runAction(_ action: CommandAction?) -> CommandOutcome? {
+        guard let action else { return nil }
+        switch action {
+        case .view(let mode):
+            appMode = mode
+            return CommandOutcome(message: mode.displayName, selectItemId: nil)
+        case .play:
+            if activeTimerItem?.isRunning != true { toggleTimerRunning() }
+            return CommandOutcome(message: "Playing", selectItemId: nil)
+        case .pause:
+            if activeTimerItem?.isRunning == true { toggleTimerRunning() }
+            return CommandOutcome(message: "Paused", selectItemId: nil)
+        case .next:
+            nextPlanItem()
+            return CommandOutcome(message: "Next", selectItemId: nil)
+        case .back:
+            previousPlanItem()
+            return CommandOutcome(message: "Back", selectItemId: nil)
+        case .reset:
+            resetTimer()
+            return CommandOutcome(message: "Reset", selectItemId: nil)
+        case .save, .open, .connect, .disconnect, .flash:
+            guard let documentCommandHandler else { return nil }
+            documentCommandHandler(action)
+            return CommandOutcome(message: "Done", selectItemId: nil)
         }
     }
 

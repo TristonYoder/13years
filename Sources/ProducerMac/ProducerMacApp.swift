@@ -17,6 +17,20 @@ struct ProducerMacApp: App {
         AppFonts.registerIfNeeded()
     }
 
+    private func installPaletteActions(on target: CueEngine) {
+        target.documentCommandHandler = { [documents, remoteHub, cueEngine, flashingWindow] action in
+            let active = remoteHub.session?.engine ?? cueEngine
+            switch action {
+            case .save: documents.save(active)
+            case .open: documents.open(cueEngine)
+            case .connect: remoteHub.isConnectPresented = true
+            case .disconnect: remoteHub.disconnect()
+            case .flash: flashingWindow.present(cueEngine: active)
+            default: break
+            }
+        }
+    }
+
     @ViewBuilder
     private var mainContent: some View {
         if let session = remoteHub.session {
@@ -24,9 +38,11 @@ struct ProducerMacApp: App {
                 remoteHub.disconnect()
             }
             .navigationTitle("Remote: \(session.displayName)")
+            .onAppear { installPaletteActions(on: session.engine) }
         } else {
             ProducerRootView()
                 .environmentObject(cueEngine)
+                .onAppear { installPaletteActions(on: cueEngine) }
                 .environment(\.documentSaveIndicator, documents.saveIndicator)
                 .disabled(documents.isLauncherPresented)
                 .overlay {

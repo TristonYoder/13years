@@ -37,8 +37,37 @@ public struct ProducerRootView: View {
         }
         #if os(macOS) || os(iOS)
         .modifier(MessageNotificationsModifier())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if engine.isCommandBarOpen {
+                CommandBarView(text: $engine.commandBarText, selectedItemId: $engine.selectedPlanItemId) {
+                    engine.isCommandBarOpen = false
+                    engine.commandBarText = ""
+                }
+            }
+        }
+        #if os(macOS)
+        .background(CommandBarKeyCapture(isEnabled: !engine.isCommandBarOpen) { handleTypedStart($0) })
+        #else
+        .onKeyPress(phases: .down) { press in
+            guard !engine.isCommandBarOpen, let typed = CommandBarKeys.startingText(for: press) else { return .ignored }
+            return handleTypedStart(typed) ? .handled : .ignored
+        }
+        #endif
         #endif
     }
+
+    #if os(macOS) || os(iOS)
+    private func handleTypedStart(_ typed: String) -> Bool {
+        if CommandBarKeys.isTimeEntryStart(typed) {
+            guard engine.activeTimerItem != nil else { return false }
+            engine.timeEntrySeed = typed
+        } else {
+            engine.commandBarText = typed
+            engine.isCommandBarOpen = true
+        }
+        return true
+    }
+    #endif
 
     private var adaptiveNavigation: some View {
         #if os(macOS)
