@@ -20,6 +20,8 @@ public struct ServiceFlowView: View {
     @State private var pendingDeleteItem: PCOTimerItem?
     @State private var selectedItemId: String?
     @State private var showingEventTimes = false
+    @State private var commandActive = false
+    @State private var commandText = ""
     #if os(macOS) || os(iOS)
     @State private var referenceRequest: RunSheetReferenceRequest?
     #endif
@@ -106,6 +108,14 @@ public struct ServiceFlowView: View {
                 .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
                 #endif
 
+                #if os(macOS) || os(iOS)
+                Button(action: { commandActive.toggle() }) {
+                    Label("Command", systemImage: "terminal")
+                }
+                .headerActionPrimary()
+                .help("Open the command bar. Typing anywhere on the run sheet opens it too.")
+                #endif
+
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")
                 }
@@ -141,6 +151,25 @@ public struct ServiceFlowView: View {
             }
         }
         #if os(macOS) || os(iOS)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if commandActive {
+                CommandBarView(text: $commandText, selectedItemId: $selectedItemId) {
+                    commandActive = false
+                    commandText = ""
+                }
+            }
+        }
+        .onKeyPress(phases: .down) { press in
+            guard !commandActive, let typed = CommandBarKeys.startingText(for: press) else { return .ignored }
+            if CommandBarKeys.isTimeEntryStart(typed) {
+                guard engine.activeTimerItem != nil else { return .ignored }
+                engine.timeEntrySeed = typed
+            } else {
+                commandText = typed
+                commandActive = true
+            }
+            return .handled
+        }
         .modifier(RunSheetPlanInspectorModifier(
             isPresented: $planPanelVisible,
             onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
@@ -159,6 +188,12 @@ public struct ServiceFlowView: View {
         }
         #endif
         .onScreenshotTourSignal("runsheet.add-item") { _ in editorMode = .add }
+        #if os(macOS) || os(iOS)
+        .onScreenshotTourSignal("runsheet.command-bar") { _ in
+            commandText = "sto it 3 "
+            commandActive = true
+        }
+        #endif
         .onScreenshotTourSignal("runsheet.edit-item") { id in
             if let item = engine.planItems.first(where: { $0.id == id }) { editorMode = .edit(item) }
         }

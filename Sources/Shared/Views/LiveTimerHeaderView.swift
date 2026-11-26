@@ -37,6 +37,7 @@ public struct LiveTimerHeaderView: View {
     @EnvironmentObject var engine: CueEngine
     @Environment(\.documentSaveIndicator) private var saveIndicator
     @State private var isEditingTimer: Bool = false
+    @State private var timeEntryInitialText = ""
 
     public init() {}
 
@@ -244,12 +245,22 @@ public struct LiveTimerHeaderView: View {
                 isEditingTimer = true
             }
             .onScreenshotTourSignal("header.timer-keypad") { _ in isEditingTimer = true }
+            .onChange(of: engine.timeEntrySeed) { _, seed in
+                guard let seed else { return }
+                engine.timeEntrySeed = nil
+                timeEntryInitialText = seed
+                isEditingTimer = true
+            }
+            .onChange(of: isEditingTimer) { _, editing in
+                if !editing { timeEntryInitialText = "" }
+            }
             .timeEntryPopover(
                 isPresented: $isEditingTimer,
                 previewBaseSeconds: item.remainingSeconds,
                 previewElapsedSeconds: item.elapsedSeconds,
                 hourFormatThreshold: engine.hourFormatThreshold,
-                clockFormat: engine.clockFormat
+                clockFormat: engine.clockFormat,
+                initialText: timeEntryInitialText
             ) { action in
                 switch action {
                 case .setAbsolute(let seconds):

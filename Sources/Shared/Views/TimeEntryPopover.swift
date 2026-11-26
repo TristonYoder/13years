@@ -12,6 +12,7 @@ public extension View {
         hourFormatThreshold: HourFormatThreshold = .over90Minutes,
         clockFormat: ClockFormat,
         allowsEndAt: Bool = true,
+        initialText: String = "",
         onCommit: @escaping (TimerInputParser.Action) -> Void
     ) -> some View {
         modifier(TimeEntryPopoverModifier(
@@ -22,6 +23,7 @@ public extension View {
             hourFormatThreshold: hourFormatThreshold,
             clockFormat: clockFormat,
             allowsEndAt: allowsEndAt,
+            initialText: initialText,
             onCommit: onCommit
         ))
     }
@@ -62,6 +64,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
     let hourFormatThreshold: HourFormatThreshold
     let clockFormat: ClockFormat
     let allowsEndAt: Bool
+    let initialText: String
     let onCommit: (TimerInputParser.Action) -> Void
 
     @State private var editBuffer: String = ""
@@ -73,7 +76,7 @@ private struct TimeEntryPopoverModifier: ViewModifier {
         content
             .onChange(of: isPresented) { _, presented in
                 if presented {
-                    editBuffer = ""
+                    editBuffer = initialText
                     isEndAt = false
                     meridiem = nil
                 }

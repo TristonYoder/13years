@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Triston Yoder
+
+import Foundation
+
+public struct CommandOutcome: Equatable, Sendable {
+    public var message: String
+    public var selectItemId: String?
+}
+
+extension CueEngine {
+    public func commandLineContext(selectedItemId: String?) -> CommandLineContext {
+        var types = ItemCommandParser.knownTypes
+        for item in planItems where !types.contains(where: { $0.caseInsensitiveCompare(item.itemType) == .orderedSame }) {
+            types.append(item.itemType)
+        }
+        return CommandLineContext(
+            itemTypes: types,
+            roles: roles.map(\.name),
+            itemCount: planItems.count,
+            hasSelection: selectedItemId.flatMap { id in planItems.contains { $0.id == id } } ?? false
+        )
+    }
+
+    public func commandTargetIds(_ statement: CommandStatement, selectedItemId: String?) -> [String] {
+        if let position = statement.position {
+            let lower = max(position - 1, 0)
+            let upper = min(lower + statement.count, planItems.count)
+            guard lower < upper else { return [] }
+            return planItems[lower..<upper].map(\.id)
+        }
+        if let selectedItemId, planItems.contains(where: { $0.id == selectedItemId }) { return [selectedItemId] }
+        return []
+    }
+
+    public func commandConfirmationPrompt(_ statement: CommandStatement, selectedItemId: String?) -> String? {
+        guard statement.verb == .delete else { return nil }
+        let count = commandTargetIds(statement, selectedItemId: selectedItemId).count
+        return count == 1 ? "Delete 1 item? Press Enter again." : "Delete \(count) items? Press Enter again."
+    }
+
+    @discardableResult
+    public func runCommand(_ statement: CommandStatement, selectedItemId: String?) -> CommandOutcome? {
+        guard !isRemoteMirror else { return nil }
+        let targets = commandTargetIds(statement, selectedItemId: selectedItemId)
+        switch statement.verb {
+        case .store: return storeItems(statement)
+        case .edit:
+            if statement.changesAttributes {
+                targets.forEach { applyAttributes(statement, to: $0) }
+                return CommandOutcome(message: summary("Updated", targets.count), selectItemId: nil)
+            }
+            return CommandOutcome(message: "Selected", selectItemId: targets.first)
+        case .label:
+            targets.forEach { applyAttributes(statement, to: $0) }
+            return CommandOutcome(message: summary("Renamed", targets.count), selectItemId: nil)
+        case .move:
+            guard let target = statement.target else { return nil }
+            moveItems(ids: targets, toPosition: target)
+            return CommandOutcome(message: summary("Moved", targets.count), selectItemId: targets.first)
+        case .copy:
+            guard let target = statement.target else { return nil }
+            let copies = targets.compactMap { duplicateItem(id: $0) }
+            moveItems(ids: copies, toPosition: target)
+            return CommandOutcome(message: summary("Copied", copies.count), selectItemId: copies.first)
+        case .delete:
+            targets.forEach { removePlanItem(id: $0) }
+            return CommandOutcome(message: summary("Deleted", targets.count), selectItemId: nil)
+        case .standby:
+            targets.forEach { standbyItem(id: $0) }
+            return CommandOutcome(message: "Standby", selectItemId: nil)
+        case .go:
+            if let first = targets.first { goItem(id: first) }
+            return CommandOutcome(message: "Go", selectItemId: nil)
+        }
+    }
+
+    private func summary(_ verb: String, _ count: Int) -> String {
+        "\(verb) \(count) \(count == 1 ? "item" : "items")"
+    }
+
+    private func storeItems(_ statement: CommandStatement) -> CommandOutcome {
+        let countBefore = planItems.count
+        var created: [String] = []
+        for _ in 0..<max(1, statement.count) {
+            let length = statement.resolvedLength(base: 5 * 60)
+            let type = statement.type ?? ItemCommandParser.knownTypes[0]
+            guard let id = addPlanItem(title: statement.title ?? "New item", itemType: type, lengthInSeconds: length) else { continue }
+            setItemTrigger(id: id, statement.trigger)
+            setItemCueRoles(id: id, roleIds(for: statement.roles))
+            created.append(id)
+        }
+        if let position = statement.position, !created.isEmpty {
+            let target = min(max(position - 1, 0), countBefore)
+            if target < countBefore {
+                movePlanItems(fromOffsets: IndexSet(countBefore..<(countBefore + created.count)), toOffset: target)
+            }
+        }
+        return CommandOutcome(message: summary("Stored", created.count), selectItemId: created.first)
+    }
+
+    private func applyAttributes(_ statement: CommandStatement, to id: String) {
+        guard let item = planItems.first(where: { $0.id == id }) else { return }
+        if statement.title != nil || statement.type != nil || statement.length != nil {
+            updatePlanItem(
+                id: id,
+                title: statement.title ?? item.title,
+                itemType: statement.type ?? item.itemType,
+                lengthInSeconds: statement.resolvedLength(base: item.lengthInSeconds)
+            )
+        }
+        if let trigger = statement.trigger { setItemTrigger(id: id, trigger) }
+        if !statement.roles.isEmpty { setItemCueRoles(id: id, roleIds(for: statement.roles)) }
+    }
+
+    private func roleIds(for names: [String]) -> [String] {
+        names.compactMap { name in roles.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.id }
+    }
+
+    private func duplicateItem(id: String) -> String? {
+        guard let item = planItems.first(where: { $0.id == id }) else { return nil }
+        guard let newId = addPlanItem(title: item.title, itemType: item.itemType, lengthInSeconds: item.lengthInSeconds, isDurationActual: item.isDurationActual) else { return nil }
+        updatePlanItem(
+            id: newId,
+            title: item.title,
+            itemType: item.itemType,
+            lengthInSeconds: item.lengthInSeconds,
+            notes: item.notes,
+            description: item.details?.description,
+            servicePosition: item.details?.servicePosition
+        )
+        setItemTrigger(id: newId, item.trigger)
+        setItemCueRoles(id: newId, item.cueRoleIds)
+        return newId
+    }
+
+    private func moveItems(ids: [String], toPosition position: Int) {
+        let indices = ids.compactMap { id in planItems.firstIndex { $0.id == id } }.sorted()
+        guard let first = indices.first, !indices.isEmpty else { return }
+        let finalStart = min(max(position - 1, 0), planItems.count - indices.count)
+        guard finalStart != first else { return }
+        let offset = finalStart > first ? finalStart + indices.count : finalStart
+        movePlanItems(fromOffsets: IndexSet(indices), toOffset: offset)
+    }
+}

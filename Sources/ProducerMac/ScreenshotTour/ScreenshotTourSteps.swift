@@ -90,6 +90,12 @@ extension ProducerScreenshotTour {
             ScreenshotTourSignal.post("runsheet.add-item")
             _ = try await waitForSheet()
         }))
+        list.append(Step(id: "runsheet.command-bar", title: "Command bar", capture: .appWindows, prepare: { [unowned self] in
+            showRunSheet(layout: "list")
+            await pause(0.4)
+            ScreenshotTourSignal.post("runsheet.command-bar")
+            await pause(0.6)
+        }))
         list.append(Step(id: "runsheet.import-text", title: "Import Text sheet", capture: .appWindows, prepare: { [unowned self] in
             showRunSheet(layout: "list")
             await pause(0.4)

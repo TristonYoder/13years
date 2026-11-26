@@ -108,6 +108,7 @@ public final class CueEngine: ObservableObject {
     }
     private static let clockFormatDefaultsKey = "clockFormat"
     @Published public var followByDefault = false
+    @Published public var timeEntrySeed: String?
     /// Title of the current plan, stored once. Items no longer carry their own copy.
     @Published public var planTitle: String?
     /// What a schedule that loads a Planning Center plan still has to do once the plan is in.
