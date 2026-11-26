@@ -114,18 +114,19 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertEqual(engine.timerColorScale(for: engine.planItems[0]).onTimeHex, "111111")
     }
 
-    func testOnlyCustomizedScalesGoToPagers() {
+    func testTheScaleInEffectAlwaysGoesToPagersEvenTheStandardOne() throws {
         let engine = CueEngine()
         engine.importFlow(title: nil, items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60)])
-        XCTAssertNil(engine.pagerTimerColors)
+        XCTAssertEqual(engine.pagerTimerColors, .standard)
         engine.setTimerColorScale(scale)
         XCTAssertEqual(engine.pagerTimerColors, scale)
-        let packet = CuePacket(type: .timerUpdate, senderId: "x", timerItem: engine.planItems[0])
-        var withColors = packet
-        withColors.timerColors = scale
-        let decoded = try? JSONDecoder().decode(CuePacket.self, from: JSONEncoder().encode(withColors))
-        XCTAssertEqual(decoded?.timerColors, scale)
-        XCTAssertNil(try? JSONDecoder().decode(CuePacket.self, from: JSONEncoder().encode(packet)).timerColors)
+        var packet = CuePacket(type: .timerUpdate, senderId: "x", timerItem: engine.planItems[0])
+        packet.timerColors = engine.pagerTimerColors
+        let decoded = try JSONDecoder().decode(CuePacket.self, from: JSONEncoder().encode(packet))
+        XCTAssertEqual(decoded.timerColors, scale)
+        // A packet with no scale decodes with none: receivers do not make one up.
+        let bare = CuePacket(type: .timerUpdate, senderId: "x", timerItem: engine.planItems[0])
+        XCTAssertNil(try JSONDecoder().decode(CuePacket.self, from: JSONEncoder().encode(bare)).timerColors)
     }
 
     func testScaleSurvivesADocumentRoundTripAndTheControlAPI() throws {
@@ -154,11 +155,13 @@ final class PagerTimerColorTests: XCTestCase {
         )
     }
 
-    func testPagersWithNoScaleUseTheStandardOvertimeRed() {
+    func testPagersColorNothingUntilTheProducerSendsAScale() {
         let over = PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, elapsedSeconds: 70)
-        let under = PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, elapsedSeconds: 10)
-        XCTAssertEqual(state(item: over).timerColorHex, "CC1717")
-        XCTAssertNil(state(item: under).timerColorHex)
+        XCTAssertNil(state(item: over).timerColorHex)
+        XCTAssertEqual(state(item: over).timerEffect, TimerEffect.none)
+        XCTAssertEqual(state(item: over, colors: .standard).timerColorHex, "CC1717")
+        // Ten seconds over has passed the standard scale's deeper level (3 s), which pulses.
+        XCTAssertEqual(state(item: over, colors: .standard).timerEffect, .pulse)
     }
 
     func testAnOverridingScaleReplacesTheStandardOne() {

@@ -16,14 +16,14 @@ extension CueEngine {
     private var resolvesTimerColorsLocally: Bool { isMasterServer && !isRemoteMirror }
 
     /// The color to draw an item's countdown in, or nil for the normal text color. The producer resolves its own
-    /// scales; a pager or mirror uses the one the producer sent, or the standard scale when none came.
+    /// scales; a pager or mirror uses only the one the producer sent, and colors nothing when none came.
     public func timerColorHex(for item: PCOTimerItem) -> String? {
         timerStyle(for: item).colorHex
     }
 
     /// The countdown's color and effect for an item right now.
     public func timerStyle(for item: PCOTimerItem) -> (colorHex: String?, effect: TimerEffect) {
-        let scale = resolvesTimerColorsLocally ? timerColorScale(for: item) : (receivedTimerColors ?? .standard)
+        guard let scale = resolvesTimerColorsLocally ? timerColorScale(for: item) : receivedTimerColors else { return (nil, .none) }
         return scale.style(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
     }
 
@@ -32,11 +32,10 @@ extension CueEngine {
         resolvesTimerColorsLocally ? broadcastTimerColors : receivedTimerColors
     }
 
-    /// What goes out to pagers and mirrors for the active item. The standard scale is not sent: receivers assume it.
+    /// What goes out to pagers and mirrors for the active item: always the scale in effect, the standard one
+    /// included, because receivers never assume one.
     var broadcastTimerColors: TimerColorScale? {
-        guard let item = activeTimerItem else { return nil }
-        let scale = timerColorScale(for: item)
-        return scale.isStandard ? nil : scale
+        activeTimerItem.map { timerColorScale(for: $0) }
     }
 
     func timerColorsDidChange() {

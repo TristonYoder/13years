@@ -259,6 +259,7 @@ extension CueEngine {
         var messages = Array(SyncHash.sortedNewestFirst(recentMessages).prefix(Self.catchUpMessageLimit))
         var pong = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: messages)
         pong.nextItem = nextItemForBroadcast
+        pong.timerColors = broadcastTimerColors
         pong.proto = CuePacket.protocolVersion
         pong.rev = syncV2.rev
         pong.epoch = syncV2.epoch
@@ -286,6 +287,7 @@ extension CueEngine {
         let pong = makeV2CatchUpPong(to: requester)
         var anchorPacket = CuePacket(type: .timerAnchor, senderId: deviceId, timerItem: syncV2.anchor == nil ? nil : activeTimerItemForBroadcast)
         anchorPacket.nextItem = syncV2.anchor == nil ? nil : nextItemForBroadcast
+        anchorPacket.timerColors = syncV2.anchor == nil ? nil : broadcastTimerColors
         anchorPacket.rev = syncV2.rev
         anchorPacket.epoch = syncV2.epoch
         anchorPacket.to = requester

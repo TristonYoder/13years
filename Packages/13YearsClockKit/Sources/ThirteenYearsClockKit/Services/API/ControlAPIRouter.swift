@@ -1642,7 +1642,7 @@ public final class ControlAPIRouter {
             clockFormat: engine.clockFormat.rawValue,
             controlAPIPort: engine.controlAPIPort,
             connectedAPIClients: connectedClientCount(),
-            timerColors: engine.timerColorScale.isStandard ? nil : engine.timerColorScale
+            timerColors: engine.timerColorScale
         )
     }
 

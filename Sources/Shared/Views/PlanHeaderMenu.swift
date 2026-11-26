@@ -22,25 +22,60 @@ struct PlanHeaderMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 10) {
-                // A Menu label collapses to its first Text on macOS, so the time is a sibling, not part of the label.
-                VStack(alignment: .leading, spacing: 1) {
-                    planMenu
-                    if let time = currentTimeText {
-                        Text(time)
-                            .font(.clock(.callout, weight: .regular))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .padding(.leading, 5)
-                    }
-                }
+            HStack(alignment: .center, spacing: 8) {
+                planMenu
                 statusTag
             }
-            summary
+            HStack(alignment: .center, spacing: 14) {
+                timeCard
+                    .frame(width: 118)
+                summary
+            }
         }
         .sheet(isPresented: $showingPlanPicker) { PCOPlanPickerView() }
         .sheet(isPresented: $showingEventTimes) { EventTimesView() }
     }
+
+    /// The running event or rehearsal, in the same card the plan popover shows. Click it to change.
+    @ViewBuilder
+    private var timeCard: some View {
+        let card = Group {
+            if engine.isRehearsalMode {
+                let time = engine.rehearsalPlanTimes.first(where: { $0.id == engine.rehearsalPlanTimeId })
+                let name = time?.name.flatMap { $0.isEmpty ? nil : $0 }
+                PlanTimeCard(
+                    title: name ?? time?.startsAt.map { Self.dayFormatter.string(from: $0) } ?? "Rehearsal",
+                    detail: nil,
+                    time: time?.startsAt.map { engine.clockFormat.string(from: $0) } ?? "Rehearsal",
+                    badge: "REHEARSING",
+                    tint: AppPalette.rehearsal,
+                    isSelected: true,
+                    fill: AppPalette.rehearsalFill
+                )
+            } else if let time = engine.liveEventTime ?? engine.eventTimes.first {
+                let isLive = engine.liveEventTime != nil
+                PlanTimeCard(
+                    title: time.name ?? time.day?.formatted ?? "",
+                    detail: time.name != nil ? time.day?.formatted : nil,
+                    time: time.startTime?.formatted(engine.clockFormat) ?? time.name ?? "Event",
+                    badge: isLive ? "LIVE" : nil,
+                    tint: AppPalette.positive,
+                    isSelected: isLive
+                )
+            }
+        }
+        if engine.isRehearsalMode || engine.liveEventTime != nil || !engine.eventTimes.isEmpty {
+            Button { showingPopover.toggle() } label: { card }
+                .buttonStyle(.plain)
+                .help("Change the event time or rehearse")
+        }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
+        return formatter
+    }()
 
     /// Planned length, planned end and pace, moved up from the run sheet footer so every screen shows them.
     @ViewBuilder
@@ -70,14 +105,6 @@ struct PlanHeaderMenu: View {
 
     private func duration(_ seconds: Int) -> String {
         TimeFormatting.string(forSeconds: seconds, threshold: engine.hourFormatThreshold)
-    }
-
-    /// The time shown under the plan name: the rehearsal time while rehearsing, otherwise the live event time.
-    private var currentTimeText: String? {
-        if engine.isRehearsalMode {
-            return engine.rehearsalLabel.replacingOccurrences(of: "Rehearsal \u{00B7} ", with: "")
-        }
-        return engine.liveEventTime?.displayName(engine.clockFormat) ?? engine.eventTimes.first?.displayName(engine.clockFormat)
     }
 
     /// One popover for the whole plan: event times as cards, rehearsal times beneath, live sync, plan actions.
@@ -119,18 +146,10 @@ struct PlanHeaderMenu: View {
         .help("Plan and event time: switch event, rehearse, change the plan, or sync with Planning Center Live")
     }
 
-    /// Rehearsal replaces the PCO Live tag: you are either rehearsing or in the event.
+    /// The PCO Live tag. Rehearsal shows as the purple card instead, since you are either rehearsing or in the event.
     @ViewBuilder
     private var statusTag: some View {
-        if engine.isRehearsalMode {
-            Label("Rehearsal", systemImage: "theatermasks")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AppPalette.rehearsal)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(AppPalette.rehearsalFill, in: Capsule())
-                .help("Rehearsal mode: actual times aren't recorded and Planning Center Live isn't stepped")
-        } else if engine.isPCOLiveSyncEnabled {
+        if engine.isPCOLiveSyncEnabled && !engine.isRehearsalMode {
             Label("PCO Live", systemImage: "dot.radiowaves.left.and.right")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AppPalette.positive)
@@ -257,7 +276,7 @@ private struct PlanPopover: View {
             if engine.isRehearsalMode { engine.setRehearsalMode(false) }
             if engine.liveEventTime?.id != time.id { engine.setLiveEventTime(id: time.id) }
         } label: {
-            card(
+            PlanTimeCard(
                 title: time.name ?? time.day?.formatted ?? "",
                 detail: time.name != nil ? time.day?.formatted : nil,
                 time: time.startTime?.formatted(engine.clockFormat) ?? time.name ?? "Event",
@@ -275,7 +294,7 @@ private struct PlanPopover: View {
         return Button {
             engine.setRehearsalMode(true, planTimeId: time.id)
         } label: {
-            card(
+            PlanTimeCard(
                 title: time.name.flatMap { $0.isEmpty ? nil : $0 } ?? time.startsAt.map { Self.dayFormatter.string(from: $0) } ?? "",
                 detail: time.name.flatMap { $0.isEmpty ? nil : $0 } != nil ? time.startsAt.map { Self.dayFormatter.string(from: $0) } : nil,
                 time: time.startsAt.map { engine.clockFormat.string(from: $0) } ?? "Rehearsal",
@@ -288,7 +307,26 @@ private struct PlanPopover: View {
         .buttonStyle(.plain)
     }
 
-    private func card(title: String, detail: String?, time: String, badge: String?, tint: Color, isSelected: Bool, fill: Color? = nil) -> some View {
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
+        return formatter
+    }()
+}
+
+/// An event or rehearsal time as a card: the name or day small on top, the time large in the clock font and a
+/// bold badge beneath (LIVE, REHEARSING), outlined in its color when it is the one running. Used in the plan
+/// popover and in the header, so they read the same.
+struct PlanTimeCard: View {
+    let title: String
+    let detail: String?
+    let time: String
+    let badge: String?
+    let tint: Color
+    let isSelected: Bool
+    var fill: Color?
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
                 .font(.caption)
@@ -314,11 +352,5 @@ private struct PlanPopover: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSelected ? tint : Color.clear, lineWidth: 2))
         .contentShape(Rectangle())
     }
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
-        return formatter
-    }()
 }
 #endif

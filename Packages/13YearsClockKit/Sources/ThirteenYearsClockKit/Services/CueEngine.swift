@@ -2535,6 +2535,7 @@ public final class CueEngine: ObservableObject {
         if isMasterServer, activeTimerItem?.isRunning == true, heartbeatTickCount % 5 == 0 {
             var packet = CuePacket(type: .timerUpdate, senderId: deviceId, timerItem: activeTimerItemForBroadcast)
             packet.nextItem = nextItemForBroadcast
+            packet.timerColors = broadcastTimerColors
             stampUtcOffset(&packet)
             emit(packet, .lan(.legacy))
             emit(packet, .relay)
@@ -2572,6 +2573,7 @@ public final class CueEngine: ObservableObject {
     private func broadcastLegacyState() {
         var packet = CuePacket(type: .cueUpdate, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         AppLog.cue.debug("broadcastState() — isMasterServer=\(self.isMasterServer, privacy: .public)")
 
         if isMasterServer {
@@ -2584,6 +2586,7 @@ public final class CueEngine: ObservableObject {
     func broadcastCatchUp() {
         var packet = CuePacket(type: .pong, senderId: deviceId, roleCues: roles, timerItem: activeTimerItemForBroadcast, messages: recentMessages)
         packet.nextItem = nextItemForBroadcast
+        packet.timerColors = broadcastTimerColors
         stampUtcOffset(&packet)
         AppLog.cue.debug("broadcastCatchUp() — isMasterServer=\(self.isMasterServer, privacy: .public) messages=\(self.recentMessages.count, privacy: .public)")
 
