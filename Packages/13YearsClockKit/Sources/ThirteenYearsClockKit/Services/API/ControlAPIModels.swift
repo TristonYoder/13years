@@ -511,6 +511,10 @@ public enum ControlAPIRequests {
         public var entries: [ControlAPIState.EventTimeStatus.Entry]
     }
 
+    public struct PlanTitleBody: Decodable, Sendable {
+        public var title: String?
+    }
+
     public struct IdBody: Decodable, Sendable {
         public var id: String?
     }

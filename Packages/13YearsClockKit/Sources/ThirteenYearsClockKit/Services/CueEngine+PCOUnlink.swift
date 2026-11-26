@@ -7,6 +7,21 @@ extension CueEngine {
     /// Whether the loaded plan is synced from a Planning Center plan.
     public var isLinkedToPCOPlan: Bool { currentPCOPlanId != nil }
 
+    /// Names the plan. Only a plan that is not linked to Planning Center can be renamed here; a linked plan takes its
+    /// name from Planning Center. An empty name clears it.
+    public func setPlanTitle(_ title: String?) {
+        if isRemoteMirror {
+            remoteCommands?.send(.planTitle(title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
+            return
+        }
+        guard !isLinkedToPCOPlan else { return }
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        guard planTitle != value else { return }
+        planTitle = value
+        broadcastTimerUpdate()
+    }
+
     /// Cuts the link to Planning Center so the plan runs entirely in 13 Years. Items, notes, waypoints, the event
     /// times and the rehearsal times stay, now as ones you edit here; what stops is syncing, change polling, Live
     /// control, saving actual lengths back, and Planning Center owning the event and rehearsal times. Sync a plan

@@ -116,3 +116,34 @@ final class PCOUnlinkTests: XCTestCase {
         XCTAssertEqual(engine.planItems.count, 1)
     }
 }
+
+@MainActor
+final class PlanTitleEditingTests: XCTestCase {
+    func testAnUnlinkedPlanCanBeNamedAndRenamed() {
+        let engine = CueEngine()
+        engine.importFlow(title: nil, items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60)])
+        engine.setPlanTitle("  Sunday Service ")
+        XCTAssertEqual(engine.planTitle, "Sunday Service")
+        engine.setPlanTitle("   ")
+        XCTAssertNil(engine.planTitle)
+    }
+
+    func testALinkedPlanKeepsItsPlanningCenterName() {
+        let engine = CueEngine()
+        engine.importFlow(title: "Easter", items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60, pcoServiceTypeId: "st", pcoPlanId: "p")])
+        engine.setPlanTitle("Something else")
+        XCTAssertEqual(engine.planTitle, "Easter")
+        engine.unlinkPCOPlan()
+        engine.setPlanTitle("Our Easter")
+        XCTAssertEqual(engine.planTitle, "Our Easter")
+    }
+
+    func testThePlanTitleIsSetThroughTheControlAPI() throws {
+        let engine = CueEngine()
+        let router = ControlAPIRouter(engine: engine)
+        engine.importFlow(title: nil, items: [PCOTimerItem(id: "a", title: "A", itemType: "Item", lengthInSeconds: 60)])
+        let reply = router.handle(HTTPRequest(method: "PATCH", path: "/v1/plan/title", body: Data(#"{"title":"Wednesday"}"#.utf8)))
+        XCTAssertEqual(reply.status, 200)
+        XCTAssertEqual(engine.planTitle, "Wednesday")
+    }
+}

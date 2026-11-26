@@ -429,6 +429,17 @@ public final class ControlAPIRouter {
             engine.setActiveTimerActualOverride(isActual)
             return json(snapshot())
 
+        case ("plan", "title"):
+            guard allows(method, "PATCH", "PUT", "POST") else { return methodNotAllowed() }
+            guard let request = decode(ControlAPIRequests.PlanTitleBody.self, body) else { return badBody() }
+            guard !engine.isLinkedToPCOPlan else {
+                return Self.error(409, "The plan is linked to Planning Center", detail: "A linked plan takes its name from Planning Center. POST /v1/pco/unlink first.")
+            }
+            let title = (request.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if let tooLong = tooLong(title, ContentLimits.title, "Plan title") { return tooLong }
+            engine.setPlanTitle(title)
+            return json(snapshot())
+
         case ("plan", "next"):
             guard allows(method, "POST") else { return methodNotAllowed() }
             engine.nextPlanItem(startTimer: decode(ControlAPIRequests.PlanStepBody.self, body)?.startTimer ?? true)

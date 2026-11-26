@@ -16,7 +16,7 @@ struct PlanHeaderMenu: View {
     @State private var confirmingUnlink = false
 
     private var planName: String {
-        engine.pcoPlanContext?.title ?? engine.planTitle ?? "No plan"
+        engine.pcoPlanContext?.title ?? engine.planTitle ?? (engine.planItems.isEmpty ? "No plan" : "Untitled plan")
     }
 
     private var hasPCOPlan: Bool { engine.planItems.first?.pcoPlanId != nil }
@@ -131,6 +131,7 @@ struct PlanHeaderMenu: View {
         .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
             PlanPopover(
                 planName: planName,
+                isLinked: engine.isLinkedToPCOPlan,
                 subtitle: engine.pcoPlanContext?.dates,
                 hasPCOPlan: hasPCOPlan,
                 planPanelVisible: $planPanelVisible,
@@ -178,6 +179,7 @@ struct PlanHeaderMenu: View {
 private struct PlanPopover: View {
     @EnvironmentObject var engine: CueEngine
     let planName: String
+    let isLinked: Bool
     let subtitle: String?
     let hasPCOPlan: Bool
     @Binding var planPanelVisible: Bool
@@ -191,7 +193,11 @@ private struct PlanPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(planName).font(.headline).lineLimit(2)
+                if isLinked || engine.planItems.isEmpty {
+                    Text(planName).font(.headline).lineLimit(2)
+                } else {
+                    PlanNameField()
+                }
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 }
@@ -367,6 +373,25 @@ struct PlanTimeCard: View {
         .background(fill ?? Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSelected ? tint : Color.clear, lineWidth: 2))
         .contentShape(Rectangle())
+    }
+}
+
+/// The plan's name, editable when it is not linked to Planning Center. Saved on Return or when focus leaves.
+private struct PlanNameField: View {
+    @EnvironmentObject var engine: CueEngine
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Name this plan", text: $draft)
+            .textFieldStyle(.plain)
+            .font(.headline)
+            .focused($focused)
+            .onAppear { draft = engine.planTitle ?? "" }
+            .onSubmit { engine.setPlanTitle(draft) }
+            .onChange(of: focused) { _, isFocused in if !isFocused { engine.setPlanTitle(draft) } }
+            .onChange(of: engine.planTitle) { _, title in if !focused { draft = title ?? "" } }
+            .help("Name this plan")
     }
 }
 #endif

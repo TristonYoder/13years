@@ -63,6 +63,7 @@ public enum RemoteCommand: Equatable, Sendable {
     case pcoRefreshServiceTypes
     case pcoSignOut
     case pcoUnlink
+    case planTitle(String)
     case pcoAuthorize
     case pcoAuthorizeComplete(code: String, state: String)
     case pcoRefreshPlans
@@ -202,6 +203,8 @@ public enum RemoteCommand: Equatable, Sendable {
             return Self.post("pco/sign-out")
         case .pcoUnlink:
             return Self.post("pco/unlink")
+        case .planTitle(let title):
+            return Request(method: "PATCH", path: "/v1/plan/title", body: Self.json(["title": title]))
         case .pcoAuthorize:
             return Self.post("pco/authorize")
         case .pcoAuthorizeComplete(let code, let state):
