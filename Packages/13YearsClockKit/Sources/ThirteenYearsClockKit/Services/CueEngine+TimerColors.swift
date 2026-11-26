@@ -18,8 +18,13 @@ extension CueEngine {
     /// The color to draw an item's countdown in, or nil for the normal text color. The producer resolves its own
     /// scales; a pager or mirror uses the one the producer sent, or the standard scale when none came.
     public func timerColorHex(for item: PCOTimerItem) -> String? {
+        timerStyle(for: item).colorHex
+    }
+
+    /// The countdown's color and effect for an item right now.
+    public func timerStyle(for item: PCOTimerItem) -> (colorHex: String?, effect: TimerEffect) {
         let scale = resolvesTimerColorsLocally ? timerColorScale(for: item) : (receivedTimerColors ?? .standard)
-        return scale.colorHex(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
+        return scale.style(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
     }
 
     /// The scale a pager should draw with: the producer's own for its host preview, otherwise what it was sent.

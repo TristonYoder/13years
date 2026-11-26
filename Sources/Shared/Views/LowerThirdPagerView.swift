@@ -147,8 +147,7 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
     }
 
     private func strip(_ m: LowerThirdMetrics) -> some View {
-        let tint = presentation.timerTint(style: style)
-        let primary = tint ?? style.primaryText(for: state)
+        let primary = style.primaryText(for: state)
         let item = presentation.activeTimerItem
         return HStack(alignment: .center, spacing: m.gap) {
             if standingMessage == nil {
@@ -159,11 +158,9 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
                 messageCard(message, m)
             } else {
                 titleBlock(m, item: item, primary: primary)
-                    .colorMultiply(tint ?? .white)
             }
 
             countdownBlock(m, item: item, primary: primary)
-                .colorMultiply(tint ?? .white)
         }
     }
 
@@ -227,9 +224,10 @@ public struct LowerThirdPagerView<RoleMenu: View>: View {
             Text(text)
                 .font(.inter(size: m.fontSize, weight: .black))
                 .monospacedDigit()
-                .foregroundColor(primary)
+                .foregroundColor(hasCountdown ? (presentation.timerTint(style: style) ?? primary) : primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
+                .timerEffect(hasCountdown ? presentation.timerEffect : .none)
             Text((item?.isDurationActual ?? false) ? "ACTUAL" : "PROJECTED")
                 .font(.system(size: m.tagFontSize, weight: .bold))
                 .tracking(m.tagFontSize * 0.15)

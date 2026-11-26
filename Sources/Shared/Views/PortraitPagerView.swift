@@ -157,7 +157,6 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                 ViewThatFits(in: .vertical) {
                     ForEach(Array(PortraitMetrics.fitScales.enumerated()), id: \.offset) { _, scale in
                         currentCard(m, item: item, scale: scale)
-                            .colorMultiply(presentation.timerTint(style: style) ?? .white)
                     }
                 }
             }
@@ -180,9 +179,10 @@ public struct PortraitPagerView<RoleMenu: View>: View {
                 Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: presentation.hourFormatThreshold))
                     .font(.inter(size: m.countdownFontSize * scale, weight: .black))
                     .monospacedDigit()
-                    .foregroundColor(.white)
+                    .foregroundColor(presentation.timerTint(style: style) ?? .white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.3)
+                    .timerEffect(presentation.timerEffect)
 
                 Text(item.isDurationActual ? "ACTUAL" : "PROJECTED")
                     .font(.system(size: m.tagFontSize * scale, weight: .bold))
@@ -216,7 +216,6 @@ public struct PortraitPagerView<RoleMenu: View>: View {
             VStack(spacing: m.margin) {
                 if let next = presentation.nextItem {
                     nextCard(m, next: next)
-                        .colorMultiply(presentation.timerTint(style: style) ?? .white)
                 }
                 if let message = standingMessage {
                     PagerMessagePanel(

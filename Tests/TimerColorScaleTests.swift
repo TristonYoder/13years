@@ -37,6 +37,27 @@ final class TimerColorScaleTests: XCTestCase {
         XCTAssertEqual(scale.colorHex(remainingSeconds: 20, lengthSeconds: 1800), "FF9500")
     }
 
+    func testStopsAndOvertimeCarryEffectsAndOlderScalesDefaultToNone() throws {
+        let scale = TimerColorScale(
+            stops: [TimerColorStop(value: 20, unit: .seconds, colorHex: "FFD60A", effect: .blink)],
+            overtimeHex: "CC1717",
+            overtimeEffect: .glitch
+        )
+        XCTAssertEqual(scale.style(remainingSeconds: 10, lengthSeconds: 300).effect, .blink)
+        XCTAssertEqual(scale.style(remainingSeconds: 100, lengthSeconds: 300).effect, .none)
+        XCTAssertEqual(scale.style(remainingSeconds: -1, lengthSeconds: 300).effect, .glitch)
+
+        let decoded = try JSONDecoder().decode(TimerColorScale.self, from: JSONEncoder().encode(scale))
+        XCTAssertEqual(decoded.stops.first?.effect, .blink)
+        XCTAssertEqual(decoded.overtimeEffect, .glitch)
+
+        let old = #"{"stops":[{"id":"a","value":30,"unit":"seconds","colorHex":"FFD60A"}],"overtimeHex":"CC1717"}"#
+        let legacy = try JSONDecoder().decode(TimerColorScale.self, from: Data(old.utf8))
+        XCTAssertEqual(legacy.stops.first?.effect, TimerEffect.none)
+        XCTAssertEqual(legacy.overtimeEffect, TimerEffect.none)
+        XCTAssertFalse(String(data: try JSONEncoder().encode(TimerColorScale.standard), encoding: .utf8)!.contains("Effect"))
+    }
+
     func testEmptyJSONDecodesAsTheStandardScale() throws {
         let decoded = try JSONDecoder().decode(TimerColorScale.self, from: Data("{}".utf8))
         XCTAssertEqual(decoded, .standard)

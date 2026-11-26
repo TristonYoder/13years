@@ -74,11 +74,14 @@ struct TimerColorScaleEditor: View {
             }
             .disabled(scale.stops.count >= Self.maxStops)
 
-            colorRow("Overtime (default red)", hex: scale.overtimeHex) { scale.overtimeHex = $0 }
+            HStack(spacing: 10) {
+                colorRow("Overtime (default red)", hex: scale.overtimeHex) { scale.overtimeHex = $0 }
+                effectPicker($scale.overtimeEffect)
+            }
         } header: {
             Text("When time is running out")
         } footer: {
-            Text("A stop takes over once the time remaining falls to its value. With several stops reached, the one closest to zero wins. Overtime applies once the item runs past its length.")
+            Text("A stop takes over once the time remaining falls to its value. With several stops reached, the one closest to zero wins. Overtime applies once the item runs past its length. Each can add an effect (Pulse, Blink, Flicker, Glitch) to the current item's countdown; None is standard.")
         }
 
         Section {
@@ -104,6 +107,7 @@ struct TimerColorScaleEditor: View {
             .labelsHidden()
             .fixedSize()
             Spacer()
+            effectPicker(stop.effect)
             ColorPicker("Color", selection: Binding(
                 get: { Color(timerHex: stop.wrappedValue.colorHex) ?? .yellow },
                 set: { stop.wrappedValue.colorHex = $0.timerHex }
@@ -114,6 +118,15 @@ struct TimerColorScaleEditor: View {
             let limit = stop.wrappedValue.unit == .percent ? 100 : 86_400
             if value < 0 || value > limit { stop.wrappedValue.value = min(max(value, 0), limit) }
         }
+    }
+
+    private func effectPicker(_ effect: Binding<TimerEffect>) -> some View {
+        Picker("Effect", selection: effect) {
+            ForEach(TimerEffect.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+        .help("An effect on the countdown to grab attention. None is standard.")
     }
 
     private func colorRow(_ title: String, hex: String, set: @escaping (String) -> Void) -> some View {

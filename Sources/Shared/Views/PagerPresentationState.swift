@@ -59,9 +59,13 @@ public struct PagerPresentationState: Equatable, Sendable {
     }
 
     /// Six hex digits for the countdown's current color, or nil for the normal text color.
-    public var timerColorHex: String? {
-        guard let item = activeTimerItem, !item.isHeader else { return nil }
-        return (timerColors ?? .standard).colorHex(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
+    public var timerColorHex: String? { timerStyle.colorHex }
+
+    public var timerEffect: TimerEffect { timerStyle.effect }
+
+    private var timerStyle: (colorHex: String?, effect: TimerEffect) {
+        guard let item = activeTimerItem, !item.isHeader else { return (nil, .none) }
+        return (timerColors ?? .standard).style(remainingSeconds: item.remainingSeconds, lengthSeconds: item.lengthInSeconds)
     }
 
     public static func cueWordText(for state: CueState) -> String {

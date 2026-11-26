@@ -230,6 +230,7 @@ public struct LiveTimerHeaderView: View {
         Text(TimeFormatting.string(forSeconds: item.remainingSeconds, threshold: engine.hourFormatThreshold))
             .font(.inter(size: 52, weight: .black))
             .foregroundStyle(isEditingTimer ? Color.primary : readoutColor(for: item))
+            .timerEffect(isEditingTimer ? .none : engine.timerStyle(for: item).effect)
             #if !os(tvOS)
             .contentTransition(.numericText())
             #endif
@@ -273,6 +274,13 @@ struct PlanProgressRail: View {
         engine.activeTimerItem.flatMap { engine.timerColorHex(for: $0) }.flatMap(Color.init(timerHex:)) ?? Color.primary
     }
 
+    /// The scale's effect for the active item; an item that has run over pulses the rail even with none set.
+    private var effect: TimerEffect {
+        guard let item = engine.activeTimerItem else { return .none }
+        let effect = engine.timerStyle(for: item).effect
+        return effect == .none && item.isOvertime ? .pulse : effect
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
@@ -282,6 +290,7 @@ struct PlanProgressRail: View {
                     Rectangle()
                         .fill(LinearGradient(colors: [tint.opacity(0), tint.opacity(0.5)], startPoint: .leading, endPoint: .trailing))
                         .frame(width: width)
+                        .timerEffect(effect)
                         .overlay(alignment: .trailing) {
                             // A short, slightly brighter head so the leading edge reads without a hard line.
                             Rectangle()
