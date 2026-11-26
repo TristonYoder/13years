@@ -15,6 +15,7 @@ struct CommandBarView: View {
 
     @FocusState private var isFocused: Bool
     @State private var highlighted = 0
+    @State private var didNavigate = false
     @State private var armedText: String?
     @State private var feedback: String?
 
@@ -39,7 +40,8 @@ struct CommandBarView: View {
         .onAppear { focusAtEnd() }
         .onChange(of: text) { _, _ in
             highlighted = 0
-            armedText = nil
+            didNavigate = false
+            if armedText != text { armedText = nil }
             feedback = nil
         }
     }
@@ -196,6 +198,7 @@ struct CommandBarView: View {
     private func moveHighlight(_ delta: Int, count: Int) -> KeyPress.Result {
         guard count > 0 else { return .ignored }
         highlighted = min(max(highlighted + delta, 0), count - 1)
+        didNavigate = true
         return .handled
     }
 
@@ -205,7 +208,18 @@ struct CommandBarView: View {
     }
 
     private func submit(_ analysis: CommandLineAnalysis) {
-        guard let statement = analysis.statement else { return }
+        var chosen = analysis
+        let rows = Array(analysis.suggestions.prefix(maxRows))
+        if didNavigate, !rows.isEmpty {
+            let filled = analysis.completed(with: rows[min(highlighted, rows.count - 1)])
+            chosen = CommandLine.analyze(filled, context: engine.commandLineContext(selectedItemId: selectedItemId))
+            guard chosen.statement != nil else {
+                text = filled
+                return
+            }
+            text = filled
+        }
+        guard let statement = chosen.statement else { return }
         if engine.commandConfirmationPrompt(statement, selectedItemId: selectedItemId) != nil, armedText != text {
             armedText = text
             return
