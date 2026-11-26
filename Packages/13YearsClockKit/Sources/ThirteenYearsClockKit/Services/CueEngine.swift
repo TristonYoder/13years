@@ -490,7 +490,18 @@ public final class CueEngine: ObservableObject {
         startNetworking()
     }
 
-    public func signInWithPCO() {
+    /// Runs `action` straight away when Planning Center is connected; otherwise shows the
+    /// sign-in screen first and runs it once sign-in succeeds. Cancelling sign-in does nothing.
+    /// When driving a remote Producer the sign-in happens there, so `action` is not run.
+    public func whenPCOConnected(_ action: @escaping () -> Void) {
+        if isPCOConnected {
+            action()
+        } else {
+            signInWithPCO(then: action)
+        }
+    }
+
+    public func signInWithPCO(then onSuccess: (() -> Void)? = nil) {
         if isRemoteMirror {
             signInWithPCOThroughRemote()
             return
@@ -500,6 +511,7 @@ public final class CueEngine: ObservableObject {
                 let signIn = OAuthSignIn()
                 let tokens = try await signIn.signIn()
                 try await finishPCOSignIn(with: tokens)
+                onSuccess?()
             } catch {
                 AppLog.cue.error("CueEngine: PCO OAuth sign-in error: \(error.localizedDescription, privacy: .private)")
                 if case OAuthError.userCancelled = error { return }

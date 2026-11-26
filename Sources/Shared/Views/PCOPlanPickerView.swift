@@ -85,9 +85,13 @@ public struct PCOPlanPickerView: View {
     private var serviceTypeList: some View {
         List {
             if let error = engine.pcoLastError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(AppPalette.warning)
+                        .font(.footnote)
+                    Button("Sign in again") { engine.signInWithPCO() }
+                        .buttonStyle(.bordered)
+                }
             }
 
             if engine.pcoServiceTypes.isEmpty && engine.pcoLastError == nil {
@@ -171,9 +175,13 @@ public struct PCOPlanPickerView: View {
             #endif
 
             if let error = engine.pcoLastError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(AppPalette.warning)
+                        .font(.footnote)
+                    Button("Sign in again") { engine.signInWithPCO() }
+                        .buttonStyle(.bordered)
+                }
             }
 
             Section {

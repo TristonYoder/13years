@@ -85,7 +85,7 @@ public struct ServiceFlowView: View {
                 RunSheetActualsMenu()
 
                 #if !(os(macOS) || os(iOS))
-                Button(action: { showingPlanPicker = true }) {
+                Button(action: { engine.whenPCOConnected { showingPlanPicker = true } }) {
                     Label(engine.isPCOConnected ? "Change Plan" : "Sync PCO", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
@@ -129,7 +129,7 @@ public struct ServiceFlowView: View {
         #if os(macOS) || os(iOS)
         .modifier(RunSheetPlanInspectorModifier(
             isPresented: $planPanelVisible,
-            onChangePlan: { showingPlanPicker = true },
+            onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
             onEventTimes: { showingEventTimes = true }
         ))
         #endif
