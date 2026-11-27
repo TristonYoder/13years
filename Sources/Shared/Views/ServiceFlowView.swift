@@ -47,14 +47,14 @@ public struct ServiceFlowView: View {
     @AppStorage(RunSheetLayout.storageKey) private var layoutRaw = RunSheetLayout.list.rawValue
     @AppStorage(RunSheetPlanPanelStorage.key) private var planPanelVisible = false
     @SceneStorage("runSheetCollapsedHeaders") private var collapsedRaw = ""
-    #if os(macOS)
+    #if os(macOS) || os(iOS)
     @AppStorage("runSheetNowNextPane") private var nowNextPane = false
     #endif
 
     public init() {}
 
     private var layout: RunSheetLayout {
-        #if os(macOS)
+        #if os(macOS) || os(iOS)
         RunSheetLayout(rawValue: layoutRaw) ?? .list
         #else
         .list
@@ -70,7 +70,7 @@ public struct ServiceFlowView: View {
 
         VStack(spacing: 0) {
             SectionHeaderBar(mode: .serviceFlow, showsTitles: true) {
-                #if os(macOS)
+                #if os(macOS) || os(iOS)
                 Picker("Layout", selection: $layoutRaw) {
                     Label("List", systemImage: "list.bullet").tag(RunSheetLayout.list.rawValue)
                     Label("Table", systemImage: "tablecells").tag(RunSheetLayout.table.rawValue)
@@ -93,7 +93,7 @@ public struct ServiceFlowView: View {
                 }
                 #endif
 
-                #if os(macOS)
+                #if os(macOS) || os(iOS)
                 Menu {
                     RunSheetTimingToggles()
                 } label: {
@@ -101,7 +101,8 @@ public struct ServiceFlowView: View {
                 }
                 .headerActionPrimary()
                 .help("End times and Follow by default")
-                #elseif os(iOS)
+                #endif
+                #if os(iOS)
                 Button(action: { planPanelVisible.toggle() }) {
                     Label("Plan", systemImage: "sidebar.trailing")
                 }
@@ -316,7 +317,7 @@ public struct ServiceFlowView: View {
 
     @ViewBuilder
     private func tableLayout(_ schedule: RunSheetSchedule) -> some View {
-        #if os(macOS)
+        #if os(macOS) || os(iOS)
         GeometryReader { proxy in
         HStack(spacing: 0) {
             VStack(spacing: 0) {

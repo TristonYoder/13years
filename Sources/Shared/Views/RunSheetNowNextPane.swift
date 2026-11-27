@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import SwiftUI
 
 struct RunSheetKeyPill: View {
@@ -85,7 +85,7 @@ struct RunSheetNowNextPane: View {
             }
         }
         .frame(width: paneWidth)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.platformWindowBackground)
     }
 
     private var tabBar: some View {
@@ -100,7 +100,7 @@ struct RunSheetNowNextPane: View {
         .labelsHidden()
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.platformControlBackground)
     }
 
     private var widthHandle: some View {
@@ -109,9 +109,11 @@ struct RunSheetNowNextPane: View {
             .frame(maxHeight: .infinity)
             .overlay(alignment: .trailing) { Divider() }
             .contentShape(Rectangle())
+            #if os(macOS)
             .onHover { inside in
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
+            #endif
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
@@ -159,9 +161,11 @@ struct RunSheetNowNextPane: View {
             .frame(maxWidth: .infinity)
             .overlay { Divider() }
             .contentShape(Rectangle())
+            #if os(macOS)
             .onHover { inside in
                 if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
             }
+            #endif
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
@@ -242,7 +246,7 @@ private struct RunSheetDetailsPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.platformControlBackground)
     }
 
     private var emptyText: String {
@@ -350,7 +354,7 @@ private struct RunSheetFocusCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.platformControlBackground)
     }
 
     private var emptyState: some View {

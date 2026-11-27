@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import SwiftUI
 
 struct RunSheetTableView: View {
@@ -90,9 +90,13 @@ struct RunSheetTableView: View {
     private static let minimumColumnWidth: CGFloat = 24
 
     private static var verticalScrollerWidth: CGFloat {
+        #if os(macOS)
         NSScroller.preferredScrollerStyle == .legacy
             ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
             : 0
+        #else
+        0
+        #endif
     }
 
     private func userWidth(_ column: RunSheetTableColumn) -> CGFloat? {
@@ -205,9 +209,11 @@ struct RunSheetTableView: View {
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .offset(x: (Self.columnSpacing / 2) + 3)
+            #if os(macOS)
             .onHover { inside in
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
+            #endif
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
@@ -863,7 +869,9 @@ struct RunSheetColumnsMenu: View {
                 engine.runSheetLayout.hiddenColumns = ids.sorted()
             }
         ))
+        #if os(macOS)
         .toggleStyle(.checkbox)
+        #endif
     }
 
     private func highlightButton(_ column: RunSheetTableColumn) -> some View {
