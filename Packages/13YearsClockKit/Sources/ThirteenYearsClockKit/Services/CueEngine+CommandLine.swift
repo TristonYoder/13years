@@ -226,3 +226,14 @@ extension CommandStatement.Verb {
         }
     }
 }
+
+extension CueEngine {
+    public var lanProblemDescription: String? {
+        guard !isLANConnected, !isRemoteMirror else { return nil }
+        guard isMasterServer else { return "Not connected to the producer on this network. Retrying in the background." }
+        if server.isPortInUse {
+            return "Pagers can't connect: port \(LANUnicastServer.port) is already used by another copy of 13 Years or a test server. Quit it and this clears on its own."
+        }
+        return "Pagers can't connect: this Mac isn't reachable on the network. Retrying in the background."
+    }
+}

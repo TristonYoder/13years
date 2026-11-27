@@ -69,6 +69,8 @@ public final class LANUnicastServer: @unchecked Sendable {
 
     private let backend: LANServerBackend
 
+    public var isPortInUse: Bool { false }
+
     public var onPacketReceived: ((CuePacket, LANConnectionID) -> Void)? {
         get { backend.onPacketReceived }
         set { backend.onPacketReceived = newValue }

@@ -11,6 +11,7 @@ public final class LocalCueServer: @unchecked Sendable {
         get { channel.onPacketReceived }
         set { channel.onPacketReceived = newValue }
     }
+    public var isPortInUse: Bool { channel.isPortInUse }
     public var onStatusChanged: ((Bool) -> Void)? {
         get { channel.onStatusChanged }
         set { channel.onStatusChanged = newValue }

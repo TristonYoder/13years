@@ -17,6 +17,7 @@ public final class LANUnicastServer: @unchecked Sendable {
 
     public var onPacketReceived: ((CuePacket, LANConnectionID) -> Void)?
     public var onStatusChanged: ((Bool) -> Void)?
+    public private(set) var isPortInUse = false
 
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "app.13years.lanunicast.server", qos: .userInteractive)
@@ -126,9 +127,15 @@ public final class LANUnicastServer: @unchecked Sendable {
                 case .ready:
                     AppLog.networking.info("LANUnicastServer listening, advertising as \"\(Self.hostDisplayName(), privacy: .private)\"")
                     self?.bindAttempt = 0
-                    DispatchQueue.main.async { self?.onStatusChanged?(true) }
+                    DispatchQueue.main.async {
+                        self?.isPortInUse = false
+                        self?.onStatusChanged?(true)
+                    }
                 case .failed(let error):
                     AppLog.networking.error("LANUnicastServer listener failed: \(String(describing: error), privacy: .private)")
+                    var inUse = false
+                    if case .posix(let code) = error, code == .EADDRINUSE { inUse = true }
+                    DispatchQueue.main.async { self?.isPortInUse = inUse }
                     self?.retryAfterFailure()
                 default:
                     break

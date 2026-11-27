@@ -38,11 +38,14 @@ public struct ProducerRootView: View {
         #if os(macOS) || os(iOS)
         .modifier(MessageNotificationsModifier())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if engine.isCommandBarOpen {
-                CommandBarView(text: $engine.commandBarText, selectedItemId: $engine.selectedPlanItemId) {
-                    engine.isCommandBarOpen = false
-                    engine.commandBarText = ""
+            VStack(spacing: 0) {
+                if engine.isCommandBarOpen {
+                    CommandBarView(text: $engine.commandBarText, selectedItemId: $engine.selectedPlanItemId) {
+                        engine.isCommandBarOpen = false
+                        engine.commandBarText = ""
+                    }
                 }
+                StatusBarView()
             }
         }
         #if os(macOS)
