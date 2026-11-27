@@ -132,7 +132,7 @@ struct PlanHeaderMenu: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
+        .popover(isPresented: $showingPopover, arrowEdge: TimeEntryPopoverDefaults.arrowEdge) {
             PlanPopover(
                 planName: planName,
                 isLinked: engine.isLinkedToPCOPlan,

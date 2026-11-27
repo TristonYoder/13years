@@ -795,7 +795,7 @@ struct RunSheetColumnsMenu: View {
             Label("Columns", systemImage: "tablecells.badge.ellipsis")
         }
         .help("Choose which columns the run sheet table shows, and their order")
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+        .popover(isPresented: $isPresented, arrowEdge: TimeEntryPopoverDefaults.arrowEdge) {
             picker
         }
         .onScreenshotTourSignal("runsheet.columns") { _ in isPresented = true }
@@ -945,7 +945,7 @@ struct RunSheetFittingSequence: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Show the full sequence")
-        .popover(isPresented: $isShowingAll, arrowEdge: .bottom) {
+        .popover(isPresented: $isShowingAll, arrowEdge: TimeEntryPopoverDefaults.arrowEdge) {
             RunSheetFlowLayout(spacing: 4) {
                 ForEach(Array(sequence.enumerated()), id: \.offset) { _, section in
                     RunSheetSequenceChip(text: section)
