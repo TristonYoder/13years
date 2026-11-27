@@ -25,7 +25,11 @@ extension CueEngine {
             roles: roles.map(\.name),
             itemCount: planItems.count,
             hasSelection: selectedItemId.flatMap { id in planItems.contains { $0.id == id } } ?? false,
-            documentActions: documentCommandHandler != nil
+            documentActions: documentCommandHandler != nil,
+            waypoints: waypoints.map(\.name),
+            eventCount: eventTimes.count,
+            rehearsalCount: manualRehearsalTimes.count,
+            scheduleCount: serviceSchedules.count
         )
     }
 
@@ -41,14 +45,19 @@ extension CueEngine {
     }
 
     public func commandConfirmationPrompt(_ statement: CommandStatement, selectedItemId: String?) -> String? {
+        if statement.verb == .generic, statement.generic.key.hasPrefix("delete.") {
+            let noun = statement.generic.key.dropFirst("delete.".count)
+            return "Delete \(noun)? Press Enter again."
+        }
         guard statement.verb == .delete else { return nil }
         let count = commandTargetIds(statement, selectedItemId: selectedItemId).count
-        return count == 1 ? "Delete 1 item? Press Enter again." : "Delete \(count) items? Press Enter again."
+        return count == 1 ? "Delete 1 cue? Press Enter again." : "Delete \(count) cues? Press Enter again."
     }
 
     @discardableResult
     public func runCommand(_ statement: CommandStatement, selectedItemId: String?) -> CommandOutcome? {
         if statement.verb == .action { return runAction(statement.action) }
+        if statement.verb == .generic { return runGeneric(statement.generic) }
         guard !isRemoteMirror else { return nil }
         let targets = commandTargetIds(statement, selectedItemId: selectedItemId)
         if statement.verb.changesPlan, statement.verb != .edit || statement.changesAttributes {
@@ -56,7 +65,10 @@ extension CueEngine {
             if commandUndoStack.count > 20 { commandUndoStack.removeFirst() }
         }
         switch statement.verb {
-        case .action: return nil
+        case .action, .generic: return nil
+        case .skip, .unskip:
+            targets.forEach { setItemSkipped(id: $0, skipped: statement.verb == .skip) }
+            return CommandOutcome(message: summary(statement.verb == .skip ? "Skipped" : "Restored", targets.count), selectItemId: nil)
         case .store: return storeItems(statement)
         case .edit:
             if statement.changesAttributes {
@@ -111,6 +123,9 @@ extension CueEngine {
             return CommandOutcome(message: "Reset", selectItemId: nil)
         case .undo:
             return undoLastCommand()
+        case .clearCues:
+            clearAllCues()
+            return CommandOutcome(message: "Cleared all cues", selectItemId: nil)
         case .save, .open, .connect, .disconnect, .flash:
             guard let documentCommandHandler else { return nil }
             documentCommandHandler(action)
@@ -150,10 +165,13 @@ extension CueEngine {
     }
 
     private func summary(_ verb: String, _ count: Int) -> String {
-        "\(verb) \(count) \(count == 1 ? "item" : "items")"
+        "\(verb) \(count) \(count == 1 ? "cue" : "cues")"
     }
 
     private func storeItems(_ statement: CommandStatement) -> CommandOutcome {
+        if statement.storeMode == .replace {
+            commandTargetIds(statement, selectedItemId: nil).forEach { removePlanItem(id: $0) }
+        }
         let countBefore = planItems.count
         var created: [String] = []
         for _ in 0..<max(1, statement.count) {
@@ -222,7 +240,7 @@ extension CommandStatement.Verb {
     var changesPlan: Bool {
         switch self {
         case .store, .label, .move, .copy, .delete, .edit: return true
-        case .standby, .go, .action: return false
+        case .standby, .go, .skip, .unskip, .action, .generic: return false
         }
     }
 }
@@ -232,7 +250,7 @@ extension CueEngine {
         guard !isLANConnected, !isRemoteMirror else { return nil }
         guard isMasterServer else { return "Not connected to the producer on this network. Retrying in the background." }
         if server.isPortInUse {
-            return "Pagers can't connect: port \(LANUnicastServer.port) is already used by another copy of 13 Years or a test server. Quit it and this clears on its own."
+            return "Pagers can't connect: port \(LANUnicastServer.port) is blocked. This clears on its own once the port is free."
         }
         return "Pagers can't connect: this Mac isn't reachable on the network. Retrying in the background."
     }

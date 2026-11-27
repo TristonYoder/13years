@@ -10,6 +10,10 @@ public struct CommandLineContext: Equatable, Sendable {
     public var hasSelection: Bool
     public var views: [String]
     public var documentActions: Bool
+    public var waypoints: [String]
+    public var eventCount: Int
+    public var rehearsalCount: Int
+    public var scheduleCount: Int
 
     public init(
         itemTypes: [String] = ItemCommandParser.knownTypes,
@@ -17,8 +21,16 @@ public struct CommandLineContext: Equatable, Sendable {
         itemCount: Int = 0,
         hasSelection: Bool = false,
         views: [String] = AppMode.sidebarCases.map(\.displayName),
-        documentActions: Bool = false
+        documentActions: Bool = false,
+        waypoints: [String] = [],
+        eventCount: Int = 0,
+        rehearsalCount: Int = 0,
+        scheduleCount: Int = 0
     ) {
+        self.waypoints = waypoints
+        self.eventCount = eventCount
+        self.rehearsalCount = rehearsalCount
+        self.scheduleCount = scheduleCount
         self.itemTypes = itemTypes
         self.roles = roles
         self.itemCount = itemCount
@@ -33,10 +45,12 @@ public enum CommandAction: Equatable, Sendable {
     case play, pause, next, back, reset
     case save, open, connect, disconnect, flash
     case undo
+    case clearCues
 }
 
 public struct CommandStatement: Equatable, Sendable {
-    public enum Verb: String, Sendable { case store, label, move, copy, delete, standby, go, edit, action }
+    public enum Verb: String, Sendable { case store, label, move, copy, delete, standby, go, skip, unskip, edit, action, generic }
+    public enum StoreMode: String, Sendable { case insert, replace }
 
     public var verb: Verb = .edit
     public var position: Int?
@@ -48,6 +62,8 @@ public struct CommandStatement: Equatable, Sendable {
     public var roles: [String] = []
     public var target: Int?
     public var action: CommandAction?
+    public var storeMode: StoreMode?
+    public var generic = GenericCommand()
 
     public init() {}
 
@@ -66,8 +82,23 @@ public struct CommandStatement: Equatable, Sendable {
     }
 }
 
+public struct GenericCommand: Equatable, Sendable {
+    public var key = ""
+    public var names: [String] = []
+    public var number: Int?
+    public var text: String?
+    public var clock: TimerInputParser.Action?
+    public var timeOfDay: String?
+    public var day: String?
+    public var choices: [String] = []
+    public var ip: String?
+
+    public init() {}
+}
+
 public enum CommandLineStatus: Equatable, Sendable {
     case empty
+    case choice(String)
     case incomplete(String)
     case ready
     case ambiguous(String)
@@ -211,32 +242,36 @@ public enum CommandLine {
     }
 
     enum Word: String, CaseIterable {
-        case store, label, move, copy, delete, standby, go, item, thru, time, at, type, trigger, role
-        case view, play, pause, next, back, reset, save, open, connect, disconnect, flash, undo
+        case store, label, move, copy, delete, standby, go, skip, unskip, cue, thru, time, at, type, trigger, role
+        case view, play, pause, next, back, reset, save, open, connect, disconnect, flash, undo, clear
+        case message, waypoint, event, rehearsal, schedule, clock, plan, set, pco, pager
+        case replace, insert, day
 
-        var title: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+        var title: String { rawValue == "pco" ? "PCO" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
 
         var summary: String {
             switch self {
-            case .store: return "Create items"
-            case .label: return "Name an item"
-            case .move: return "Reorder items"
-            case .copy: return "Duplicate items"
-            case .delete: return "Remove items"
-            case .standby: return "Call standby roles"
+            case .store: return "Create or record something"
+            case .label: return "Rename something"
+            case .move: return "Reorder cues"
+            case .copy: return "Duplicate cues"
+            case .delete: return "Remove something"
+            case .standby: return "Call standby"
             case .go: return "Go now"
-            case .item: return "Pick items by number"
+            case .skip: return "Skip cues"
+            case .unskip: return "Stop skipping cues"
+            case .cue: return "Pick cues by number"
             case .thru: return "Range end"
             case .time: return "Set length"
             case .at: return "Position or time"
-            case .type: return "Set item type"
+            case .type: return "Set cue type"
             case .trigger: return "Follow or Go"
-            case .role: return "Cue roles"
+            case .role: return "Pager roles"
             case .view: return "Switch tab"
             case .play: return "Start the timer"
             case .pause: return "Pause the timer"
-            case .next: return "Next item"
-            case .back: return "Previous item"
+            case .next: return "Next cue"
+            case .back: return "Previous cue"
             case .reset: return "Reset the timer"
             case .save: return "Save the document"
             case .open: return "Open a document"
@@ -244,25 +279,41 @@ public enum CommandLine {
             case .disconnect: return "Disconnect"
             case .flash: return "Flash a pager"
             case .undo: return "Undo the last command"
+            case .clear: return "Clear cues, a role or a message"
+            case .message: return "Pager messages"
+            case .waypoint: return "Waypoints"
+            case .event: return "Event times"
+            case .rehearsal: return "Rehearsal times"
+            case .schedule: return "Auto-start schedules"
+            case .clock: return "Adjust the running clock"
+            case .plan: return "The plan"
+            case .set: return "Change a setting"
+            case .pco: return "Planning Center"
+            case .pager: return "Devices and network"
+            case .replace: return "Replace the existing cue"
+            case .insert: return "Insert and push the rest down"
+            case .day: return "Day of the week"
             }
         }
 
         var example: String {
             switch self {
-            case .store: return "Store \"Offering\" Time 5m"
-            case .label: return "Label Item 3 \"Offering\""
-            case .move: return "Move Item 5 At 2"
-            case .copy: return "Copy Item 2 At 7"
-            case .delete: return "Delete Item 4 Thru 6"
-            case .standby: return "Standby Item 3"
-            case .go: return "Go Item 3"
-            case .item: return "Item 4 Thru 6"
-            case .thru: return "Item 4 Thru 6"
-            case .time: return "Item 4 Time 5m"
-            case .at: return "Move Item 5 At 2"
-            case .type: return "Item 4 Type Song"
-            case .trigger: return "Item 4 Trigger Follow"
-            case .role: return "Item 4 Role Band + Host"
+            case .store: return "Store Cue 4 \"Offering\" Time 5m"
+            case .label: return "Label Cue 3 \"Offering\""
+            case .move: return "Move Cue 5 At 2"
+            case .copy: return "Copy Cue 2 At 7"
+            case .delete: return "Delete Cue 4 Thru 6"
+            case .standby: return "Standby Role Band + Host"
+            case .go: return "Go Cue 3"
+            case .skip: return "Skip Cue 3"
+            case .unskip: return "Unskip Cue 3"
+            case .cue: return "Cue 4 Thru 6"
+            case .thru: return "Cue 4 Thru 6"
+            case .time: return "Cue 4 Time 5m"
+            case .at: return "Move Cue 5 At 2"
+            case .type: return "Cue 4 Type Song"
+            case .trigger: return "Cue 4 Trigger Follow"
+            case .role: return "Cue 4 Role Band + Host"
             case .view: return "View Run Sheet"
             case .play: return "Play"
             case .pause: return "Pause"
@@ -275,12 +326,28 @@ public enum CommandLine {
             case .disconnect: return "Disconnect"
             case .flash: return "Flash"
             case .undo: return "Undo"
+            case .clear: return "Clear Role Band"
+            case .message: return "Store Message \"Wrap up\""
+            case .waypoint: return "Go Waypoint Offering"
+            case .event: return "Go Event 2"
+            case .rehearsal: return "Store Rehearsal Day Wed Time 19:00"
+            case .schedule: return "Go Schedule 1"
+            case .clock: return "Clock +30"
+            case .plan: return "Plan Title \"Sunday\""
+            case .set: return "Set Format 24h"
+            case .pco: return "PCO Live On"
+            case .pager: return "Pager Ping 10.0.0.5"
+            case .replace: return "Store Cue 4 Replace"
+            case .insert: return "Store Cue 4 Insert"
+            case .day: return "Store Event Day Sun Time 9:00"
             }
         }
 
-        static let verbs: [Word] = [.store, .label, .move, .copy, .delete, .standby, .go]
-        static let actions: [Word] = [.view, .play, .pause, .next, .back, .reset, .save, .open, .connect, .disconnect, .flash, .undo]
+        static let verbs: [Word] = [.store, .label, .move, .copy, .delete, .standby, .go, .skip, .unskip]
+        static let actions: [Word] = [.view, .play, .pause, .next, .back, .reset, .save, .open, .connect, .disconnect, .flash, .undo, .clear]
         static let documentWords: Set<Word> = [.save, .open, .connect, .disconnect, .flash]
+        static let standaloneNouns: [Word] = [.clock, .plan, .set, .pco, .pager]
+        static let genericNouns: Set<Word> = [.role, .message, .waypoint, .event, .rehearsal, .schedule]
     }
 
     enum Expect: Equatable {
@@ -293,6 +360,7 @@ public enum CommandLine {
         case roleMore
         case trigger
         case viewName
+        case generic
     }
 
     struct Match {
@@ -319,6 +387,9 @@ public enum CommandLine {
         var ambiguity: String?
         var pendingSign: String?
         var triggerWord = false
+        var genericArgs: [GArg] = []
+        var genericUsed: Set<String> = []
+        var expectPlus = false
 
         init(context: CommandLineContext) {
             self.context = context
@@ -327,21 +398,23 @@ public enum CommandLine {
 
         var actionWords: [Word] { Word.actions.filter { !Word.documentWords.contains($0) || context.documentActions } }
         var listedActionWords: [Word] { actionWords.filter { $0 != .undo } }
-        var startWords: [Word] { Word.verbs + [.item, .time, .type, .trigger, .role] + actionWords }
+        var startWords: [Word] { Word.verbs + [.cue, .time, .type, .trigger, .role] + Word.standaloneNouns + actionWords }
 
         var expectsValue: Bool {
             switch expect {
             case .number, .time, .text: return true
+            case .generic: return genericExpectsValue
             default: return false
             }
         }
 
         var hint: String? {
+            if case .generic = expect { return genericHint }
             switch expect {
             case .number(let word):
                 switch word {
-                case .item: return "Type an item number"
-                case .thru: return "Type the last item number"
+                case .cue: return "Type a cue number"
+                case .thru: return "Type the last cue number"
                 default: return "Type a position"
                 }
             case .time: return "Type a time: 5m, 4:30, +30, 1h30m"
@@ -355,16 +428,22 @@ public enum CommandLine {
             switch statement.verb {
             case .action:
                 return []
+            case .generic:
+                return []
             case .store, .edit:
                 var words: [Word] = []
-                if !hasItem { words.append(.item) }
+                if statement.verb == .store, needsStoreMode { words += [.insert, .replace] }
+                if !hasItem { words.append(.cue) }
+                if statement.verb == .store, pieces.count == 1 { words += [.role, .message, .waypoint, .event, .rehearsal] }
                 if statement.title == nil { words.append(.label) }
-                words += [.time, .type, .trigger, .role]
+                words += [.time, .type, .trigger]
+                if statement.verb == .edit || pieces.count > 1 { words.append(.role) }
                 return words.filter { !used.contains($0) }
-            case .label, .delete, .standby, .go:
-                return hasItem ? [] : [.item]
+            case .label, .delete, .standby, .go, .skip, .unskip:
+                if hasItem { return [] }
+                return [.cue] + (pieces.count == 1 ? CommandLine.nouns(for: statement.verb) : [])
             case .move, .copy:
-                if !hasItem { return [.item] }
+                if !hasItem { return [.cue] }
                 return statement.target == nil ? [.at] : []
             }
         }
@@ -395,6 +474,7 @@ public enum CommandLine {
                 }
             case .trigger: consumeTrigger(token)
             case .viewName: consumeView(token)
+            case .generic: consumeGeneric(token)
             }
         }
 
@@ -414,9 +494,15 @@ public enum CommandLine {
                 apply(.undo)
                 return
             }
+            let lowered = token.text.lowercased()
+            if !started, lowered == "new" || (lowered.count >= 3 && "create".hasPrefix(lowered)) {
+                apply(.store)
+                return
+            }
             var options = words.map(\.title)
             if !started || statement.verb == .store || statement.verb == .edit { options += words.contains(.time) ? [Word.at.title] : [] }
-            let result = CommandLine.match(token.text, in: options)
+            var result = CommandLine.match(token.text, in: options)
+            if result.one == nil, lowered.count >= 2, "item".hasPrefix(lowered), words.contains(.cue) { result = CommandLine.Match(one: Word.cue.title) }
             if let one = result.one, let word = Word(rawValue: one.lowercased()) {
                 apply(word)
             } else if result.many.count > 1 {
@@ -439,6 +525,20 @@ public enum CommandLine {
                 }
             }
             addPiece(word.title, .resolved)
+            if atStart && Word.standaloneNouns.contains(word) {
+                statement.verb = .generic
+                beginGeneric(verb: nil, noun: word)
+                return
+            }
+            if !atStart, CommandLine.genericNoun(word, verb: statement.verb, action: statement.action), pieces.count == 2 {
+                beginGeneric(verb: CommandLine.verbWord(statement), noun: word)
+                return
+            }
+            if !atStart, word == .replace || word == .insert {
+                statement.storeMode = word == .replace ? .replace : .insert
+                expect = .keywords(clauseWords())
+                return
+            }
             if atStart && Word.actions.contains(word) {
                 switch word {
                 case .view: expect = .viewName
@@ -452,9 +552,10 @@ public enum CommandLine {
                 case .connect: statement.action = .connect
                 case .disconnect: statement.action = .disconnect
                 case .undo: statement.action = .undo
+                case .clear: statement.action = .clearCues
                 default: statement.action = .flash
                 }
-                if word != .view { expect = .keywords([]) }
+                if word == .next { expect = .keywords([.event]) } else if word == .clear { expect = .keywords([.role, .message]) } else if word != .view { expect = .keywords([]) }
                 return
             }
             if atStart && Word.verbs.contains(word) {
@@ -462,9 +563,9 @@ public enum CommandLine {
                 return
             }
             switch word {
-            case .item:
-                used.insert(.item)
-                expect = .number(.item)
+            case .cue:
+                used.insert(.cue)
+                expect = .number(.cue)
             case .thru:
                 expect = .number(.thru)
             case .at:
@@ -503,16 +604,16 @@ public enum CommandLine {
             }
             addPiece(token.text, .value)
             switch word {
-            case .item:
+            case .cue:
                 statement.position = value
-                expect = .keywords([.thru] + clauseWords())
+                expect = .keywords(needsStoreMode ? clauseWords() + [.thru] : [.thru] + clauseWords())
             case .thru:
                 guard let first = statement.position, value >= first else {
                     error = "Thru needs an end of \(statement.position ?? 1) or more"
                     return
                 }
                 statement.count = value - first + 1
-                if statement.count > ItemCommandParser.maxCount { error = "That's more than \(ItemCommandParser.maxCount) items at once" }
+                if statement.count > ItemCommandParser.maxCount { error = "That's more than \(ItemCommandParser.maxCount) cues at once" }
                 expect = .keywords(clauseWords())
             default:
                 statement.target = value
@@ -615,21 +716,23 @@ public enum CommandLine {
             var all: [CommandLineSuggestion] = []
             switch expect {
             case .keywords(let words):
-                let shown = started ? words : Word.verbs + [.item] + listedActionWords
+                let shown = started ? words : Word.verbs + [.cue] + Word.standaloneNouns + listedActionWords
                 all = shown.map { CommandLineSuggestion(word: $0.title, summary: $0.summary, example: $0.example) }
             case .typeName:
-                all = context.itemTypes.map { CommandLineSuggestion(word: $0, summary: "Item type", example: "Type \($0)") }
+                all = context.itemTypes.map { CommandLineSuggestion(word: $0, summary: "Cue type", example: "Type \($0)") }
             case .roleName:
                 all = context.roles.filter { !statement.roles.contains($0) }.map { CommandLineSuggestion(word: $0, summary: "Cue role", example: "Role \($0)") }
             case .roleMore:
                 all = clauseWords().map { CommandLineSuggestion(word: $0.title, summary: $0.summary, example: $0.example) }
             case .trigger:
                 all = [
-                    CommandLineSuggestion(word: "Follow", summary: "Starts when the item before it ends", example: "Trigger Follow"),
+                    CommandLineSuggestion(word: "Follow", summary: "Starts when the cue before it ends", example: "Trigger Follow"),
                     CommandLineSuggestion(word: "Go", summary: "Waits for a manual Go", example: "Trigger Go")
                 ]
             case .viewName:
                 all = context.views.map { CommandLineSuggestion(word: $0, summary: "Tab", example: "View \($0)") }
+            case .generic:
+                all = genericSuggestions()
             case .number, .time, .text:
                 return []
             }
@@ -651,6 +754,7 @@ public enum CommandLine {
             if let ambiguity { return .ambiguous("Ambiguous: \(ambiguity). Add a letter.") }
             if let error { return .invalid(error) }
             if hasPartial { return .incomplete("Finish the word, or press Tab to accept") }
+            if case .generic = expect { return genericStatus() }
             switch expect {
             case .number, .time, .text: return .incomplete(hint ?? "Needs a value")
             case .typeName: return .incomplete("Type needs a name, like Type Song")
@@ -662,23 +766,27 @@ public enum CommandLine {
             let verb = statement.verb
             let needsTarget = !statement.hasItemClause && !context.hasSelection
             switch verb {
-            case .store, .action:
+            case .action:
                 break
+            case .store:
+                if needsStoreMode { return .choice("Cue \(statement.position ?? 0) exists. Insert it, or Replace it?") }
             case .label:
                 if statement.title == nil { return .incomplete("Label needs a name, like \"Offering\"") }
-                if needsTarget { return .incomplete("Pick an item, like Item 3, or select a row") }
+                if needsTarget { return .incomplete("Pick a cue, like Cue 3, or select a row") }
             case .move, .copy:
-                if needsTarget { return .incomplete("Pick an item, like Item 3, or select a row") }
+                if needsTarget { return .incomplete("Pick a cue, like Cue 3, or select a row") }
                 if statement.target == nil { return .incomplete("Add At and a position, like At 2") }
-            case .delete, .standby, .go:
-                if needsTarget { return .incomplete("Pick an item, like Item 3, or select a row") }
+            case .generic:
+                return genericStatus()
+            case .delete, .standby, .go, .skip, .unskip:
+                if needsTarget { return .incomplete("Pick a cue, like Cue 3, or select a row") }
             case .edit:
-                if statement.changesAttributes && needsTarget { return .incomplete("Pick an item, like Item 3, or select a row") }
+                if statement.changesAttributes && needsTarget { return .incomplete("Pick a cue, like Cue 3, or select a row") }
             }
-            if verb != .store, statement.hasItemClause, let first = statement.position {
+            if verb != .store, verb != .generic, statement.hasItemClause, let first = statement.position {
                 let last = first + statement.count - 1
-                if first > context.itemCount { return .invalid("There's no Item \(first). The run sheet has \(context.itemCount).") }
-                if last > context.itemCount { return .invalid("There's no Item \(last). The run sheet has \(context.itemCount).") }
+                if first > context.itemCount { return .invalid("There's no Cue \(first). The run sheet has \(context.itemCount).") }
+                if last > context.itemCount { return .invalid("There's no Cue \(last). The run sheet has \(context.itemCount).") }
             }
             return .ready
         }
@@ -695,6 +803,8 @@ extension CommandStatement.Verb {
         case .delete: return .delete
         case .standby: return .standby
         case .go: return .go
+        case .skip: return .skip
+        case .unskip: return .unskip
         default: return .edit
         }
     }

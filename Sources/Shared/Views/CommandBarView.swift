@@ -55,7 +55,7 @@ struct CommandBarView: View {
                     Text(analysis.ghost).foregroundStyle(.tertiary)
                 }
                 .lineLimit(1)
-                TextField("Type a command, like sto it 3", text: $text)
+                TextField("Type a command, like sto cu 3", text: $text)
                     .textFieldStyle(.plain)
                     .focused($isFocused)
                     #if os(iOS)
@@ -160,9 +160,11 @@ struct CommandBarView: View {
         } else {
             switch analysis.status {
             case .empty:
-                Text("Start with Store, Label, Move, Copy, Delete, Standby, Go or Item. A number opens time entry.").foregroundStyle(.secondary)
+                Text("Start with Store, Label, Move, Copy, Delete, Standby, Go or Cue. A number opens time entry.").foregroundStyle(.secondary)
             case .incomplete(let message):
                 Text(analysis.hint ?? message).foregroundStyle(.secondary)
+            case .choice(let question):
+                Text(question).foregroundStyle(AppPalette.warning)
             case .ready:
                 Text("Ready. Enter runs it.").foregroundStyle(.secondary)
             case .ambiguous(let message):
@@ -210,7 +212,9 @@ struct CommandBarView: View {
     private func submit(_ analysis: CommandLineAnalysis) {
         var chosen = analysis
         let rows = Array(analysis.suggestions.prefix(maxRows))
-        if didNavigate, !rows.isEmpty {
+        var isChoice = false
+        if case .choice = analysis.status { isChoice = true }
+        if (didNavigate || isChoice), !rows.isEmpty {
             let filled = analysis.completed(with: rows[min(highlighted, rows.count - 1)])
             chosen = CommandLine.analyze(filled, context: engine.commandLineContext(selectedItemId: selectedItemId))
             guard chosen.statement != nil else {
