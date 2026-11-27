@@ -60,6 +60,8 @@ public struct CommandStatement: Equatable, Sendable {
     public var length: TimerInputParser.Action?
     public var trigger: ItemTrigger?
     public var roles: [String] = []
+    public var waypoints: [String] = []
+    public var clearsWaypoints = false
     public var target: Int?
     public var action: CommandAction?
     public var storeMode: StoreMode?
@@ -70,7 +72,7 @@ public struct CommandStatement: Equatable, Sendable {
     public var hasItemClause: Bool { position != nil }
 
     public var changesAttributes: Bool {
-        title != nil || type != nil || length != nil || trigger != nil || !roles.isEmpty
+        title != nil || type != nil || length != nil || trigger != nil || !roles.isEmpty || !waypoints.isEmpty || clearsWaypoints
     }
 
     public func resolvedLength(base: Int) -> Int {
@@ -361,6 +363,8 @@ public enum CommandLine {
         case trigger
         case viewName
         case generic
+        case waypointName
+        case waypointMore
     }
 
     struct Match {
@@ -437,7 +441,7 @@ public enum CommandLine {
                 if statement.verb == .store, pieces.count == 1 { words += [.role, .message, .waypoint, .event, .rehearsal] }
                 if statement.title == nil { words.append(.label) }
                 words += [.time, .type, .trigger]
-                if statement.verb == .edit || pieces.count > 1 { words.append(.role) }
+                if statement.verb == .edit || pieces.count > 1 { words += [.role, .waypoint] }
                 return words.filter { !used.contains($0) }
             case .label, .delete, .standby, .go, .skip, .unskip:
                 if hasItem { return [] }
@@ -473,6 +477,15 @@ public enum CommandLine {
                     consumeKeyword(token, clauseWords())
                 }
             case .trigger: consumeTrigger(token)
+            case .waypointName: consumeWaypointRef(token)
+            case .waypointMore:
+                if !token.quoted && token.text == "+" {
+                    addPiece("+", .resolved)
+                    expect = .waypointName
+                } else {
+                    expect = .keywords(clauseWords())
+                    consumeKeyword(token, clauseWords())
+                }
             case .viewName: consumeView(token)
             case .generic: consumeGeneric(token)
             }
@@ -585,6 +598,9 @@ public enum CommandLine {
             case .role:
                 used.insert(.role)
                 expect = .roleName
+            case .waypoint:
+                used.insert(.waypoint)
+                expect = .waypointName
             case .trigger:
                 used.insert(.trigger)
                 expect = .trigger
@@ -682,6 +698,31 @@ public enum CommandLine {
             }
         }
 
+        mutating func consumeWaypointRef(_ token: Tok) {
+            if !token.quoted, statement.waypoints.isEmpty, !statement.clearsWaypoints, token.text.lowercased() == "none" {
+                statement.clearsWaypoints = true
+                addPiece("None", .resolved)
+                expect = .keywords(clauseWords())
+                return
+            }
+            let result = CommandLine.match(token.text, in: context.waypoints)
+            if let one = result.one {
+                if !statement.waypoints.contains(one) { statement.waypoints.append(one) }
+                addPiece(one, .resolved)
+                expect = .waypointMore
+            } else if result.many.count > 1 {
+                ambiguity = result.many.joined(separator: ", ")
+                addPiece(result.many.joined(separator: " / "), .ambiguous)
+            } else if token.quoted {
+                statement.waypoints.append(token.text)
+                addPiece("\"\(token.text)\"", .value)
+                expect = .waypointMore
+            } else {
+                error = "No waypoint called \u{201C}\(token.text)\u{201D}. Use quotes to create one."
+                addPiece(token.text, .invalid)
+            }
+        }
+
         mutating func consumeView(_ token: Tok) {
             let result = CommandLine.match(token.text, in: context.views)
             guard let one = result.one, let mode = AppMode.sidebarCases.first(where: { $0.displayName == one }) else {
@@ -729,6 +770,11 @@ public enum CommandLine {
                     CommandLineSuggestion(word: "Follow", summary: "Starts when the cue before it ends", example: "Trigger Follow"),
                     CommandLineSuggestion(word: "Go", summary: "Waits for a manual Go", example: "Trigger Go")
                 ]
+            case .waypointName:
+                all = context.waypoints.filter { !statement.waypoints.contains($0) }.map { CommandLineSuggestion(word: $0, summary: "Waypoint", example: "Waypoint \($0)") }
+                if statement.waypoints.isEmpty { all.append(CommandLineSuggestion(word: "None", summary: "Remove the cue's waypoints", example: "Cue 4 Waypoint None")) }
+            case .waypointMore:
+                all = clauseWords().map { CommandLineSuggestion(word: $0.title, summary: $0.summary, example: $0.example) }
             case .viewName:
                 all = context.views.map { CommandLineSuggestion(word: $0, summary: "Tab", example: "View \($0)") }
             case .generic:
@@ -759,6 +805,7 @@ public enum CommandLine {
             case .number, .time, .text: return .incomplete(hint ?? "Needs a value")
             case .typeName: return .incomplete("Type needs a name, like Type Song")
             case .roleName: return .incomplete("Role needs a name")
+            case .waypointName: return .incomplete("Waypoint needs a name, or None")
             case .trigger: return .incomplete("Trigger is Follow or Go")
             case .viewName: return .incomplete("View needs a tab, like View Run Sheet")
             default: break

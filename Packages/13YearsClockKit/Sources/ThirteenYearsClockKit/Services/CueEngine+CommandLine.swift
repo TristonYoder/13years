@@ -180,6 +180,7 @@ extension CueEngine {
             guard let id = addPlanItem(title: statement.title ?? "New item", itemType: type, lengthInSeconds: length) else { continue }
             setItemTrigger(id: id, statement.trigger)
             setItemCueRoles(id: id, roleIds(for: statement.roles))
+            applyWaypoints(statement, to: id)
             created.append(id)
         }
         if let position = statement.position, !created.isEmpty {
@@ -203,6 +204,24 @@ extension CueEngine {
         }
         if let trigger = statement.trigger { setItemTrigger(id: id, trigger) }
         if !statement.roles.isEmpty { setItemCueRoles(id: id, roleIds(for: statement.roles)) }
+        applyWaypoints(statement, to: id)
+    }
+
+    private func applyWaypoints(_ statement: CommandStatement, to id: String) {
+        if statement.clearsWaypoints {
+            setWaypointIds([], forItemId: id)
+            return
+        }
+        guard !statement.waypoints.isEmpty else { return }
+        var ids: [String] = []
+        for name in statement.waypoints {
+            if let existing = waypoint(matching: name) {
+                ids.append(existing.id)
+            } else if let created = addWaypoint(name: name) {
+                ids.append(created.id)
+            }
+        }
+        setWaypointIds(ids, forItemId: id)
     }
 
     private func roleIds(for names: [String]) -> [String] {

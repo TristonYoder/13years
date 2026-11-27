@@ -557,3 +557,78 @@ final class CommandLineNounExecutionTests: XCTestCase {
         XCTAssertEqual(engine.commandConfirmationPrompt(statement, selectedItemId: nil), "Delete role? Press Enter again.")
     }
 }
+
+
+final class CommandLineWaypointAssignTests: XCTestCase {
+    private let context = CommandLineContext(itemCount: 6, waypoints: ["Offering", "Closing"])
+
+    private func analyze(_ text: String) -> CommandLineAnalysis { CommandLine.analyze(text, context: context) }
+
+    func testACueTakesWaypointsLikeRoles() {
+        let result = analyze("cue 4 waypoint off + clo ")
+        XCTAssertEqual(result.status, .ready)
+        XCTAssertEqual(result.statement?.waypoints, ["Offering", "Closing"])
+        XCTAssertEqual(result.pieces.map(\.text), ["Cue", "4", "Waypoint", "Offering", "+", "Closing"])
+    }
+
+    func testNoneClearsAndAQuotedNameCreates() {
+        XCTAssertEqual(analyze("cue 4 waypoint none ").statement?.clearsWaypoints, true)
+        XCTAssertEqual(analyze("cue 4 waypoint \"Prayer\" ").statement?.waypoints, ["Prayer"])
+        guard case .invalid = analyze("cue 4 waypoint zzz ").status else { return XCTFail("expected invalid") }
+    }
+
+    func testStoreWaypointStillMeansTheNounRightAfterAVerb() {
+        XCTAssertEqual(analyze("store waypoint \"Prayer\" ").statement?.generic.key, "store.waypoint")
+        XCTAssertEqual(analyze("store cue 9 \"Hymn\" waypoint off ").statement?.waypoints, ["Offering"])
+    }
+
+    func testSuggestionsOfferNone() {
+        XCTAssertEqual(analyze("cue 4 waypoint ").suggestions.map(\.word), ["Offering", "Closing", "None"])
+    }
+}
+
+@MainActor
+final class CommandLineWaypointAssignExecutionTests: XCTestCase {
+    private func makeEngine() -> CueEngine {
+        let engine = CueEngine()
+        engine.importFlow(title: "Sunday", items: [
+            PCOTimerItem(id: "a", title: "Welcome", itemType: "Item", lengthInSeconds: 60),
+            PCOTimerItem(id: "b", title: "Song", itemType: "Song", lengthInSeconds: 240)
+        ])
+        return engine
+    }
+
+    @discardableResult
+    private func run(_ engine: CueEngine, _ text: String) -> CommandOutcome? {
+        let analysis = CommandLine.analyze(text + " ", context: engine.commandLineContext(selectedItemId: nil))
+        guard let statement = analysis.statement else {
+            XCTFail("not ready: \(analysis.status)")
+            return nil
+        }
+        return engine.runCommand(statement, selectedItemId: nil)
+    }
+
+    func testAssignCreateMoveAndClear() {
+        let engine = makeEngine()
+        run(engine, "store waypoint \"Offering\"")
+        run(engine, "cue 2 waypoint off")
+        XCTAssertEqual(engine.waypoints(forItemId: "b").map(\.name), ["Offering"])
+        run(engine, "cue 1 waypoint off")
+        XCTAssertEqual(engine.waypoints(forItemId: "a").map(\.name), ["Offering"])
+        XCTAssertTrue(engine.waypoints(forItemId: "b").isEmpty)
+        run(engine, "cue 1 waypoint \"Prayer\"")
+        XCTAssertEqual(engine.waypoints(forItemId: "a").map(\.name), ["Prayer"])
+        run(engine, "cue 1 waypoint none")
+        XCTAssertTrue(engine.waypoints(forItemId: "a").isEmpty)
+    }
+
+    func testStoringACueWithAWaypointAndUndo() {
+        let engine = makeEngine()
+        run(engine, "store waypoint \"Offering\"")
+        run(engine, "store cue 3 \"Giving\" waypoint off")
+        XCTAssertEqual(engine.planItems.last?.title, "Giving")
+        XCTAssertEqual(engine.waypoints(forItemId: engine.planItems.last!.id).map(\.name), ["Offering"])
+        run(engine, "undo")
+        XCTAssertEqual(engine.planItems.count, 2)
+    }
+}
