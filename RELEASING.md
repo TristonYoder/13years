@@ -19,7 +19,7 @@ Two notarized, stapled disk images are attached to the GitHub release:
 
 The Pager app is named `13 Years`, the same as the iPhone, iPad and Apple TV apps. Inside the Producer disk image it is renamed `13 Years Pager.app` so it reads clearly next to the Producer.
 
-`scripts/release-mac.sh` builds both Mac apps with the hardened runtime, notarizes and staples each app, builds both disk images, signs, notarizes and staples them, and writes `SHA256SUMS`. It needs `NOTARY_KEY` (path to the App Store Connect `.p8`), `NOTARY_KEY_ID` and `NOTARY_ISSUER`.
+`scripts/release-mac.sh` builds both Mac apps with the hardened runtime, notarizes and staples each app, builds both disk images, signs, notarizes and staples them, and writes `SHA256SUMS`. It needs `NOTARY_KEY` (path to the App Store Connect `.p8`), `NOTARY_KEY_ID` and `NOTARY_ISSUER`. When any of them is unset, the script reads it from the 1Password item `App Store Connect API (13 Years notarization)` through the `op` CLI (fields `key_file`, `key_id`, `issuer_id`; set `NOTARY_OP_ITEM` to use a different item), so on a Mac signed in to 1Password you can just run it. Nothing is printed or written to disk. The generic signing and notarization steps are in the Apple development notes (`codesign-notarize-macos`) in the vault.
 
 ## Steps
 

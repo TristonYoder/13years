@@ -4,9 +4,21 @@
 
 set -euo pipefail
 
-: "${NOTARY_KEY:?path to the App Store Connect .p8 key}"
-: "${NOTARY_KEY_ID:?App Store Connect key id}"
-: "${NOTARY_ISSUER:?App Store Connect issuer id}"
+op_item="${NOTARY_OP_ITEM:-App Store Connect API (13 Years notarization)}"
+
+from_1password() {
+  command -v op >/dev/null 2>&1 || { echo "Set NOTARY_KEY, NOTARY_KEY_ID and NOTARY_ISSUER, or install and sign in to the 1Password CLI (op)."; exit 1; }
+  op item get "$op_item" --fields "$1" 2>/dev/null || { echo "Could not read '$1' from the 1Password item '$op_item'. Is op signed in?"; exit 1; }
+}
+
+if [ -z "${NOTARY_KEY:-}" ]; then
+  key_file="$(from_1password key_file)"
+  NOTARY_KEY="${key_file/#\~/$HOME}"
+fi
+[ -n "${NOTARY_KEY_ID:-}" ] || NOTARY_KEY_ID="$(from_1password key_id)"
+[ -n "${NOTARY_ISSUER:-}" ] || NOTARY_ISSUER="$(from_1password issuer_id)"
+[ -f "$NOTARY_KEY" ] || { echo "The App Store Connect key file is missing: $NOTARY_KEY"; exit 1; }
+export NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
