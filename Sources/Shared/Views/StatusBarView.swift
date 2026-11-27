@@ -21,7 +21,7 @@ struct StatusBarView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .background(.bar)
+            .background(.regularMaterial)
             .overlay(alignment: .top) { Divider() }
         }
     }
