@@ -8,6 +8,9 @@ public struct SectionHeaderBar<Actions: View>: View {
     let showsTitles: Bool
     @ViewBuilder let actions: () -> Actions
     @Environment(\.toggleSidebar) private var toggleSidebar
+    #if os(macOS) || os(iOS)
+    @EnvironmentObject private var engine: CueEngine
+    #endif
 
     /// With `showsTitles`, action buttons show their text beside the icon when the row has room,
     /// and fall back to icons only when it does not.
@@ -51,9 +54,18 @@ public struct SectionHeaderBar<Actions: View>: View {
                 .font(.title2.weight(.bold))
             Spacer()
             HStack(spacing: 8) {
-                actions()
-                    .labelStyle(TitledOrIconLabelStyle())
-                    .buttonStyle(SectionHeaderActionButtonStyle())
+                Group {
+                    actions()
+                    #if os(macOS) || os(iOS)
+                    Button(action: { engine.isCommandBarOpen.toggle() }) {
+                        Label("Command", systemImage: "terminal")
+                    }
+                    .headerActionPrimary()
+                    .help("Open the command bar. Typing anywhere opens it too.")
+                    #endif
+                }
+                .labelStyle(TitledOrIconLabelStyle())
+                .buttonStyle(SectionHeaderActionButtonStyle())
             }
             .environment(\.headerTitleTier, tier)
         }

@@ -28,6 +28,21 @@ enum DocumentMenuBridge {
 }
 
 final class ProducerIOSAppDelegate: UIResponder, UIApplicationDelegate {
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let handled = MainActor.assumeIsolated { () -> Bool in
+            guard let handler = TypedStartRelay.handler,
+                  let press = presses.first, let key = press.key,
+                  key.modifierFlags.isDisjoint(with: [.command, .control, .alternate]) else { return false }
+            let characters = key.characters
+            guard characters.count == 1, let first = characters.first, !first.isWhitespace,
+                  characters.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value != 127 && !(0xF700...0xF8FF).contains($0.value) }) else { return false }
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            if window?.rootViewController?.presentedViewController != nil { return false }
+            return handler(characters)
+        }
+        if !handled { super.pressesBegan(presses, with: event) }
+    }
+
     override func buildMenu(with builder: UIMenuBuilder) {
         super.buildMenu(with: builder)
         guard builder.system == .main else { return }

@@ -51,10 +51,7 @@ public struct ProducerRootView: View {
         #if os(macOS)
         .background(CommandBarKeyCapture(isEnabled: !engine.isCommandBarOpen) { handleTypedStart($0) })
         #else
-        .onKeyPress(phases: .down) { press in
-            guard !engine.isCommandBarOpen, let typed = CommandBarKeys.startingText(for: press) else { return .ignored }
-            return handleTypedStart(typed) ? .handled : .ignored
-        }
+        .onAppear { TypedStartRelay.handler = { engine.isCommandBarOpen ? false : handleTypedStart($0) } }
         #endif
         #endif
     }

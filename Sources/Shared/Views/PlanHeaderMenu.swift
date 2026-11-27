@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Triston Yoder
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import SwiftUI
 
 /// The left side of the app header: which plan and event is running, and whether the Producer is

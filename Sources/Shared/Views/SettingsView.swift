@@ -5,6 +5,9 @@ import SwiftUI
 
 public struct SettingsView: View {
     @EnvironmentObject var engine: CueEngine
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     private static let showsPlotipharIntegration = FeatureFlags.plotiphar
 
@@ -108,6 +111,30 @@ public struct SettingsView: View {
 
     private var settingsForm: some View {
         #if os(macOS)
+        categorizedSettings
+        #elseif os(iOS)
+        Group {
+            if horizontalSizeClass == .regular {
+                categorizedSettings
+            } else {
+                Form {
+                    ForEach(categories) { entry in content(for: entry) }
+                }
+                .formStyle(.grouped)
+                .modifier(settingsPresentations)
+            }
+        }
+        #else
+        Form {
+            ForEach(categories) { entry in content(for: entry) }
+        }
+        .formStyle(.grouped)
+        .modifier(settingsPresentations)
+        #endif
+    }
+
+    #if os(macOS) || os(iOS)
+    private var categorizedSettings: some View {
         HStack(spacing: 0) {
             List(categories, selection: Binding<Category?>(get: { category }, set: { if let value = $0 { category = value } })) { entry in
                 Label(entry.rawValue, systemImage: entry.symbol)
@@ -120,15 +147,8 @@ public struct SettingsView: View {
                 .formStyle(.grouped)
         }
         .modifier(settingsPresentations)
-        #else
-        Form {
-            ForEach(categories) { entry in content(for: entry) }
-        }
-        .formStyle(.grouped)
-        .modifier(settingsPresentations)
-        #endif
     }
-
+    #endif
 
     private var settingsPresentations: SettingsPresentations {
         SettingsPresentations(

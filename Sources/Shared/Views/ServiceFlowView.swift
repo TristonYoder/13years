@@ -127,13 +127,6 @@ public struct ServiceFlowView: View {
                 .help("Set up the times this run sheet runs, like a 9:00 and an 11:00 event")
                 #endif
 
-                #if os(macOS) || os(iOS)
-                Button(action: { engine.isCommandBarOpen.toggle() }) {
-                    Label("Command", systemImage: "terminal")
-                }
-                .headerActionPrimary()
-                .help("Open the command bar. Typing anywhere on the run sheet opens it too.")
-                #endif
 
                 Button(action: { editorMode = .add }) {
                     Label("Add Item", systemImage: "plus")

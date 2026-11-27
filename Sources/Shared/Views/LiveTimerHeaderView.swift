@@ -48,6 +48,8 @@ public struct LiveTimerHeaderView: View {
                     #if os(macOS)
                     PlanHeaderMenu()
                         .padding(.top, 22)
+                    #elseif os(iOS)
+                    PlanHeaderMenu()
                     #endif
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

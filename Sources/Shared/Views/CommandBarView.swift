@@ -251,6 +251,10 @@ struct CommandBarView: View {
 
 #endif
 
+enum TypedStartRelay {
+    @MainActor static var handler: ((String) -> Bool)?
+}
+
 struct CommandItemBadge: View {
     let number: Int
 
