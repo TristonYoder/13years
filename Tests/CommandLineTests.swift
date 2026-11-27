@@ -282,3 +282,60 @@ final class CommandLinePartialSubmitTests: XCTestCase {
         XCTAssertNil(CommandLine.analyze("vi", context: context).statement)
     }
 }
+
+@MainActor
+final class CommandLineUndoTests: XCTestCase {
+    private func makeEngine() -> CueEngine {
+        let engine = CueEngine()
+        engine.importFlow(title: "Sunday", items: [
+            PCOTimerItem(id: "a", title: "Welcome", itemType: "Item", lengthInSeconds: 60),
+            PCOTimerItem(id: "b", title: "Song", itemType: "Song", lengthInSeconds: 240),
+            PCOTimerItem(id: "c", title: "Close", itemType: "Item", lengthInSeconds: 60)
+        ])
+        return engine
+    }
+
+    @discardableResult
+    private func run(_ engine: CueEngine, _ text: String) -> CommandOutcome? {
+        let analysis = CommandLine.analyze(text + " ", context: engine.commandLineContext(selectedItemId: nil))
+        guard let statement = analysis.statement else {
+            XCTFail("not ready: \(analysis.status)")
+            return nil
+        }
+        return engine.runCommand(statement, selectedItemId: nil)
+    }
+
+    func testOopsAndUndoResolveToUndoAndStayOutOfTheList() {
+        let context = CommandLineContext()
+        XCTAssertEqual(CommandLine.analyze("oops ", context: context).statement?.action, .undo)
+        XCTAssertEqual(CommandLine.analyze("und ", context: context).statement?.action, .undo)
+        XCTAssertEqual(CommandLine.analyze("oops ", context: context).pieces.map(\.text), ["Undo"])
+        XCTAssertFalse(CommandLine.analyze("", context: context).suggestions.map(\.word).contains("Undo"))
+    }
+
+    func testUndoRestoresADelete() {
+        let engine = makeEngine()
+        run(engine, "delete item 2")
+        XCTAssertEqual(engine.planItems.map(\.id), ["a", "c"])
+        let outcome = run(engine, "oops")
+        XCTAssertEqual(engine.planItems.map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(outcome?.message, "Undid delete")
+    }
+
+    func testUndoRestoresATimeEditAndAMove() {
+        let engine = makeEngine()
+        run(engine, "item 1 time 5m")
+        run(engine, "move item 3 at 1")
+        XCTAssertEqual(engine.planItems.map(\.id), ["c", "a", "b"])
+        run(engine, "undo")
+        XCTAssertEqual(engine.planItems.map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(engine.planItems[0].lengthInSeconds, 300)
+        run(engine, "undo")
+        XCTAssertEqual(engine.planItems[0].lengthInSeconds, 60)
+    }
+
+    func testUndoWithNothingToUndo() {
+        let engine = makeEngine()
+        XCTAssertEqual(run(engine, "undo")?.message, "Nothing to undo")
+    }
+}

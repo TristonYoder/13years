@@ -3,6 +3,12 @@
 
 import Foundation
 
+struct CommandUndoSnapshot {
+    var label: String
+    var items: [PCOTimerItem]
+    var activeIndex: Int
+}
+
 public struct CommandOutcome: Equatable, Sendable {
     public var message: String
     public var selectItemId: String?
@@ -45,6 +51,10 @@ extension CueEngine {
         if statement.verb == .action { return runAction(statement.action) }
         guard !isRemoteMirror else { return nil }
         let targets = commandTargetIds(statement, selectedItemId: selectedItemId)
+        if statement.verb.changesPlan, statement.verb != .edit || statement.changesAttributes {
+            commandUndoStack.append(CommandUndoSnapshot(label: statement.verb.rawValue, items: planItems, activeIndex: activeItemIndex))
+            if commandUndoStack.count > 20 { commandUndoStack.removeFirst() }
+        }
         switch statement.verb {
         case .action: return nil
         case .store: return storeItems(statement)
@@ -99,11 +109,44 @@ extension CueEngine {
         case .reset:
             resetTimer()
             return CommandOutcome(message: "Reset", selectItemId: nil)
+        case .undo:
+            return undoLastCommand()
         case .save, .open, .connect, .disconnect, .flash:
             guard let documentCommandHandler else { return nil }
             documentCommandHandler(action)
             return CommandOutcome(message: "Done", selectItemId: nil)
         }
+    }
+
+    private func undoLastCommand() -> CommandOutcome {
+        guard !isRemoteMirror, let snapshot = commandUndoStack.popLast() else {
+            return CommandOutcome(message: "Nothing to undo", selectItemId: nil)
+        }
+        ensurePCOBaseline()
+        let previousLengths = Dictionary(planItems.map { ($0.id, $0.lengthInSeconds) }, uniquingKeysWith: { first, _ in first })
+        let current = activeTimerItem
+        planItems = snapshot.items
+        if let current, let index = planItems.firstIndex(where: { $0.id == current.id }) {
+            var restored = current
+            restored.title = planItems[index].title
+            restored.itemType = planItems[index].itemType
+            restored.lengthInSeconds = planItems[index].lengthInSeconds
+            restored.trigger = planItems[index].trigger
+            restored.cueRoleIds = planItems[index].cueRoleIds
+            activeItemIndex = index
+            activeTimerItem = restored
+        } else if planItems.indices.contains(snapshot.activeIndex) {
+            var restored = planItems[snapshot.activeIndex]
+            restored.isRunning = false
+            activeItemIndex = snapshot.activeIndex
+            activeTimerItem = restored
+        }
+        broadcastTimerUpdate()
+        pushPlanOrderToPCO()
+        for item in planItems where previousLengths[item.id] != item.lengthInSeconds {
+            pushItemLengthToPCO(id: item.id)
+        }
+        return CommandOutcome(message: "Undid \(snapshot.label)", selectItemId: nil)
     }
 
     private func summary(_ verb: String, _ count: Int) -> String {
@@ -172,5 +215,14 @@ extension CueEngine {
         guard finalStart != first else { return }
         let offset = finalStart > first ? finalStart + indices.count : finalStart
         movePlanItems(fromOffsets: IndexSet(indices), toOffset: offset)
+    }
+}
+
+extension CommandStatement.Verb {
+    var changesPlan: Bool {
+        switch self {
+        case .store, .label, .move, .copy, .delete, .edit: return true
+        case .standby, .go, .action: return false
+        }
     }
 }

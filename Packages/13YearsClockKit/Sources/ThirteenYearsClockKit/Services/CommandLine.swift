@@ -32,6 +32,7 @@ public enum CommandAction: Equatable, Sendable {
     case view(AppMode)
     case play, pause, next, back, reset
     case save, open, connect, disconnect, flash
+    case undo
 }
 
 public struct CommandStatement: Equatable, Sendable {
@@ -211,7 +212,7 @@ public enum CommandLine {
 
     enum Word: String, CaseIterable {
         case store, label, move, copy, delete, standby, go, item, thru, time, at, type, trigger, role
-        case view, play, pause, next, back, reset, save, open, connect, disconnect, flash
+        case view, play, pause, next, back, reset, save, open, connect, disconnect, flash, undo
 
         var title: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
 
@@ -242,6 +243,7 @@ public enum CommandLine {
             case .connect: return "Connect to a producer"
             case .disconnect: return "Disconnect"
             case .flash: return "Flash a pager"
+            case .undo: return "Undo the last command"
             }
         }
 
@@ -272,11 +274,12 @@ public enum CommandLine {
             case .connect: return "Connect"
             case .disconnect: return "Disconnect"
             case .flash: return "Flash"
+            case .undo: return "Undo"
             }
         }
 
         static let verbs: [Word] = [.store, .label, .move, .copy, .delete, .standby, .go]
-        static let actions: [Word] = [.view, .play, .pause, .next, .back, .reset, .save, .open, .connect, .disconnect, .flash]
+        static let actions: [Word] = [.view, .play, .pause, .next, .back, .reset, .save, .open, .connect, .disconnect, .flash, .undo]
         static let documentWords: Set<Word> = [.save, .open, .connect, .disconnect, .flash]
     }
 
@@ -323,6 +326,7 @@ public enum CommandLine {
         }
 
         var actionWords: [Word] { Word.actions.filter { !Word.documentWords.contains($0) || context.documentActions } }
+        var listedActionWords: [Word] { actionWords.filter { $0 != .undo } }
         var startWords: [Word] { Word.verbs + [.item, .time, .type, .trigger, .role] + actionWords }
 
         var expectsValue: Bool {
@@ -406,6 +410,10 @@ public enum CommandLine {
                 }
                 return
             }
+            if !started, token.text.lowercased() == "oops" || (token.text.count >= 3 && "oops".hasPrefix(token.text.lowercased())) {
+                apply(.undo)
+                return
+            }
             var options = words.map(\.title)
             if !started || statement.verb == .store || statement.verb == .edit { options += words.contains(.time) ? [Word.at.title] : [] }
             let result = CommandLine.match(token.text, in: options)
@@ -443,6 +451,7 @@ public enum CommandLine {
                 case .open: statement.action = .open
                 case .connect: statement.action = .connect
                 case .disconnect: statement.action = .disconnect
+                case .undo: statement.action = .undo
                 default: statement.action = .flash
                 }
                 if word != .view { expect = .keywords([]) }
@@ -606,7 +615,7 @@ public enum CommandLine {
             var all: [CommandLineSuggestion] = []
             switch expect {
             case .keywords(let words):
-                let shown = started ? words : Word.verbs + [.item] + actionWords
+                let shown = started ? words : Word.verbs + [.item] + listedActionWords
                 all = shown.map { CommandLineSuggestion(word: $0.title, summary: $0.summary, example: $0.example) }
             case .typeName:
                 all = context.itemTypes.map { CommandLineSuggestion(word: $0, summary: "Item type", example: "Type \($0)") }
