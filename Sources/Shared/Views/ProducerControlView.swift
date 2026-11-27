@@ -11,6 +11,8 @@ public struct ProducerControlView: View {
 
     public init() {}
 
+    private static let previewMinWidth: CGFloat = 980
+
     public var body: some View {
         VStack(spacing: 0) {
             SectionHeaderBar(mode: .producerControl) {
@@ -25,21 +27,26 @@ public struct ProducerControlView: View {
                 .help(showsPreview ? "Hide the live pager preview" : "Show the live pager preview")
             }
 
-            HStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        roleGrid
+            GeometryReader { proxy in
+                let previewFits = proxy.size.width >= Self.previewMinWidth
+                let showsPane = showsPreview && previewFits
+                HStack(spacing: 0) {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            roleGrid
+                        }
+                        .padding()
                     }
-                    .padding()
-                }
 
-                if showsPreview {
-                    PagerPreviewPane()
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    if showsPane {
+                        PagerPreviewPane()
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
+                .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showsPane)
             }
-            .clipped()
-            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showsPreview)
         }
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
@@ -81,13 +88,25 @@ public struct ProducerControlView: View {
 
     /// One line per role with every control inline, for scanning a long team quickly.
     private var roleTable: some View {
+        ViewThatFits(in: .horizontal) {
+            roleTableContent(showsPerson: true, showsMessage: true)
+            roleTableContent(showsPerson: true, showsMessage: false)
+            roleTableContent(showsPerson: false, showsMessage: false)
+        }
+    }
+
+    private func roleTableContent(showsPerson: Bool, showsMessage: Bool) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Color.clear.frame(width: 22)
                 Text("ROLE").frame(width: 150, alignment: .leading)
-                Text("PERSON").frame(width: 110, alignment: .leading)
+                if showsPerson { Text("PERSON").frame(width: 110, alignment: .leading) }
                 Text("CUE").frame(width: 230, alignment: .leading)
-                Text("LAST MESSAGE").frame(maxWidth: .infinity, alignment: .leading)
+                if showsMessage {
+                    Text("LAST MESSAGE").frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Spacer(minLength: 0)
+                }
             }
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
@@ -95,12 +114,12 @@ public struct ProducerControlView: View {
             .padding(.bottom, 6)
 
             ForEach(Array(engine.roles.enumerated()), id: \.element.id) { index, role in
-                roleRow(role, striped: index % 2 == 0)
+                roleRow(role, striped: index % 2 == 0, showsPerson: showsPerson, showsMessage: showsMessage)
             }
         }
     }
 
-    private func roleRow(_ role: RoleCue, striped: Bool) -> some View {
+    private func roleRow(_ role: RoleCue, striped: Bool, showsPerson: Bool, showsMessage: Bool) -> some View {
         let isSelected = engine.selectedRoleIds.contains(role.id)
         let unread = engine.hasUnreadMessage(forRoleId: role.id)
         let last = engine.recentMessages.first(where: { $0.targetRoleId == role.id })
@@ -112,10 +131,12 @@ public struct ProducerControlView: View {
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .frame(width: 150, alignment: .leading)
-            Text(role.personName ?? "\u{2014}")
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: 110, alignment: .leading)
+            if showsPerson {
+                Text(role.personName ?? "\u{2014}")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 110, alignment: .leading)
+            }
             HStack(spacing: 6) {
                 Button("Standby") { engine.setCueForRole(id: role.id, state: .standby) }
                     .buttonStyle(.borderedProminent)
@@ -131,12 +152,16 @@ public struct ProducerControlView: View {
             }
             .compactControlSize()
             .frame(width: 230, alignment: .leading)
-            Text(last.map { ($0.senderRoleId == nil ? "You: " : "") + $0.text } ?? "\u{2014}")
-                .font(.callout)
-                .foregroundStyle(unread ? Color.primary : Color.secondary)
-                .fontWeight(unread ? .semibold : .regular)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if showsMessage {
+                Text(last.map { ($0.senderRoleId == nil ? "You: " : "") + $0.text } ?? "\u{2014}")
+                    .font(.callout)
+                    .foregroundStyle(unread ? Color.primary : Color.secondary)
+                    .fontWeight(unread ? .semibold : .regular)
+                    .lineLimit(1)
+                    .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
+            }
             Button(action: { engine.openMessageThread(forRoleId: role.id) }) {
                 Image(systemName: unread ? "message.badge.fill" : "message")
             }
