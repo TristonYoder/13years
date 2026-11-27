@@ -835,7 +835,7 @@ struct RunSheetRow: View {
         .buttonStyle(.plain)
         .help("Edit time and notes inline")
 
-        #if os(macOS)
+        #if os(macOS) || os(iOS)
         RowActionButton(systemImage: "pencil", label: "Edit item\u{2026}", action: onEdit)
         RowActionButton(systemImage: "trash", label: "Delete item\u{2026}", action: onDelete)
         #endif

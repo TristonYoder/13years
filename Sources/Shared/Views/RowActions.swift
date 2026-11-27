@@ -14,7 +14,7 @@ extension View {
     }
 }
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 struct RowActionButton: View {
     let systemImage: String
     let label: String
@@ -26,7 +26,11 @@ struct RowActionButton: View {
             Image(systemName: systemImage)
                 .font(.callout)
                 .foregroundStyle(tint)
+                #if os(iOS)
+                .frame(width: 32, height: 32)
+                #else
                 .frame(width: 22, height: 22)
+                #endif
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

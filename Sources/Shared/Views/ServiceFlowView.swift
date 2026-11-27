@@ -102,17 +102,6 @@ public struct ServiceFlowView: View {
                 .headerActionPrimary()
                 .help("End times and Follow by default")
                 #endif
-                #if os(iOS)
-                Button(action: { planPanelVisible.toggle() }) {
-                    Label("Plan", systemImage: "sidebar.trailing")
-                }
-                .headerActionPrimary()
-                .help("Plan name, Sync PCO and Event Times, plus the Planning Center notes, times and team")
-                #endif
-
-                #if !os(macOS)
-                RehearsalBadge()
-                #endif
 
                 RunSheetActualsMenu()
 
@@ -154,7 +143,7 @@ public struct ServiceFlowView: View {
                         case .table:
                             tableLayout(schedule)
                         }
-                        #if os(macOS)
+                        #if os(macOS) || os(iOS)
                         RunSheetTotalsView(schedule: schedule, showsSummary: false)
                         #else
                         RunSheetTotalsView(schedule: schedule)
@@ -441,40 +430,6 @@ public struct ServiceFlowView: View {
 
     @ViewBuilder
     private func flowListContent(_ schedule: RunSheetSchedule) -> some View {
-        #if !os(macOS)
-        if let error = engine.pcoLastError {
-            Section {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppPalette.warning)
-                    .font(.footnote)
-            }
-        }
-
-        Section {
-            RunSheetTimingToggles()
-        } footer: {
-            Text(RunSheetTimingToggles.explanation)
-        }
-
-        if engine.planItems.first?.pcoPlanId != nil {
-            Section {
-                PCOLiveSyncToggle()
-            } footer: {
-                Text(engine.isPCOLiveSyncEnabled
-                    ? "This app controls Planning Center's Live view \u{2014} item navigation mirrors there too. Taking control can interrupt another controller."
-                    : PCOLiveSyncToggle.explanation)
-            }
-        }
-
-        if engine.eventTimes.count > 1 || engine.isRehearsalMode || !engine.rehearsalPlanTimes.isEmpty {
-            Section {
-                if engine.eventTimes.count > 1 {
-                    LiveEventTimePicker()
-                }
-                RehearsalControl()
-            }
-        }
-        #endif
 
         let sections = sheetSections
         ForEach(sections) { section in
