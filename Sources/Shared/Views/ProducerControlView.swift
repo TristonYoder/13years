@@ -8,6 +8,7 @@ public struct ProducerControlView: View {
     @State private var showingPlanPicker = false
     @AppStorage("showPagerPreview") private var showsPreview = true
     @AppStorage("pagerRoleLayout") private var roleLayout = "table"
+    @State private var contentWidth: CGFloat = 0
 
     public init() {}
 
@@ -21,10 +22,10 @@ public struct ProducerControlView: View {
                 }
                 .help("Pick a Planning Center plan type and plan to sync")
 
-                Button(action: { showsPreview.toggle() }) {
-                    Label(showsPreview ? "Hide Preview" : "Show Preview", systemImage: "iphone.gen3")
+                Button(action: togglePreview) {
+                    Label(previewIsShown ? "Hide Preview" : "Show Preview", systemImage: "iphone.gen3")
                 }
-                .help(showsPreview ? "Hide the live pager preview" : "Show the live pager preview")
+                .help(previewIsShown ? "Hide the live pager preview" : "Show the live pager preview")
             }
 
             GeometryReader { proxy in
@@ -48,8 +49,26 @@ public struct ProducerControlView: View {
                 .animation(.spring(response: 0.45, dampingFraction: 0.85), value: showsPane)
             }
         }
+        .readWidth(into: $contentWidth)
+        .onChange(of: showsPreview) { _, shown in
+            if shown { WindowSizing.ensure(width: Self.previewMinWidth, current: contentWidth) }
+        }
         .sheet(isPresented: $showingPlanPicker) {
             PCOPlanPickerView()
+        }
+    }
+
+    private var previewIsShown: Bool {
+        showsPreview && (contentWidth == 0 || contentWidth >= Self.previewMinWidth)
+    }
+
+    private func togglePreview() {
+        if previewIsShown {
+            showsPreview = false
+        } else if showsPreview {
+            WindowSizing.ensure(width: Self.previewMinWidth, current: contentWidth)
+        } else {
+            showsPreview = true
         }
     }
 

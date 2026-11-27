@@ -18,6 +18,17 @@ public struct ServiceFlowView: View {
     @State private var newWaypointTargetItemId: String?
     @State private var newWaypointName: String = ""
     @State private var pendingDeleteItem: PCOTimerItem?
+    private var planInspectorBinding: Binding<Bool> {
+        #if os(macOS)
+        Binding(
+            get: { planPanelVisible && (totalWidth == 0 || totalWidth >= Self.inspectorMinWidth) },
+            set: { planPanelVisible = $0 }
+        )
+        #else
+        $planPanelVisible
+        #endif
+    }
+
     private var selectedItemBinding: Binding<String?> {
         Binding(get: { engine.selectedPlanItemId }, set: { engine.selectedPlanItemId = $0 })
     }
@@ -27,6 +38,9 @@ public struct ServiceFlowView: View {
         nonmutating set { engine.selectedPlanItemId = newValue }
     }
     @State private var showingEventTimes = false
+    @State private var totalWidth: CGFloat = 0
+    private static let inspectorMinWidth: CGFloat = 900
+    private static let nowNextMinWidth: CGFloat = 1000
     #if os(macOS) || os(iOS)
     @State private var referenceRequest: RunSheetReferenceRequest?
     #endif
@@ -157,10 +171,19 @@ public struct ServiceFlowView: View {
         }
         #if os(macOS) || os(iOS)
         .modifier(RunSheetPlanInspectorModifier(
-            isPresented: $planPanelVisible,
+            isPresented: planInspectorBinding,
             onChangePlan: { engine.whenPCOConnected { showingPlanPicker = true } },
             onEventTimes: { showingEventTimes = true }
         ))
+        .readWidth(into: $totalWidth)
+        #if os(macOS)
+        .onChange(of: planPanelVisible) { _, visible in
+            if visible { WindowSizing.ensure(width: Self.inspectorMinWidth, current: totalWidth) }
+        }
+        .onChange(of: nowNextPane) { _, visible in
+            if visible { WindowSizing.ensure(width: Self.nowNextMinWidth, current: totalWidth) }
+        }
+        #endif
         #endif
         #if os(macOS) || os(iOS)
         .environment(\.runSheetReferencePresenter, RunSheetReferencePresenter { referenceRequest = $0 })
