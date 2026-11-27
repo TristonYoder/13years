@@ -110,31 +110,30 @@ struct RehearsalControl: View {
     }
 }
 
-struct RunSheetActualsMenu: View {
+struct PlanActualsActions: View {
     @EnvironmentObject var engine: CueEngine
     @State private var confirmingSave = false
 
     var body: some View {
         let changes = engine.actualLengthChanges()
-        Menu {
+        Group {
             if engine.planItems.first?.pcoPlanId != nil {
                 Button {
                     confirmingSave = true
                 } label: {
-                    Label("Save Actual Lengths to PCO Plan\u{2026}", systemImage: "square.and.arrow.up")
+                    Label("Save actuals", systemImage: "square.and.arrow.up")
                 }
                 .disabled(changes.isEmpty)
+                .help("Save the actual lengths to the Planning Center plan")
             }
             Button(role: .destructive) {
                 engine.clearActuals()
             } label: {
-                Label("Clear Actuals", systemImage: "eraser")
+                Label("Clear actuals", systemImage: "eraser")
             }
             .disabled(engine.itemActuals.isEmpty)
-        } label: {
-            Label("Actuals", systemImage: "stopwatch")
+            .help("Forget the actual times recorded while the event ran")
         }
-        .help("Actual times recorded while the event runs")
         .confirmationDialog(
             "Save actual lengths to Planning Center?",
             isPresented: $confirmingSave,

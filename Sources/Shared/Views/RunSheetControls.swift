@@ -65,28 +65,6 @@ struct StartNextEventButton: View {
     }
 }
 
-struct RunSheetTimingToggles: View {
-    @EnvironmentObject var engine: CueEngine
-
-    static var explanation: String {
-        "Follow starts an item when the one before it reaches zero, and Go waits for the producer. Each item can override this default. Showing end times swaps each item's start time for the time it ends."
-    }
-
-    var body: some View {
-        Toggle(isOn: $engine.followByDefault) {
-            Label("Follow by default", systemImage: "forward.end")
-        }
-        .help("New items follow the one before them unless set to Go. Each item can override it in its editor.")
-        Toggle(isOn: Binding(
-            get: { engine.runSheetLayout.displaysEndTimes },
-            set: { engine.runSheetLayout.showsEndTimes = $0 ? true : nil }
-        )) {
-            Label("End times", systemImage: "clock.badge.checkmark")
-        }
-        .help("Show when each item ends instead of when it starts")
-    }
-}
-
 struct ItemCueButtons: View {
     @EnvironmentObject var engine: CueEngine
     let item: PCOTimerItem

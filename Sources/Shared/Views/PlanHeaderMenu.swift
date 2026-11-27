@@ -264,6 +264,7 @@ private struct PlanPopover: View {
                 Button { planPanelVisible.toggle() } label: {
                     Label(planPanelVisible ? "Hide details" : "Details", systemImage: "sidebar.trailing")
                 }
+                PlanActualsActions()
                 if engine.pcoPlanContext?.planningCenterURL != nil {
                     Button(action: onOpenInPCO) {
                         Label("Planning Center", systemImage: "arrow.up.right.square")

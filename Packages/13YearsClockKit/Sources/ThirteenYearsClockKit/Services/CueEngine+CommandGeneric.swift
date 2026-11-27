@@ -121,8 +121,10 @@ extension CueEngine {
             followByDefault = on
             return done(on ? "Follow by default is on" : "Follow by default is off")
         case "set.endtimes":
-            runSheetLayout.showsEndTimes = on
-            return done(on ? "End times are on" : "End times are off")
+            var hidden = runSheetLayout.hiddenSet
+            if on { hidden.remove("end") } else { hidden.insert("end") }
+            runSheetLayout.hiddenColumns = hidden.sorted()
+            return done(on ? "End column is shown" : "End column is hidden")
         case "pco.live":
             if on { enablePCOLiveSync() } else { disablePCOLiveSync() }
             return done(on ? "Live sync is on" : "Live sync is off")

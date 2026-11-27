@@ -544,7 +544,7 @@ final class CommandLineNounExecutionTests: XCTestCase {
         run(engine, "set follow on")
         XCTAssertTrue(engine.followByDefault)
         run(engine, "set endtimes on")
-        XCTAssertTrue(engine.runSheetLayout.displaysEndTimes)
+        XCTAssertFalse(engine.runSheetLayout.hiddenSet.contains("end"))
         run(engine, "set threshold never")
         XCTAssertEqual(engine.hourFormatThreshold, .never)
         run(engine, "plan title \"New name\"")

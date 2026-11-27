@@ -57,11 +57,13 @@ public struct SectionHeaderBar<Actions: View>: View {
                 Group {
                     actions()
                     #if os(macOS) || os(iOS)
-                    Button(action: { engine.isCommandBarOpen.toggle() }) {
-                        Label("Command", systemImage: "terminal")
+                    if toggleSidebar == nil {
+                        Button(action: { engine.isCommandBarOpen.toggle() }) {
+                            Label("Command", systemImage: "terminal")
+                        }
+                        .headerActionPrimary()
+                        .help("Open the command bar. Typing anywhere opens it too.")
                     }
-                    .headerActionPrimary()
-                    .help("Open the command bar. Typing anywhere opens it too.")
                     #endif
                 }
                 .labelStyle(TitledOrIconLabelStyle())

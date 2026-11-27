@@ -75,6 +75,7 @@ public struct SettingsView: View {
             eventScheduleSection
         case .show:
             rolesSection
+            followSection
             quickPhrasesSection
             waypointsSection
         case .display:
@@ -91,6 +92,18 @@ public struct SettingsView: View {
         case .app:
             startupSection
             appSection
+        }
+    }
+
+    private var followSection: some View {
+        Section {
+            Toggle(isOn: $engine.followByDefault) {
+                Label("Follow by default", systemImage: "forward.end")
+            }
+        } header: {
+            Text("Cues")
+        } footer: {
+            Text("Follow starts a cue when the one before it reaches zero, and Go waits for the producer. Each cue can override this default in its editor.")
         }
     }
 

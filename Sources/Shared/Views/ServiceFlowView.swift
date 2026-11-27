@@ -93,17 +93,6 @@ public struct ServiceFlowView: View {
                 }
                 #endif
 
-                #if os(macOS) || os(iOS)
-                Menu {
-                    RunSheetTimingToggles()
-                } label: {
-                    Label("Display", systemImage: "slider.horizontal.3")
-                }
-                .headerActionPrimary()
-                .help("End times and Follow by default")
-                #endif
-
-                RunSheetActualsMenu()
 
                 #if !(os(macOS) || os(iOS))
                 Button(action: { engine.whenPCOConnected { showingPlanPicker = true } }) {

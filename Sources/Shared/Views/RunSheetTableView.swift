@@ -168,7 +168,7 @@ struct RunSheetTableView: View {
     private func columnHeader(_ widths: [String: CGFloat]) -> some View {
         HStack(spacing: Self.columnSpacing) {
             ForEach(columns) { column in
-                Text(column.id == "start" && engine.runSheetLayout.displaysEndTimes ? "End" : column.title)
+                Text(column.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -364,6 +364,7 @@ struct RunSheetTableView: View {
         switch column.id {
         case "status": statusCell(item)
         case "start": startCell(item).markerHighlight(on)
+        case "end": endCell(item).markerHighlight(on)
         case "title": itemCell(item, detailed: !compact).markerHighlight(on)
         case "time": timeCell(item).markerHighlight(on)
         case "drift": driftCell(item).markerHighlight(on)
@@ -474,17 +475,37 @@ struct RunSheetTableView: View {
         let entry = schedule.entry(forItemId: item.id)
         return styled(item) {
             VStack(alignment: .leading, spacing: 1) {
-                if let entry, !entry.isOmitted, let planned = engine.runSheetLayout.displaysEndTimes ? (item.isHeader ? nil : entry.plannedEnd) : entry.plannedStart {
+                if let entry, !entry.isOmitted, let planned = entry.plannedStart {
                     Text(engine.clockFormat.string(from: planned))
                         .font(.clock(.body))
                         .foregroundStyle(item.isHeader ? .secondary : .primary)
                     if !item.isHeader, let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold,
-                       let projected = engine.runSheetLayout.displaysEndTimes ? entry.projectedEnd : entry.projectedStart {
+                       let projected = entry.projectedStart {
                         Text(engine.clockFormat.string(from: projected))
                             .font(.caption.weight(.semibold))
                             .font(.clock(.body))
                             .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
                             .help(drift > 0 ? "Projected to start later than planned" : "Projected to start earlier than planned")
+                    }
+                }
+            }
+            .lineLimit(1)
+        }
+    }
+
+    private func endCell(_ item: PCOTimerItem) -> some View {
+        let entry = schedule.entry(forItemId: item.id)
+        return styled(item) {
+            VStack(alignment: .leading, spacing: 1) {
+                if let entry, !entry.isOmitted, !item.isHeader, let planned = entry.plannedEnd {
+                    Text(engine.clockFormat.string(from: planned))
+                        .font(.clock(.body))
+                    if let drift = entry.driftSeconds, abs(drift) >= RunSheetSchedule.driftThreshold, let projected = entry.projectedEnd {
+                        Text(engine.clockFormat.string(from: projected))
+                            .font(.caption.weight(.semibold))
+                            .font(.clock(.body))
+                            .foregroundStyle(drift > 0 ? AppPalette.driftLate : AppPalette.driftEarly)
+                            .help(drift > 0 ? "Projected to end later than planned" : "Projected to end earlier than planned")
                     }
                 }
             }
@@ -732,6 +753,7 @@ struct RunSheetTableColumn: Identifiable {
     static let fixed: [RunSheetTableColumn] = [
         .init(id: "status", title: "", fixedWidth: 22),
         .init(id: "start", title: "Start", fixedWidth: 84),
+        .init(id: "end", title: "End", fixedWidth: 84),
         .init(id: "title", title: "Item", flexMinWidth: 160),
         .init(id: "leaderPhoto", title: "Leader photo", isItemPart: true),
         .init(id: "leader", title: "Leader", isItemPart: true),
@@ -760,7 +782,7 @@ struct RunSheetTableColumn: Identifiable {
     }
 
     static func all(_ categories: [String]) -> [RunSheetTableColumn] {
-        Array(fixed.prefix(10)) + noteColumns(categories) + Array(fixed.dropFirst(10))
+        Array(fixed.prefix(11)) + noteColumns(categories) + Array(fixed.dropFirst(11))
     }
 
     static func ordered(_ categories: [String], layout: RunSheetLayoutSettings) -> [RunSheetTableColumn] {

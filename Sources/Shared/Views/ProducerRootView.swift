@@ -96,6 +96,26 @@ public struct ProducerRootView: View {
             .modifier(UnreadBadge(count: badgeCount(for: mode)))
     }
 
+    #if os(macOS) || os(iOS)
+    private var commandSidebarButton: some View {
+        Button {
+            engine.isCommandBarOpen.toggle()
+        } label: {
+            Label("Command", systemImage: "terminal")
+                .font(.body.weight(.medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(engine.isCommandBarOpen ? Color.accentColor.opacity(0.25) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .help("Open the command bar. Typing anywhere opens it too.")
+    }
+    #endif
+
     private func badgeCount(for mode: AppMode) -> Int {
         mode == .messages ? engine.unreadMessageCount : 0
     }
@@ -119,6 +139,7 @@ public struct ProducerRootView: View {
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
+                .safeAreaInset(edge: .bottom, spacing: 0) { commandSidebarButton }
                 .frame(width: 160)
                 .modifier(SidebarPanel())
                 .padding(8)
@@ -146,6 +167,7 @@ public struct ProducerRootView: View {
             }
             #if os(iOS)
             .listStyle(.sidebar)
+            .safeAreaInset(edge: .bottom, spacing: 0) { commandSidebarButton }
             #endif
             .navigationTitle("13 Years Producer")
             .modifier(HideNativeSidebarToggle())

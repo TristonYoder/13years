@@ -27,7 +27,7 @@ public struct RunSheetLayoutSettings: Codable, Equatable, Sendable {
         min(max(detailsTextScale ?? 1.0, Self.detailsTextScaleRange.lowerBound), Self.detailsTextScaleRange.upperBound)
     }
 
-    public static let defaultHiddenColumns = ["number", "type", "bpm", "meter", "arrangement", "description", "pco-actual"]
+    public static let defaultHiddenColumns = ["end", "number", "type", "bpm", "meter", "arrangement", "description", "pco-actual"]
 
     public init(
         columnOrder: [String]? = nil,

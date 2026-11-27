@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Triston Yoder
 
 import UIKit
+import ObjectiveC
 
 extension Notification.Name {
     static let producerOpenDocument = Notification.Name("producerOpenDocument")
@@ -28,19 +29,9 @@ enum DocumentMenuBridge {
 }
 
 final class ProducerIOSAppDelegate: UIResponder, UIApplicationDelegate {
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        let handled = MainActor.assumeIsolated { () -> Bool in
-            guard let handler = TypedStartRelay.handler,
-                  let press = presses.first, let key = press.key,
-                  key.modifierFlags.isDisjoint(with: [.command, .control, .alternate]) else { return false }
-            let characters = key.characters
-            guard characters.count == 1, let first = characters.first, !first.isWhitespace,
-                  characters.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value != 127 && !(0xF700...0xF8FF).contains($0.value) }) else { return false }
-            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            if window?.rootViewController?.presentedViewController != nil { return false }
-            return handler(characters)
-        }
-        if !handled { super.pressesBegan(presses, with: event) }
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        ProducerKeyInterceptor.install()
+        return true
     }
 
     override func buildMenu(with builder: UIMenuBuilder) {
@@ -89,5 +80,54 @@ final class ProducerIOSAppDelegate: UIResponder, UIApplicationDelegate {
 
     @objc func clearRecentDocuments(_ sender: Any?) {
         NotificationCenter.default.post(name: .producerClearRecents, object: nil)
+    }
+}
+
+@MainActor
+enum ProducerKeyInterceptor {
+    private static var installed = false
+
+    static func install() {
+        guard !installed else { return }
+        installed = true
+        let original = #selector(UIApplication.sendEvent(_:))
+        let replacement = #selector(UIApplication.producerSendEvent(_:))
+        guard let originalMethod = class_getInstanceMethod(UIApplication.self, original),
+              let replacementMethod = class_getInstanceMethod(UIApplication.self, replacement) else { return }
+        method_exchangeImplementations(originalMethod, replacementMethod)
+    }
+
+    static func handle(_ event: UIPressesEvent) -> Bool {
+        guard let handler = TypedStartRelay.handler,
+              let press = event.allPresses.first(where: { $0.phase == .began && $0.key != nil }), let key = press.key,
+              key.modifierFlags.isDisjoint(with: [.command, .control, .alternate]) else { return false }
+        let characters = key.characters
+        guard characters.count == 1, let first = characters.first, !first.isWhitespace,
+              characters.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value != 127 && !(0xF700...0xF8FF).contains($0.value) }) else { return false }
+        if UIResponder.currentFirstResponder() is UITextInput { return false }
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        if window?.rootViewController?.presentedViewController != nil { return false }
+        return handler(characters)
+    }
+}
+
+extension UIApplication {
+    @objc fileprivate func producerSendEvent(_ event: UIEvent) {
+        if let presses = event as? UIPressesEvent, MainActor.assumeIsolated({ ProducerKeyInterceptor.handle(presses) }) { return }
+        producerSendEvent(event)
+    }
+}
+
+private extension UIResponder {
+    private static weak var firstResponderProbe: UIResponder?
+
+    @MainActor static func currentFirstResponder() -> UIResponder? {
+        firstResponderProbe = nil
+        UIApplication.shared.sendAction(#selector(captureFirstResponder), to: nil, from: nil, for: nil)
+        return firstResponderProbe
+    }
+
+    @objc func captureFirstResponder() {
+        UIResponder.firstResponderProbe = self
     }
 }
